@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
+import { validationBadge } from '@/lib/uiSemantics';
 import { useOrg } from '../context/useOrg';
 
 export function VersionSelector() {
@@ -53,7 +54,7 @@ export function VersionSelector() {
           </SelectContent>
         </Select>
         {activeVersion && (
-          <Badge variant={activeVersion.valid ? 'default' : 'destructive'}>
+          <Badge variant={validationBadge(activeVersion.valid)}>
             {activeVersion.valid ? '驗證通過' : '驗證失敗'}
           </Badge>
         )}

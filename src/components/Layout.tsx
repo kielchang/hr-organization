@@ -6,7 +6,6 @@ import {
   History,
   Users,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { DataToolbar } from './DataToolbar';
 
 const navItems = [
@@ -20,7 +19,7 @@ const navItems = [
 export function Layout() {
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="flex w-56 shrink-0 flex-col gap-4 border-r border-border bg-sidebar px-4 py-6 text-sidebar-foreground">
+      <aside className="flex w-56 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground">
         <div>
           <h1 className="font-heading text-lg font-semibold tracking-tight">HR 組織</h1>
           <p className="text-xs text-muted-foreground">架構調整工具</p>
@@ -33,16 +32,9 @@ export function Layout() {
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
-                  )
-                }
+                className="app-nav-link"
               >
-                <Icon className="size-4 shrink-0 opacity-80" />
+                <Icon className="size-4 shrink-0" />
                 {item.label}
               </NavLink>
             );

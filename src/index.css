@@ -169,6 +169,12 @@ body,
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -208,6 +214,12 @@ body,
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.62 0.17 145);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.78 0.14 85);
+  --warning-foreground: oklch(0.28 0.06 85);
+  --info: oklch(0.94 0.03 250);
+  --info-foreground: oklch(0.35 0.1 250);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -219,9 +231,9 @@ body,
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.42 0.14 250);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.01 250);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
@@ -243,6 +255,12 @@ body,
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.55 0.14 145);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.65 0.12 85);
+  --warning-foreground: oklch(0.98 0 0);
+  --info: oklch(0.32 0.08 250);
+  --info-foreground: oklch(0.92 0.02 250);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -270,5 +288,37 @@ body,
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* 同層導覽：停留頁面 vs 同列其他項目 */
+@layer components {
+  .app-nav-link {
+    @apply flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-sidebar-foreground/75 transition-colors;
+    @apply hover:bg-sidebar-accent hover:text-sidebar-accent-foreground;
+  }
+
+  .app-nav-link[aria-current='page'] {
+    @apply border-sidebar-primary/15 bg-sidebar-primary font-semibold text-sidebar-primary-foreground shadow-sm;
+    @apply hover:bg-sidebar-primary hover:text-sidebar-primary-foreground;
+  }
+
+  .app-nav-link[aria-current='page'] svg {
+    @apply opacity-100;
+  }
+
+  .app-nav-link:not([aria-current='page']) svg {
+    @apply opacity-70;
+  }
+
+  /* 同層列表選取（如員工列表） */
+  .app-list-item {
+    @apply flex w-full flex-col gap-1 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors;
+    @apply text-foreground hover:bg-muted/70;
+  }
+
+  .app-list-item[data-active='true'] {
+    @apply border-primary/20 bg-accent font-medium text-accent-foreground shadow-sm ring-1 ring-primary/15;
+    @apply hover:bg-accent;
   }
 }

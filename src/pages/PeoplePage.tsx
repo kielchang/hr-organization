@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { AssignmentEditor } from '../components/AssignmentEditor';
 import { EmployeeForm } from '../components/EmployeeForm';
 import { EmployeeList } from '../components/EmployeeList';
+import { buttonIntent } from '@/lib/uiSemantics';
 import { useOrg } from '../context/useOrg';
 
 export function PeoplePage() {
@@ -55,13 +56,18 @@ export function PeoplePage() {
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-semibold">{employee.name}</h3>
                 <span className="text-sm text-muted-foreground">{employee.employeeNo}</span>
-                <Button type="button" variant="outline" size="sm" onClick={openEditEmployee}>
+                <Button
+                  type="button"
+                  variant={buttonIntent.edit}
+                  size="sm"
+                  onClick={openEditEmployee}
+                >
                   <Pencil className="size-4" />
                   編輯員工
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={buttonIntent.danger}
                   size="sm"
                   onClick={() => {
                     if (confirm(`確定刪除 ${employee.name}？`)) {
@@ -78,6 +84,7 @@ export function PeoplePage() {
                 <h4 className="text-sm font-semibold">組別歸屬</h4>
                 <Button
                   type="button"
+                  variant={buttonIntent.create}
                   size="sm"
                   onClick={() => {
                     setDraftAssignment(newAssignmentFor(employee.id));
@@ -118,13 +125,18 @@ export function PeoplePage() {
                           .join('、') || '—'}
                       </p>
                       <div className="mt-2 flex gap-2">
-                        <Button type="button" size="sm" onClick={() => setEditingId(a.id)}>
+                        <Button
+                          type="button"
+                          variant={buttonIntent.edit}
+                          size="sm"
+                          onClick={() => setEditingId(a.id)}
+                        >
                           編輯
                         </Button>
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
+                          variant={buttonIntent.danger}
                           onClick={() => {
                             if (confirm('確定刪除此歸屬？')) removeAssignment(a.id);
                           }}

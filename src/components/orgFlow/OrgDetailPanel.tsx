@@ -33,6 +33,7 @@ import {
   selectOptionLabel,
   toSelectOptions,
 } from '@/lib/selectOptions';
+import { buttonIntent, tagBadge } from '@/lib/uiSemantics';
 import type { Assignment, Employee } from '../../types/org';
 import { useOrg } from '../../context/useOrg';
 import { getActiveEmployees } from '../../services/validators';
@@ -164,10 +165,10 @@ function EmployeeEditForm({
         </Select>
       </div>
       <div className={modalActionsClass}>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant={buttonIntent.neutral} onClick={onClose}>
           取消
         </Button>
-        <Button type="button" onClick={onSave}>
+        <Button type="button" variant={buttonIntent.primary} onClick={onSave}>
           <Save />
           儲存
         </Button>
@@ -356,10 +357,10 @@ function AssignmentEditForm({
         <Label htmlFor={`${assignment.id}-primary-group`}>設為主組別</Label>
       </div>
       <div className={modalActionsClass}>
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button type="button" variant={buttonIntent.neutral} onClick={onClose}>
           取消
         </Button>
-        <Button type="button" onClick={onSave}>
+        <Button type="button" variant={buttonIntent.primary} onClick={onSave}>
           <Save />
           儲存
         </Button>
@@ -417,7 +418,7 @@ export function OrgDetailPanel({
         <div className="flex shrink-0 items-center gap-0.5">
           <Button
             type="button"
-            variant="ghost"
+            variant={buttonIntent.edit}
             size="icon-sm"
             onClick={() => setEditingEmp(true)}
             title="編輯員工資料"
@@ -436,7 +437,7 @@ export function OrgDetailPanel({
         </p>
         <Button
           type="button"
-          variant="outline"
+          variant={buttonIntent.create}
           size="icon-sm"
           onClick={openAddAssignment}
           title="新增歸屬"
@@ -460,7 +461,7 @@ export function OrgDetailPanel({
                   <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                     {group?.name ?? '—'}
                     {a.isPrimaryGroup && (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant={tagBadge()} className="text-[10px]">
                         主組別
                       </Badge>
                     )}
@@ -468,7 +469,7 @@ export function OrgDetailPanel({
                   <CardAction>
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant={buttonIntent.edit}
                       size="icon-sm"
                       onClick={() => setEditingAssignment(a)}
                       title="編輯歸屬"
@@ -513,7 +514,10 @@ export function OrgDetailPanel({
       )}
 
       {editingAssignment && (
-        <OrgModal container={portalContainer} onBackdropClick={() => setEditingAssignment(null)}>
+        <OrgModal
+          container={portalContainer}
+          onBackdropClick={() => setEditingAssignment(null)}
+        >
           <AssignmentEditForm
             key={editingAssignment.id}
             assignment={editingAssignment}
@@ -529,7 +533,7 @@ export function OrgDetailPanel({
           <AssignmentEditForm
             key={newAssignmentDraft.id}
             assignment={newAssignmentDraft}
-            isNew={true}
+            isNew
             onClose={closeAddAssignment}
             selectPortalContainer={portalContainer}
           />

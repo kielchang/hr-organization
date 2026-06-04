@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge } from '@/components/ui/badge';
 import type { Employee } from '../../types/org';
+import { tagBadge } from '@/lib/uiSemantics';
 import { orgFlowNodeClass } from './orgFlowNodeStyles';
 
 export interface EmployeeNodeData extends Record<string, unknown> {
@@ -24,7 +25,7 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         <p className="text-xs text-muted-foreground">{d.employee.employeeNo}</p>
         <p className="text-xs text-muted-foreground">{d.jobLevelName}</p>
         {d.isPrimaryGroup && (
-          <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]">
+          <Badge variant={tagBadge()} className="mt-0.5 w-fit text-[10px]">
             主組別
           </Badge>
         )}

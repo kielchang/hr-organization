@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge } from '@/components/ui/badge';
 import type { Employee } from '../../types/org';
+import { tagBadge } from '@/lib/uiSemantics';
 import { orgFlowNodeClass } from '../orgFlow/orgFlowNodeStyles';
 
 export interface AssignmentMemberNodeData extends Record<string, unknown> {
@@ -32,7 +33,7 @@ export function AssignmentMemberNode({ data, selected }: NodeProps) {
           {d.employee.employeeNo} · {d.jobLevelName}
         </p>
         {d.isPrimaryGroup && (
-          <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]">
+          <Badge variant={tagBadge()} className="mt-0.5 w-fit text-[10px]">
             主組別
           </Badge>
         )}

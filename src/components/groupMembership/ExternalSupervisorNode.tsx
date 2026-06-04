@@ -28,10 +28,7 @@ export function ExternalSupervisorNode({ data, selected }: NodeProps) {
         className="!size-2 !border-2 !border-background !bg-amber-600"
       />
       <div className="flex flex-col gap-1.5">
-        <Badge
-          variant="outline"
-          className="w-fit border-amber-500/40 text-[10px] text-amber-800 dark:text-amber-200"
-        >
+        <Badge variant="warning" className="w-fit text-[10px]">
           組外主管
         </Badge>
         <p className="font-medium leading-snug">{d.name}</p>

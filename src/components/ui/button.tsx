@@ -8,15 +8,29 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        /** 主要動作：儲存、送出 */
+        default: "bg-primary text-primary-foreground hover:bg-primary/85",
+        /** 新增 */
+        brand:
+          "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm hover:bg-sidebar-primary/90 focus-visible:ring-sidebar-primary/30",
+        /** 編輯 */
+        "brand-outline":
+          "border-sidebar-primary/35 bg-background text-sidebar-primary hover:bg-sidebar-accent hover:text-sidebar-accent-foreground dark:border-sidebar-primary/45",
+        /** 次要動作 */
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_6%)]",
+        /** 中性：取消、匯出、工具列 */
+        outline:
+          "border-border bg-background text-foreground hover:bg-muted hover:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        /** 低調：圖示、列內操作；data-active 用於同層選取 */
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "text-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-accent data-[active=true]:font-medium data-[active=true]:text-accent-foreground data-[active=true]:shadow-sm data-[active=true]:ring-1 data-[active=true]:ring-primary/15 dark:hover:bg-muted/50",
+        /** 危險：刪除、不可逆 */
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "bg-destructive/12 text-destructive hover:bg-destructive/22 focus-visible:border-destructive/40 focus-visible:ring-destructive/25 dark:bg-destructive/22 dark:hover:bg-destructive/32",
+        /** 正向次要 */
+        success:
+          "bg-success/15 text-success hover:bg-success/25 focus-visible:ring-success/30 dark:bg-success/25",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

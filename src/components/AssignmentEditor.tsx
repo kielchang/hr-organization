@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
+import { buttonIntent } from '@/lib/uiSemantics';
 import type { Assignment } from '../types/org';
 import { useOrg } from '../context/useOrg';
 import { getActiveEmployees } from '../services/validators';
@@ -113,7 +114,7 @@ export function AssignmentEditor({
         <CardAction>
           <Button
             type="button"
-            variant="ghost"
+            variant={buttonIntent.quiet}
             size="icon-sm"
             onClick={onCancel}
             aria-label="取消"
@@ -229,7 +230,7 @@ export function AssignmentEditor({
           設為主組別
         </label>
         <div className="flex justify-end">
-          <Button type="button" onClick={onSave}>
+          <Button type="button" variant={buttonIntent.primary} onClick={onSave}>
             <Save className="size-4" />
             儲存
           </Button>

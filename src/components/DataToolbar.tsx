@@ -3,6 +3,7 @@ import { Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { buttonIntent } from '@/lib/uiSemantics';
 import { parseOrgDataFile } from '../services/exportImport';
 import { useOrg } from '../context/useOrg';
 import { VersionSelector } from './VersionSelector';
@@ -40,13 +41,18 @@ export function DataToolbar() {
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => exportData()}>
+        <Button
+          type="button"
+          variant={buttonIntent.neutral}
+          size="sm"
+          onClick={() => exportData()}
+        >
           <Download className="size-4" />
           匯出目前資料
         </Button>
         <Button
           type="button"
-          variant="outline"
+          variant={buttonIntent.neutral}
           size="sm"
           onClick={() => fileRef.current?.click()}
         >

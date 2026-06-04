@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { buttonIntent, groupStatusBadge } from '@/lib/uiSemantics';
 import type { Group } from '../types/org';
 import { GroupForm } from '../components/GroupForm';
 import { useOrg } from '../context/useOrg';
@@ -48,7 +49,7 @@ export function GroupsPage() {
           維護組織單位階層；人員可跨組別歸屬（矩陣組織）。
         </p>
       </header>
-      <Button type="button" className="w-fit" onClick={openNew}>
+      <Button type="button" variant={buttonIntent.create} className="w-fit" onClick={openNew}>
         <Plus className="size-4" />
         新增組別
       </Button>
@@ -70,14 +71,14 @@ export function GroupsPage() {
                 <TableCell>{g.name}</TableCell>
                 <TableCell>{parentName(g.parentId)}</TableCell>
                 <TableCell>
-                  <Badge variant={g.status === 'active' ? 'secondary' : 'outline'}>
+                  <Badge variant={groupStatusBadge(g.status)}>
                     {g.status === 'active' ? '啟用' : '停用'}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant={buttonIntent.edit}
                     size="icon-sm"
                     onClick={() => openEdit(g)}
                     aria-label="編輯"

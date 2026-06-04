@@ -11,12 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import {
   EMPLOYEE_FILTER_STATUS_OPTIONS,
   selectOptionLabel,
   toSelectOptions,
 } from '@/lib/selectOptions';
+import { buttonIntent, employeeStatusBadge } from '@/lib/uiSemantics';
 import type { Employee } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -87,7 +87,7 @@ export function EmployeeList({
             ))}
           </SelectContent>
         </Select>
-        <Button type="button" onClick={onAddEmployee}>
+        <Button type="button" variant={buttonIntent.create} onClick={onAddEmployee}>
           <Plus className="size-4" />
           新增員工
         </Button>
@@ -99,17 +99,12 @@ export function EmployeeList({
               <button
                 type="button"
                 onClick={() => onSelect(e.id)}
-                className={cn(
-                  'flex w-full flex-col gap-1 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:bg-muted/80',
-                  selectedId === e.id && 'border-border bg-accent/50',
-                )}
+                className="app-list-item"
+                data-active={selectedId === e.id ? true : undefined}
               >
                 <span className="font-medium">{e.name}</span>
                 <span className="text-xs text-muted-foreground">{e.employeeNo}</span>
-                <Badge
-                  variant={e.status === 'active' ? 'secondary' : 'outline'}
-                  className="w-fit"
-                >
+                <Badge variant={employeeStatusBadge(e.status)} className="w-fit">
                   {e.status === 'active' ? '在職' : '離職'}
                 </Badge>
               </button>
