@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { orderSelectOptions } from '@/lib/orderSelectOptions';
+import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
 import { ALL_GROUPS_VIEW_ID } from '../../services/buildOrgFlowGraph';
 import type { Group } from '../../types/org';
 
@@ -31,7 +31,7 @@ export function OrgChartGroupSelector({
       { id: ALL_GROUPS_VIEW_ID, name: allGroupsLabel },
       ...activeGroups.map((g) => ({ id: g.id, name: g.name })),
     ];
-    return orderSelectOptions(items, selectedGroupId, (o) => o.id);
+    return toSelectOptions(items, selectedGroupId, (o) => o.id, (o) => o.name);
   }, [activeGroups, allGroupsLabel, selectedGroupId]);
 
   return (
@@ -46,16 +46,14 @@ export function OrgChartGroupSelector({
         }}
       >
         <SelectTrigger id="org-chart-group-select" className="w-full bg-background">
-          <SelectValue>
-            {selectedGroupId === ALL_GROUPS_VIEW_ID
-              ? allGroupsLabel
-              : (activeGroups.find((g) => g.id === selectedGroupId)?.name ?? '選擇組別')}
+          <SelectValue placeholder="選擇組別">
+            {selectOptionLabel(groupOptions, selectedGroupId)}
           </SelectValue>
         </SelectTrigger>
         <SelectContent container={mountNode}>
           {groupOptions.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.name}
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
             </SelectItem>
           ))}
         </SelectContent>

@@ -28,15 +28,14 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { orderSelectOptions } from '@/lib/orderSelectOptions';
+import {
+  EMPLOYEE_STATUS_OPTIONS,
+  selectOptionLabel,
+  toSelectOptions,
+} from '@/lib/selectOptions';
 import type { Assignment, Employee } from '../../types/org';
 import { useOrg } from '../../context/useOrg';
 import { getActiveEmployees } from '../../services/validators';
-
-const EMPLOYEE_STATUS_OPTIONS = [
-  { value: 'active' as const, label: '在職' },
-  { value: 'inactive' as const, label: '離職' },
-];
 
 interface OrgDetailPanelProps {
   employeeId: string;
@@ -109,7 +108,13 @@ function EmployeeEditForm({
   };
 
   const statusOptions = useMemo(
-    () => orderSelectOptions(EMPLOYEE_STATUS_OPTIONS, employee.status, (o) => o.value),
+    () =>
+      toSelectOptions(
+        EMPLOYEE_STATUS_OPTIONS,
+        employee.status,
+        (o) => o.value,
+        (o) => o.label,
+      ),
     [employee.status],
   );
 
@@ -145,7 +150,9 @@ function EmployeeEditForm({
           }}
         >
           <SelectTrigger id="org-edit-employee-status" className="w-full">
-            <SelectValue />
+            <SelectValue>
+              {selectOptionLabel(statusOptions, employee.status)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent container={selectPortalContainer} className="z-[60]">
             {statusOptions.map((o) => (
@@ -202,25 +209,38 @@ function AssignmentEditForm({
     [data.jobLevels],
   );
 
-  const orderedGroups = useMemo(
-    () => orderSelectOptions(activeGroups, assignment.groupId || undefined, (g) => g.id),
+  const groupOptions = useMemo(
+    () =>
+      toSelectOptions(
+        activeGroups,
+        assignment.groupId || undefined,
+        (g) => g.id,
+        (g) => g.name,
+      ),
     [activeGroups, assignment.groupId],
   );
 
-  const orderedJobLevels = useMemo(
-    () => orderSelectOptions(sortedJobLevels, assignment.jobLevelId || undefined, (j) => j.id),
+  const jobLevelOptions = useMemo(
+    () =>
+      toSelectOptions(
+        sortedJobLevels,
+        assignment.jobLevelId || undefined,
+        (j) => j.id,
+        (j) => j.name,
+      ),
     [sortedJobLevels, assignment.jobLevelId],
   );
 
-  const orderedSupervisorOptions = useMemo(() => {
+  const primarySupervisorOptions = useMemo(() => {
     const items = assignment.supervisorIds.map((sid) => {
       const e = data.employees.find((x) => x.id === sid);
-      return { id: sid, name: e?.name ?? sid };
+      return { id: sid, name: e?.name ?? '—' };
     });
-    return orderSelectOptions(
+    return toSelectOptions(
       items,
       assignment.primarySupervisorId ?? undefined,
       (o) => o.id,
+      (o) => o.name,
     );
   }, [assignment.supervisorIds, assignment.primarySupervisorId, data.employees]);
 
@@ -249,13 +269,13 @@ function AssignmentEditForm({
         >
           <SelectTrigger id="org-edit-assignment-group" className="w-full">
             <SelectValue placeholder="選擇組別">
-              {activeGroups.find((g) => g.id === assignment.groupId)?.name}
+              {selectOptionLabel(groupOptions, assignment.groupId)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent container={selectPortalContainer} className="z-[60]">
-            {orderedGroups.map((g) => (
-              <SelectItem key={g.id} value={g.id}>
-                {g.name}
+            {groupOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -271,13 +291,13 @@ function AssignmentEditForm({
         >
           <SelectTrigger id="org-edit-assignment-level" className="w-full">
             <SelectValue placeholder="選擇職級">
-              {data.jobLevels.find((j) => j.id === assignment.jobLevelId)?.name}
+              {selectOptionLabel(jobLevelOptions, assignment.jobLevelId)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent container={selectPortalContainer} className="z-[60]">
-            {orderedJobLevels.map((j) => (
-              <SelectItem key={j.id} value={j.id}>
-                {j.name}
+            {jobLevelOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -293,9 +313,7 @@ function AssignmentEditForm({
                 checked={assignment.supervisorIds.includes(e.id)}
                 onCheckedChange={(checked) => toggleSupervisor(e.id, checked)}
               />
-              <Label htmlFor={`${assignment.id}-supervisor-${e.id}`}>
-                {e.name} ({e.employeeNo})
-              </Label>
+              <Label htmlFor={`${assignment.id}-supervisor-${e.id}`}>{e.name}</Label>
             </div>
           ))}
         </div>
@@ -311,13 +329,16 @@ function AssignmentEditForm({
           >
             <SelectTrigger id="org-edit-primary-supervisor" className="w-full">
               <SelectValue placeholder="選擇主主管">
-                {data.employees.find((e) => e.id === assignment.primarySupervisorId)?.name}
+                {selectOptionLabel(
+                  primarySupervisorOptions,
+                  assignment.primarySupervisorId,
+                )}
               </SelectValue>
             </SelectTrigger>
             <SelectContent container={selectPortalContainer} className="z-[60]">
-              {orderedSupervisorOptions.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.name}
+              {primarySupervisorOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
                 </SelectItem>
               ))}
             </SelectContent>

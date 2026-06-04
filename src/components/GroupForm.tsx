@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -16,6 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  GROUP_STATUS_OPTIONS,
+  selectOptionLabel,
+  toSelectOptions,
+} from '@/lib/selectOptions';
 import type { Group } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -48,7 +53,20 @@ export function GroupForm({
   );
   const [error, setError] = useState<string | null>(null);
 
-  const parentOptions = data.groups.filter((g) => g.id !== group.id);
+  const parentSelectValue = group.parentId ?? NO_PARENT;
+
+  const parentOptions = useMemo(() => {
+    const items = [
+      { id: NO_PARENT, name: '（無）' },
+      ...data.groups.filter((g) => g.id !== group.id),
+    ];
+    return toSelectOptions(items, parentSelectValue, (g) => g.id, (g) => g.name);
+  }, [data.groups, group.id, parentSelectValue]);
+
+  const statusOptions = useMemo(
+    () => toSelectOptions(GROUP_STATUS_OPTIONS, group.status, (o) => o.value, (o) => o.label),
+    [group.status],
+  );
 
   const onSave = () => {
     if (!group.code.trim() || !group.name.trim()) {
@@ -91,7 +109,7 @@ export function GroupForm({
           <div className="grid gap-2">
             <Label htmlFor="group-parent">上層組別</Label>
             <Select
-              value={group.parentId ?? NO_PARENT}
+              value={parentSelectValue}
               onValueChange={(value) => {
                 if (!value) return;
                 setGroup((g) => ({
@@ -101,13 +119,14 @@ export function GroupForm({
               }}
             >
               <SelectTrigger id="group-parent" className="w-full bg-background">
-                <SelectValue placeholder="（無）" />
+                <SelectValue placeholder="（無）">
+                  {selectOptionLabel(parentOptions, parentSelectValue)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_PARENT}>（無）</SelectItem>
-                {parentOptions.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.name}
+                {parentOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -127,11 +146,16 @@ export function GroupForm({
               }}
             >
               <SelectTrigger id="group-status" className="w-full bg-background">
-                <SelectValue />
+                <SelectValue>
+                  {selectOptionLabel(statusOptions, group.status)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">啟用</SelectItem>
-                <SelectItem value="inactive">停用</SelectItem>
+                {statusOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

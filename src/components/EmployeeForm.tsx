@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -16,6 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  EMPLOYEE_STATUS_OPTIONS,
+  selectOptionLabel,
+  toSelectOptions,
+} from '@/lib/selectOptions';
 import type { Employee } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -44,6 +49,17 @@ export function EmployeeForm({
     },
   );
   const [error, setError] = useState<string | null>(null);
+
+  const statusOptions = useMemo(
+    () =>
+      toSelectOptions(
+        EMPLOYEE_STATUS_OPTIONS,
+        employee.status,
+        (o) => o.value,
+        (o) => o.label,
+      ),
+    [employee.status],
+  );
 
   const onSave = () => {
     if (!employee.employeeNo.trim() || !employee.name.trim()) {
@@ -99,11 +115,16 @@ export function EmployeeForm({
               }}
             >
               <SelectTrigger id="employee-status" className="w-full bg-background">
-                <SelectValue />
+                <SelectValue>
+                  {selectOptionLabel(statusOptions, employee.status)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">在職</SelectItem>
-                <SelectItem value="inactive">離職</SelectItem>
+                {statusOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

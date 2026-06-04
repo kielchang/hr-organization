@@ -12,6 +12,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  EMPLOYEE_FILTER_STATUS_OPTIONS,
+  selectOptionLabel,
+  toSelectOptions,
+} from '@/lib/selectOptions';
 import type { Employee } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -32,6 +37,17 @@ export function EmployeeList({
     'active',
   );
 
+  const statusOptions = useMemo(
+    () =>
+      toSelectOptions(
+        EMPLOYEE_FILTER_STATUS_OPTIONS,
+        statusFilter,
+        (o) => o.value,
+        (o) => o.label,
+      ),
+    [statusFilter],
+  );
+
   const filtered = useMemo(() => {
     return data.employees.filter((e) => {
       const matchStatus = statusFilter === 'all' || e.status === statusFilter;
@@ -43,9 +59,6 @@ export function EmployeeList({
       return matchStatus && matchSearch;
     });
   }, [data.employees, search, statusFilter]);
-
-  const statusLabel =
-    statusFilter === 'all' ? '全部' : statusFilter === 'active' ? '在職' : '離職';
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm ring-1 ring-foreground/5">
@@ -62,12 +75,16 @@ export function EmployeeList({
           }}
         >
           <SelectTrigger className="w-full bg-background">
-            <SelectValue>{statusLabel}</SelectValue>
+            <SelectValue>
+              {selectOptionLabel(statusOptions, statusFilter)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部</SelectItem>
-            <SelectItem value="active">在職</SelectItem>
-            <SelectItem value="inactive">離職</SelectItem>
+            {statusOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button type="button" onClick={onAddEmployee}>

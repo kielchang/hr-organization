@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -8,10 +9,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
 import { useOrg } from '../context/useOrg';
 
 export function VersionSelector() {
   const { dataVersions, activeVersionId, selectDataVersion, activeVersion } = useOrg();
+
+  const versionOptions = useMemo(
+    () =>
+      toSelectOptions(
+        dataVersions,
+        activeVersionId,
+        (v) => v.id,
+        (v) => `${v.valid ? '✓ ' : '✗ '}${v.label}`,
+      ),
+    [dataVersions, activeVersionId],
+  );
 
   if (dataVersions.length === 0) {
     return (
@@ -28,16 +41,13 @@ export function VersionSelector() {
         <Select value={activeVersionId} onValueChange={(v) => v && selectDataVersion(v)}>
           <SelectTrigger id="data-version" className="min-w-[260px] bg-background">
             <SelectValue placeholder="選擇版本">
-              {activeVersion
-                ? `${activeVersion.valid ? '✓ ' : '✗ '}${activeVersion.label}`
-                : null}
+              {selectOptionLabel(versionOptions, activeVersionId)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {dataVersions.map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.valid ? '✓ ' : '✗ '}
-                {v.label}
+            {versionOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
               </SelectItem>
             ))}
           </SelectContent>

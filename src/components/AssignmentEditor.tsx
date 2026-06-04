@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
 import type { Assignment } from '../types/org';
 import { useOrg } from '../context/useOrg';
 import { getActiveEmployees } from '../services/validators';
@@ -43,14 +44,45 @@ export function AssignmentEditor({
     (e) => e.id !== assignment.employeeId,
   );
 
-  const supervisorOptions = useMemo(
-    () =>
-      activeEmployees.map((e) => ({
-        value: e.id,
-        text: `${e.name} (${e.employeeNo})`,
-      })),
-    [activeEmployees],
+  const sortedJobLevels = useMemo(
+    () => [...data.jobLevels].sort((a, b) => b.rank - a.rank),
+    [data.jobLevels],
   );
+
+  const groupOptions = useMemo(
+    () =>
+      toSelectOptions(
+        activeGroups,
+        assignment.groupId || undefined,
+        (g) => g.id,
+        (g) => g.name,
+      ),
+    [activeGroups, assignment.groupId],
+  );
+
+  const jobLevelOptions = useMemo(
+    () =>
+      toSelectOptions(
+        sortedJobLevels,
+        assignment.jobLevelId || undefined,
+        (j) => j.id,
+        (j) => j.name,
+      ),
+    [sortedJobLevels, assignment.jobLevelId],
+  );
+
+  const primarySupervisorOptions = useMemo(() => {
+    const items = assignment.supervisorIds.map((sid) => {
+      const e = data.employees.find((x) => x.id === sid);
+      return { id: sid, name: e?.name ?? '—' };
+    });
+    return toSelectOptions(
+      items,
+      assignment.primarySupervisorId ?? undefined,
+      (o) => o.id,
+      (o) => o.name,
+    );
+  }, [assignment.supervisorIds, assignment.primarySupervisorId, data.employees]);
 
   const toggleSupervisor = (id: string, checked: boolean) => {
     setAssignment((a) => {
@@ -101,12 +133,14 @@ export function AssignmentEditor({
             }}
           >
             <SelectTrigger className="w-full bg-background">
-              <SelectValue placeholder="選擇組別" />
+              <SelectValue placeholder="選擇組別">
+                {selectOptionLabel(groupOptions, assignment.groupId)}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {activeGroups.map((g) => (
-                <SelectItem key={g.id} value={g.id}>
-                  {g.name}
+              {groupOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -121,36 +155,36 @@ export function AssignmentEditor({
             }}
           >
             <SelectTrigger className="w-full bg-background">
-              <SelectValue placeholder="選擇職級" />
+              <SelectValue placeholder="選擇職級">
+                {selectOptionLabel(jobLevelOptions, assignment.jobLevelId)}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {[...data.jobLevels]
-                .sort((a, b) => b.rank - a.rank)
-                .map((j) => (
-                  <SelectItem key={j.id} value={j.id}>
-                    {j.name}
-                  </SelectItem>
-                ))}
+              {jobLevelOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
         <div className="grid gap-2">
           <Label className="text-muted-foreground">主管（可多選）</Label>
           <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-2">
-            {supervisorOptions.map((o) => (
+            {activeEmployees.map((e) => (
               <label
-                key={o.value}
-                htmlFor={`${assignment.id}-supervisor-${o.value}`}
+                key={e.id}
+                htmlFor={`${assignment.id}-supervisor-${e.id}`}
                 className="flex cursor-pointer items-center gap-2 text-sm"
               >
                 <Checkbox
-                  id={`${assignment.id}-supervisor-${o.value}`}
-                  checked={assignment.supervisorIds.includes(o.value)}
+                  id={`${assignment.id}-supervisor-${e.id}`}
+                  checked={assignment.supervisorIds.includes(e.id)}
                   onCheckedChange={(checked) =>
-                    toggleSupervisor(o.value, checked === true)
+                    toggleSupervisor(e.id, checked === true)
                   }
                 />
-                {o.text}
+                {e.name}
               </label>
             ))}
           </div>
@@ -168,17 +202,19 @@ export function AssignmentEditor({
               }}
             >
               <SelectTrigger className="w-full bg-background">
-                <SelectValue placeholder="選擇主主管" />
+                <SelectValue placeholder="選擇主主管">
+                  {selectOptionLabel(
+                    primarySupervisorOptions,
+                    assignment.primarySupervisorId,
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {assignment.supervisorIds.map((sid) => {
-                  const e = data.employees.find((x) => x.id === sid);
-                  return (
-                    <SelectItem key={sid} value={sid}>
-                      {e?.name ?? sid}
-                    </SelectItem>
-                  );
-                })}
+                {primarySupervisorOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
