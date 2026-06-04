@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Badge, Text } from '@fluentui/react-components';
+import { Badge } from '@/components/ui/badge';
 import type { Employee } from '../../types/org';
+import { orgFlowNodeClass } from './orgFlowNodeStyles';
 
 export interface EmployeeNodeData extends Record<string, unknown> {
   employee: Employee;
@@ -12,25 +13,27 @@ export interface EmployeeNodeData extends Record<string, unknown> {
 export function EmployeeNode({ data, selected }: NodeProps) {
   const d = data as EmployeeNodeData;
   return (
-    <div
-      className={`employee-node${selected ? ' employee-node--selected' : ''}`}
-    >
-      <Handle type="target" position={Position.Top} />
-      <Text weight="semibold" block>
-        {d.employee.name}
-      </Text>
-      <Text size={200} block>
-        {d.employee.employeeNo}
-      </Text>
-      <Text size={200} block>
-        {d.jobLevelName}
-      </Text>
-      {d.isPrimaryGroup && (
-        <Badge appearance="filled" color="brand" size="small">
-          主組別
-        </Badge>
-      )}
-      <Handle type="source" position={Position.Bottom} />
+    <div className={orgFlowNodeClass(!!selected)}>
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!size-2 !border-2 !border-background !bg-primary"
+      />
+      <div className="flex flex-col gap-1">
+        <p className="font-medium leading-snug text-card-foreground">{d.employee.name}</p>
+        <p className="text-xs text-muted-foreground">{d.employee.employeeNo}</p>
+        <p className="text-xs text-muted-foreground">{d.jobLevelName}</p>
+        {d.isPrimaryGroup && (
+          <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]">
+            主組別
+          </Badge>
+        )}
+      </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!size-2 !border-2 !border-background !bg-primary"
+      />
     </div>
   );
 }

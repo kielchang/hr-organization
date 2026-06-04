@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Badge, Text } from '@fluentui/react-components';
+import { Badge } from '@/components/ui/badge';
 import type { Employee } from '../../types/org';
+import { orgFlowNodeClass } from '../orgFlow/orgFlowNodeStyles';
 
 export interface AssignmentMemberNodeData extends Record<string, unknown> {
   assignmentId: string;
@@ -15,24 +16,32 @@ export function AssignmentMemberNode({ data, selected }: NodeProps) {
   const d = data as AssignmentMemberNodeData;
   return (
     <div
-      className={`assignment-member-node${selected ? ' assignment-member-node--selected' : ''}`}
+      className={orgFlowNodeClass(!!selected, 'border-primary/40 ring-primary/10')}
     >
-      <Handle type="target" position={Position.Top} />
-      <Text size={200} block className="assignment-member-node__group">
-        {d.groupName}
-      </Text>
-      <Text weight="semibold" block>
-        {d.employee.name}
-      </Text>
-      <Text size={200} block>
-        {d.employee.employeeNo} · {d.jobLevelName}
-      </Text>
-      {d.isPrimaryGroup && (
-        <Badge appearance="filled" color="brand" size="small">
-          主組別
-        </Badge>
-      )}
-      <Handle type="source" position={Position.Bottom} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!size-2 !border-2 !border-background !bg-primary"
+      />
+      <div className="flex flex-col gap-1">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+          {d.groupName}
+        </p>
+        <p className="font-medium leading-snug">{d.employee.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {d.employee.employeeNo} · {d.jobLevelName}
+        </p>
+        {d.isPrimaryGroup && (
+          <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]">
+            主組別
+          </Badge>
+        )}
+      </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!size-2 !border-2 !border-background !bg-primary"
+      />
     </div>
   );
 }

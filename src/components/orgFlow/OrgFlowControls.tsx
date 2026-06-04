@@ -1,5 +1,6 @@
-import { Text } from '@fluentui/react-components';
+import { cn } from '@/lib/utils';
 import { OrgChartGroupSelector } from './OrgChartGroupSelector';
+import { OrgFlowLegendBlock } from './OrgFlowLegend';
 import type { Group } from '../../types/org';
 
 export type OrgFlowChartVariant = 'reporting' | 'membership';
@@ -10,6 +11,7 @@ interface OrgFlowControlsProps {
   onGroupChange: (groupId: string) => void;
   activeGroups: Group[];
   mountNode?: HTMLElement | null;
+  className?: string;
 }
 
 export function OrgFlowControls({
@@ -18,13 +20,17 @@ export function OrgFlowControls({
   onGroupChange,
   activeGroups,
   mountNode,
+  className,
 }: OrgFlowControlsProps) {
   const allGroupsLabel =
     variant === 'reporting' ? '全公司' : '全公司（各組並列）';
 
   return (
     <div
-      className="org-flow-controls"
+      className={cn(
+        'flex w-full flex-col gap-0 rounded-xl border border-border bg-card/95 p-4 shadow-md ring-1 ring-foreground/5 backdrop-blur-sm',
+        className,
+      )}
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -35,21 +41,7 @@ export function OrgFlowControls({
         allGroupsLabel={allGroupsLabel}
         mountNode={mountNode}
       />
-      <Text size={200} className="org-flow-legend">
-        {variant === 'reporting' ? (
-          <>
-            <span className="legend-solid">━</span> 主匯報
-            <span className="legend-dashed">┄</span> 虛線匯報
-          </>
-        ) : (
-          <>
-            每個節點為一筆組別歸屬；連線依該歸屬的主管設定。
-            <br />
-            <span className="legend-solid">━</span> 主主管
-            <span className="legend-dashed">┄</span> 其他主管
-          </>
-        )}
-      </Text>
+      <OrgFlowLegendBlock variant={variant} />
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   Controls,
-  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -10,18 +9,17 @@ import {
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import {
-  FluentProvider,
-  MessageBar,
-  MessageBarBody,
-  webLightTheme,
-} from '@fluentui/react-components';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 import { buildOrgFlowGraph } from '../../services/buildOrgFlowGraph';
 import { useOrg } from '../../context/useOrg';
 import { EmployeeNode } from './EmployeeNode';
-import { OrgDetailPanel } from './OrgDetailPanel';
-import { OrgFlowControls, type OrgFlowChartVariant } from './OrgFlowControls';
+import { OrgFlowFullscreenButton } from './OrgFlowChartChrome';
+import { OrgFlowLeftStack } from './OrgFlowLeftStack';
+import type { OrgFlowChartVariant } from './OrgFlowControls';
 import { useDraggableFlowNodes } from './useDraggableFlowNodes';
+import { useOrgFlowMiniMapVisibility } from './useOrgFlowMiniMapVisibility';
+import { useOrgFlowSidebarWidth } from './useOrgFlowSidebarWidth';
 
 const nodeTypes = { employee: EmployeeNode } as const;
 
@@ -58,10 +56,6 @@ function FlowInner({
     selectedGroupId,
   );
 
-  const selectedEmployee = selectedEmployeeId
-    ? data.employees.find((e) => e.id === selectedEmployeeId)
-    : undefined;
-
   useEffect(() => {
     if (computedNodes.length > 0) {
       const t = setTimeout(() => fitView({ padding: 0.2 }), 80);
@@ -69,9 +63,11 @@ function FlowInner({
     }
   }, [computedNodes, edges, fitView, selectedGroupId]);
 
-  const [showMiniMap, setShowMiniMap] = useState(true);
+  const hasDetail = !!selectedEmployeeId;
+  const { showMiniMap, setShowMiniMap } = useOrgFlowMiniMapVisibility(hasDetail);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -79,6 +75,13 @@ function FlowInner({
     containerRef.current = node;
     setPortalContainer(node);
   }, []);
+
+  const sidebarWidth = useOrgFlowSidebarWidth(sidebarRef, true);
+
+  const chartStyle =
+    sidebarWidth > 0
+      ? ({ '--org-flow-sidebar-width': `${sidebarWidth}px` } as React.CSSProperties)
+      : undefined;
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -107,11 +110,14 @@ function FlowInner({
 
   return (
     <div
-      className={`org-flow-chart${isFullscreen ? ' org-flow-chart--fullscreen' : ''}`}
       ref={setChartContainer}
+      className={cn(
+        'org-flow-chart relative h-full min-h-[480px] overflow-hidden rounded-xl border border-border bg-muted/25 shadow-sm',
+        isFullscreen && 'org-flow-chart--fullscreen',
+      )}
+      style={chartStyle}
     >
-      <FluentProvider theme={webLightTheme} className="org-flow-fluent-root">
-        <ReactFlow
+      <ReactFlow
         nodes={nodes as import('@xyflow/react').Node[]}
         edges={edges}
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
@@ -123,63 +129,43 @@ function FlowInner({
         elementsSelectable
         minZoom={0.2}
         maxZoom={1.5}
+        proOptions={{ hideAttribution: true }}
       >
-        <Background gap={16} />
-        <Controls />
+        <Background gap={20} size={1} color="var(--border)" />
+        <Controls
+          className="!rounded-lg !border-border !bg-card/90 !shadow-md [&>button]:!border-border [&>button]:!bg-background [&>button]:hover:!bg-muted"
+        />
 
-        <Panel position="top-left" className="org-flow-panel">
-          <OrgFlowControls
+        <Panel
+          position="top-left"
+          className="org-flow-chrome-panel org-flow-sidebar-panel !m-0 !top-0 !left-0"
+        >
+          <OrgFlowLeftStack
+            sidebarRef={sidebarRef}
             variant={variant}
             selectedGroupId={selectedGroupId}
             onGroupChange={onGroupChange}
             activeGroups={activeGroups}
             mountNode={portalContainer}
+            selectedEmployeeId={selectedEmployeeId}
+            onCloseDetail={() => onNodeSelect(null)}
+            showMiniMap={showMiniMap}
+            onToggleMiniMap={() => setShowMiniMap((v) => !v)}
+            miniMapCompact={hasDetail}
           />
         </Panel>
 
-        {/* 全螢幕按鈕 — 右上角 */}
-        <Panel position="top-right" className="fullscreen-panel">
-          <button
-            className="fullscreen-btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? '離開全螢幕' : '全螢幕'}
-          >
-            {isFullscreen ? '✕ 離開' : '⤢ 全螢幕'}
-          </button>
-        </Panel>
+        <OrgFlowFullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      </ReactFlow>
 
-        {/* MiniMap — 右下角 */}
-        <Panel position="bottom-right" className="minimap-panel">
-          <button
-            className="minimap-toggle-tab"
-            onClick={() => setShowMiniMap((v) => !v)}
-            title={showMiniMap ? '隱藏觀景窗' : '顯示觀景窗'}
-          >
-            {showMiniMap ? '▼' : '▲'} 觀景窗
-          </button>
-          <div className={`minimap-slide${showMiniMap ? '' : ' minimap-slide--hidden'}`}>
-            <MiniMap zoomable pannable nodeColor="#d0e4f7" nodeStrokeColor="#4a90d9" />
-          </div>
-        </Panel>
-
-        </ReactFlow>
-
-        {selectedEmployeeId && selectedEmployee && (
-          <div className="org-detail-float">
-            <OrgDetailPanel
-              employeeId={selectedEmployeeId}
-              onClose={() => onNodeSelect(null)}
-              portalContainer={portalContainer}
-            />
-          </div>
-        )}
-
-        {error && (
-          <MessageBar intent="error" className="org-flow-error">
-            <MessageBarBody>{error}</MessageBarBody>
-          </MessageBar>
-        )}
-      </FluentProvider>
+      {error && (
+        <Alert
+          variant="destructive"
+          className="absolute bottom-3 left-3 right-3 z-10 border-destructive/30 bg-card/95 shadow-md backdrop-blur-sm"
+        >
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

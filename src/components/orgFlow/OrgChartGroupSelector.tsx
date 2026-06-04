@@ -1,5 +1,13 @@
-import { Dropdown, Field, Option } from '@fluentui/react-components';
-import type { OptionOnSelectData } from '@fluentui/react-components';
+import { useMemo } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { orderSelectOptions } from '@/lib/orderSelectOptions';
 import { ALL_GROUPS_VIEW_ID } from '../../services/buildOrgFlowGraph';
 import type { Group } from '../../types/org';
 
@@ -8,7 +16,6 @@ interface OrgChartGroupSelectorProps {
   onGroupChange: (groupId: string) => void;
   activeGroups: Group[];
   allGroupsLabel: string;
-  /** 全螢幕時將下拉選單 portal 掛在圖表容器內 */
   mountNode?: HTMLElement | null;
 }
 
@@ -19,31 +26,40 @@ export function OrgChartGroupSelector({
   allGroupsLabel,
   mountNode,
 }: OrgChartGroupSelectorProps) {
-  const displayValue =
-    selectedGroupId === ALL_GROUPS_VIEW_ID
-      ? allGroupsLabel
-      : (activeGroups.find((g) => g.id === selectedGroupId)?.name ?? '選擇組別');
+  const groupOptions = useMemo(() => {
+    const items = [
+      { id: ALL_GROUPS_VIEW_ID, name: allGroupsLabel },
+      ...activeGroups.map((g) => ({ id: g.id, name: g.name })),
+    ];
+    return orderSelectOptions(items, selectedGroupId, (o) => o.id);
+  }, [activeGroups, allGroupsLabel, selectedGroupId]);
 
   return (
-    <Field label="檢視組別" className="org-flow-group-field">
-      <Dropdown
-        inlinePopup
-        mountNode={mountNode ?? undefined}
-        value={displayValue}
-        selectedOptions={selectedGroupId ? [selectedGroupId] : []}
-        onOptionSelect={(_e, opt: OptionOnSelectData) => {
-          if (opt.optionValue) onGroupChange(opt.optionValue);
+    <div className="grid gap-2">
+      <Label htmlFor="org-chart-group-select" className="text-xs font-medium text-muted-foreground">
+        檢視組別
+      </Label>
+      <Select
+        value={selectedGroupId}
+        onValueChange={(value) => {
+          if (value) onGroupChange(value);
         }}
       >
-        <Option key={ALL_GROUPS_VIEW_ID} value={ALL_GROUPS_VIEW_ID} text={allGroupsLabel}>
-          {allGroupsLabel}
-        </Option>
-        {activeGroups.map((g) => (
-          <Option key={g.id} value={g.id} text={g.name}>
-            {g.name}
-          </Option>
-        ))}
-      </Dropdown>
-    </Field>
+        <SelectTrigger id="org-chart-group-select" className="w-full bg-background">
+          <SelectValue>
+            {selectedGroupId === ALL_GROUPS_VIEW_ID
+              ? allGroupsLabel
+              : (activeGroups.find((g) => g.id === selectedGroupId)?.name ?? '選擇組別')}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent container={mountNode}>
+          {groupOptions.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

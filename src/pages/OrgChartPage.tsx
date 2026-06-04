@@ -1,5 +1,4 @@
-import { Title2, Text, Tab, TabList } from '@fluentui/react-components';
-import type { SelectTabData } from '@fluentui/react-components';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMemo, useState } from 'react';
 import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
@@ -27,6 +26,13 @@ function resolveGroupId(
   return pickDefaultGroupId(groups);
 }
 
+const chartDescriptions: Record<ChartMode, string> = {
+  reporting:
+    '以人員為節點、依匯報關係連線；可選「全公司」或單一組別。實線為主匯報、虛線為其他主管。',
+  membership:
+    '以每筆「組別歸屬」為節點，連線依該歸屬的主管設定；同一人跨組會出現多個節點。',
+};
+
 export function OrgChartPage() {
   const { data } = useOrg();
 
@@ -39,11 +45,6 @@ export function OrgChartPage() {
     [groupId, data.groups],
   );
 
-  const onTabSelect = (_e: unknown, tabData: SelectTabData) => {
-    setChartMode(tabData.value as ChartMode);
-    setSelectedEmployeeId(null);
-  };
-
   const chartProps = {
     selectedGroupId: resolvedGroupId,
     onGroupChange: setGroupId,
@@ -52,20 +53,28 @@ export function OrgChartPage() {
   };
 
   return (
-    <div className="org-chart-page">
-      <Title2>組織圖</Title2>
-      <TabList selectedValue={chartMode} onTabSelect={onTabSelect} className="org-chart-tabs">
-        <Tab value="reporting">匯報組織圖</Tab>
-        <Tab value="membership">組別歸屬圖</Tab>
-      </TabList>
-      <Text block className="page-desc">
-        {chartMode === 'reporting' ? (
-          <>以人員為節點、依匯報關係連線；可選「全公司」或單一組別。實線為主匯報、虛線為其他主管。</>
-        ) : (
-          <>以每筆「組別歸屬」為節點，連線依該歸屬的主管設定；同一人跨組會出現多個節點。</>
-        )}
-      </Text>
-      <div className="org-chart-layout">
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-2xl font-semibold tracking-tight">組織圖</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {chartDescriptions[chartMode]}
+        </p>
+      </header>
+
+      <Tabs
+        value={chartMode}
+        onValueChange={(value) => {
+          setChartMode(value as ChartMode);
+          setSelectedEmployeeId(null);
+        }}
+      >
+        <TabsList variant="line" className="w-fit">
+          <TabsTrigger value="reporting">匯報組織圖</TabsTrigger>
+          <TabsTrigger value="membership">組別歸屬圖</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <div className="relative h-[calc(100vh-13rem)] min-h-[520px]">
         {chartMode === 'reporting' ? (
           <OrgFlowChart variant="reporting" {...chartProps} />
         ) : (

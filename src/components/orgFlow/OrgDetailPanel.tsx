@@ -1,33 +1,48 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  Checkbox,
-  Dropdown,
-  Field,
-  Input,
-  Option,
-  Text,
-} from '@fluentui/react-components';
-import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-components';
+  Plus,
+  Pencil,
+  Save,
+  User,
+  X,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
-  Add24Regular,
-  Dismiss24Regular,
-  Edit24Regular,
-  Person24Regular,
-  Save24Regular,
-} from '@fluentui/react-icons';
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
+import { orderSelectOptions } from '@/lib/orderSelectOptions';
 import type { Assignment, Employee } from '../../types/org';
 import { useOrg } from '../../context/useOrg';
 import { getActiveEmployees } from '../../services/validators';
+
+const EMPLOYEE_STATUS_OPTIONS = [
+  { value: 'active' as const, label: '在職' },
+  { value: 'inactive' as const, label: '離職' },
+];
 
 interface OrgDetailPanelProps {
   employeeId: string;
   onClose: () => void;
   portalContainer: HTMLElement | null;
+  className?: string;
 }
 
 function OrgModal({
@@ -41,8 +56,14 @@ function OrgModal({
 }) {
   if (!container) return null;
   return ReactDOM.createPortal(
-    <div className="org-modal-backdrop" onClick={onBackdropClick}>
-      <div className="org-modal-content" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 p-4 backdrop-blur-sm"
+      onClick={onBackdropClick}
+    >
+      <div
+        className="max-h-[calc(100%-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-border bg-card shadow-xl ring-1 ring-foreground/5"
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>,
@@ -50,12 +71,28 @@ function OrgModal({
   );
 }
 
+const modalFormClass = 'flex flex-col gap-4 p-6';
+const modalHeaderClass = 'flex items-center justify-between gap-2';
+const modalActionsClass =
+  'flex justify-end gap-2 border-t border-border pt-4';
+
+function ModalCloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="icon-sm" onClick={onClick} title="關閉">
+      <X className="size-4" />
+    </Button>
+  );
+}
+
 function EmployeeEditForm({
   employee: initial,
   onClose,
+  selectPortalContainer,
 }: {
   employee: Employee;
   onClose: () => void;
+  /** 與檢視組別相同：全螢幕時下拉需掛在圖表容器內 */
+  selectPortalContainer: HTMLElement | null;
 }) {
   const { saveEmployee } = useOrg();
   const [employee, setEmployee] = useState<Employee>(initial);
@@ -71,34 +108,62 @@ function EmployeeEditForm({
     onClose();
   };
 
+  const statusOptions = useMemo(
+    () => orderSelectOptions(EMPLOYEE_STATUS_OPTIONS, employee.status, (o) => o.value),
+    [employee.status],
+  );
+
   return (
-    <div className="org-modal-form">
-      <div className="org-modal-header">
-        <Text weight="semibold">編輯員工資料</Text>
-        <button className="org-detail-close-btn" onClick={onClose} title="關閉">✕</button>
+    <div className={modalFormClass}>
+      <div className={modalHeaderClass}>
+        <p className="font-semibold tracking-tight">編輯員工資料</p>
+        <ModalCloseButton onClick={onClose} />
       </div>
-      {error && <Text style={{ color: 'var(--colorPaletteRedForeground1)' }}>{error}</Text>}
-      <Field label="工號" required>
-        <Input value={employee.employeeNo} onChange={(_e, d) => setEmployee((v) => ({ ...v, employeeNo: d.value }))} />
-      </Field>
-      <Field label="姓名" required>
-        <Input value={employee.name} onChange={(_e, d) => setEmployee((v) => ({ ...v, name: d.value }))} />
-      </Field>
-      <Field label="狀態">
-        <Dropdown
-          value={employee.status === 'active' ? '在職' : '離職'}
-          selectedOptions={[employee.status]}
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) setEmployee((v) => ({ ...v, status: opt.optionValue as Employee['status'] }));
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="grid gap-1.5">
+        <Label htmlFor="org-edit-employee-no">工號 *</Label>
+        <Input
+          id="org-edit-employee-no"
+          value={employee.employeeNo}
+          onChange={(e) => setEmployee((v) => ({ ...v, employeeNo: e.target.value }))}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="org-edit-employee-name">姓名 *</Label>
+        <Input
+          id="org-edit-employee-name"
+          value={employee.name}
+          onChange={(e) => setEmployee((v) => ({ ...v, name: e.target.value }))}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="org-edit-employee-status">狀態</Label>
+        <Select
+          value={employee.status}
+          onValueChange={(value) => {
+            if (value) setEmployee((v) => ({ ...v, status: value as Employee['status'] }));
           }}
         >
-          <Option value="active">在職</Option>
-          <Option value="inactive">離職</Option>
-        </Dropdown>
-      </Field>
-      <div className="org-modal-actions">
-        <Button appearance="secondary" onClick={onClose}>取消</Button>
-        <Button appearance="primary" icon={<Save24Regular />} onClick={onSave}>儲存</Button>
+          <SelectTrigger id="org-edit-employee-status" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent container={selectPortalContainer} className="z-[60]">
+            {statusOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className={modalActionsClass}>
+        <Button type="button" variant="outline" onClick={onClose}>
+          取消
+        </Button>
+        <Button type="button" onClick={onSave}>
+          <Save />
+          儲存
+        </Button>
       </div>
     </div>
   );
@@ -108,10 +173,12 @@ function AssignmentEditForm({
   assignment: initial,
   isNew,
   onClose,
+  selectPortalContainer,
 }: {
   assignment: Assignment;
   isNew: boolean;
   onClose: () => void;
+  selectPortalContainer: HTMLElement | null;
 }) {
   const { data, saveAssignment } = useOrg();
   const [assignment, setAssignment] = useState(initial);
@@ -130,6 +197,33 @@ function AssignmentEditForm({
     });
   };
 
+  const sortedJobLevels = useMemo(
+    () => [...data.jobLevels].sort((a, b) => b.rank - a.rank),
+    [data.jobLevels],
+  );
+
+  const orderedGroups = useMemo(
+    () => orderSelectOptions(activeGroups, assignment.groupId || undefined, (g) => g.id),
+    [activeGroups, assignment.groupId],
+  );
+
+  const orderedJobLevels = useMemo(
+    () => orderSelectOptions(sortedJobLevels, assignment.jobLevelId || undefined, (j) => j.id),
+    [sortedJobLevels, assignment.jobLevelId],
+  );
+
+  const orderedSupervisorOptions = useMemo(() => {
+    const items = assignment.supervisorIds.map((sid) => {
+      const e = data.employees.find((x) => x.id === sid);
+      return { id: sid, name: e?.name ?? sid };
+    });
+    return orderSelectOptions(
+      items,
+      assignment.primarySupervisorId ?? undefined,
+      (o) => o.id,
+    );
+  }, [assignment.supervisorIds, assignment.primarySupervisorId, data.employees]);
+
   const onSave = () => {
     const err = saveAssignment(assignment, isNew);
     if (err) { setError(err); return; }
@@ -137,85 +231,128 @@ function AssignmentEditForm({
   };
 
   return (
-    <div className="org-modal-form">
-      <div className="org-modal-header">
-        <Text weight="semibold">{isNew ? '新增組別歸屬' : '編輯組別歸屬'}</Text>
-        <button className="org-detail-close-btn" onClick={onClose} title="關閉">✕</button>
+    <div className={modalFormClass}>
+      <div className={modalHeaderClass}>
+        <p className="font-semibold tracking-tight">
+          {isNew ? '新增組別歸屬' : '編輯組別歸屬'}
+        </p>
+        <ModalCloseButton onClick={onClose} />
       </div>
-      {error && <Text style={{ color: 'var(--colorPaletteRedForeground1)' }}>{error}</Text>}
-      <Field label="組別" required>
-        <Dropdown
-          placeholder="選擇組別"
-          value={activeGroups.find((g) => g.id === assignment.groupId)?.name ?? ''}
-          selectedOptions={assignment.groupId ? [assignment.groupId] : []}
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) setAssignment((a) => ({ ...a, groupId: opt.optionValue! }));
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <div className="grid gap-1.5">
+        <Label htmlFor="org-edit-assignment-group">組別 *</Label>
+        <Select
+          value={assignment.groupId || undefined}
+          onValueChange={(value) => {
+            if (value) setAssignment((a) => ({ ...a, groupId: value }));
           }}
         >
-          {activeGroups.map((g) => <Option key={g.id} value={g.id} text={g.name}>{g.name}</Option>)}
-        </Dropdown>
-      </Field>
-      <Field label="職級" required>
-        <Dropdown
-          placeholder="選擇職級"
-          value={data.jobLevels.find((j) => j.id === assignment.jobLevelId)?.name ?? ''}
-          selectedOptions={assignment.jobLevelId ? [assignment.jobLevelId] : []}
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) setAssignment((a) => ({ ...a, jobLevelId: opt.optionValue! }));
+          <SelectTrigger id="org-edit-assignment-group" className="w-full">
+            <SelectValue placeholder="選擇組別">
+              {activeGroups.find((g) => g.id === assignment.groupId)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent container={selectPortalContainer} className="z-[60]">
+            {orderedGroups.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="org-edit-assignment-level">職級 *</Label>
+        <Select
+          value={assignment.jobLevelId || undefined}
+          onValueChange={(value) => {
+            if (value) setAssignment((a) => ({ ...a, jobLevelId: value }));
           }}
         >
-          {[...data.jobLevels].sort((a, b) => b.rank - a.rank).map((j) => (
-            <Option key={j.id} value={j.id} text={j.name}>{j.name}</Option>
-          ))}
-        </Dropdown>
-      </Field>
-      <div className="supervisor-field">
-        <Text size={300} weight="semibold" className="supervisor-field-label">
-          主管（可多選）
-        </Text>
-        <div className="supervisor-checkboxes">
+          <SelectTrigger id="org-edit-assignment-level" className="w-full">
+            <SelectValue placeholder="選擇職級">
+              {data.jobLevels.find((j) => j.id === assignment.jobLevelId)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent container={selectPortalContainer} className="z-[60]">
+            {orderedJobLevels.map((j) => (
+              <SelectItem key={j.id} value={j.id}>
+                {j.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="rounded-lg border border-border bg-muted/30 p-3">
+        <p className="mb-2 text-sm font-medium">主管（可多選）</p>
+        <div className="flex max-h-36 flex-col gap-2 overflow-y-auto">
           {activeEmployees.map((e) => (
-            <Checkbox
-              key={e.id}
-              id={`${assignment.id}-supervisor-${e.id}`}
-              label={`${e.name} (${e.employeeNo})`}
-              checked={assignment.supervisorIds.includes(e.id)}
-              onChange={(_ev, d) => toggleSupervisor(e.id, !!d.checked)}
-            />
+            <div key={e.id} className="flex items-center gap-2">
+              <Checkbox
+                id={`${assignment.id}-supervisor-${e.id}`}
+                checked={assignment.supervisorIds.includes(e.id)}
+                onCheckedChange={(checked) => toggleSupervisor(e.id, checked)}
+              />
+              <Label htmlFor={`${assignment.id}-supervisor-${e.id}`}>
+                {e.name} ({e.employeeNo})
+              </Label>
+            </div>
           ))}
         </div>
       </div>
       {assignment.supervisorIds.length > 0 && (
-        <Field label="主主管">
-          <Dropdown
-            placeholder="選擇主主管"
-            value={data.employees.find((e) => e.id === assignment.primarySupervisorId)?.name ?? ''}
-            selectedOptions={assignment.primarySupervisorId ? [assignment.primarySupervisorId] : []}
-            onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-              setAssignment((a) => ({ ...a, primarySupervisorId: opt.optionValue ?? null }));
-            }}
+        <div className="grid gap-1.5">
+          <Label htmlFor="org-edit-primary-supervisor">主主管</Label>
+          <Select
+            value={assignment.primarySupervisorId ?? undefined}
+            onValueChange={(value) =>
+              setAssignment((a) => ({ ...a, primarySupervisorId: value ?? null }))
+            }
           >
-            {assignment.supervisorIds.map((sid) => {
-              const e = data.employees.find((x) => x.id === sid);
-              return <Option key={sid} value={sid} text={e?.name ?? sid}>{e?.name ?? sid}</Option>;
-            })}
-          </Dropdown>
-        </Field>
+            <SelectTrigger id="org-edit-primary-supervisor" className="w-full">
+              <SelectValue placeholder="選擇主主管">
+                {data.employees.find((e) => e.id === assignment.primarySupervisorId)?.name}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent container={selectPortalContainer} className="z-[60]">
+              {orderedSupervisorOptions.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
-      <Checkbox
-        label="設為主組別"
-        checked={assignment.isPrimaryGroup}
-        onChange={(_e, d) => setAssignment((a) => ({ ...a, isPrimaryGroup: !!d.checked }))}
-      />
-      <div className="org-modal-actions">
-        <Button appearance="secondary" icon={<Dismiss24Regular />} onClick={onClose}>取消</Button>
-        <Button appearance="primary" icon={<Save24Regular />} onClick={onSave}>儲存</Button>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={`${assignment.id}-primary-group`}
+          checked={assignment.isPrimaryGroup}
+          onCheckedChange={(checked) =>
+            setAssignment((a) => ({ ...a, isPrimaryGroup: checked }))
+          }
+        />
+        <Label htmlFor={`${assignment.id}-primary-group`}>設為主組別</Label>
+      </div>
+      <div className={modalActionsClass}>
+        <Button type="button" variant="outline" onClick={onClose}>
+          取消
+        </Button>
+        <Button type="button" onClick={onSave}>
+          <Save />
+          儲存
+        </Button>
       </div>
     </div>
   );
 }
 
-export function OrgDetailPanel({ employeeId, onClose, portalContainer }: OrgDetailPanelProps) {
+export function OrgDetailPanel({
+  employeeId,
+  onClose,
+  portalContainer,
+  className,
+}: OrgDetailPanelProps) {
   const { data, newAssignmentFor } = useOrg();
   const employee = data.employees.find((e) => e.id === employeeId);
   const assignments = data.assignments.filter((a) => a.employeeId === employeeId);
@@ -242,70 +379,115 @@ export function OrgDetailPanel({ employeeId, onClose, portalContainer }: OrgDeta
   };
 
   return (
-    <div className="org-detail-panel-inner">
-      <div className="org-detail-emp-row">
-        <div className="org-detail-emp-info">
-          <Person24Regular className="org-detail-emp-icon" />
-          <div>
-            <Text weight="semibold" block>{employee.name}</Text>
-            <Text size={200} block>{employee.employeeNo}</Text>
-          </div>
+    <div
+      className={cn(
+        'org-detail-panel w-full rounded-xl border border-border bg-card/95 shadow-md ring-1 ring-foreground/5 backdrop-blur-sm',
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-3 p-4 pb-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <User className="size-5" />
         </div>
-        <div className="org-detail-emp-actions">
-          <Button appearance="subtle" size="small" icon={<Edit24Regular />}
-            onClick={() => setEditingEmp(true)} title="編輯員工資料" />
-          <button className="org-detail-close-btn" onClick={onClose} title="關閉">✕</button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold leading-snug">{employee.name}</p>
+          <p className="text-xs text-muted-foreground">{employee.employeeNo}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setEditingEmp(true)}
+            title="編輯員工資料"
+          >
+            <Pencil />
+          </Button>
+          <ModalCloseButton onClick={onClose} />
         </div>
       </div>
 
-      <div className="org-detail-assignments">
-        <div className="org-detail-section-header">
-          <Text size={200} weight="semibold">組別歸屬</Text>
-          <Button appearance="subtle" size="small" icon={<Add24Regular />}
-            onClick={openAddAssignment} title="新增歸屬" />
-        </div>
+      <Separator className="shrink-0" />
 
-        {assignments.map((a) => {
-          const group = data.groups.find((g) => g.id === a.groupId);
-          const jl = data.jobLevels.find((j) => j.id === a.jobLevelId);
-          return (
-            <Card key={a.id} className="org-detail-assign-card">
-              <CardHeader
-                header={
-                  <span className="org-detail-assign-title">
+      <div className="flex shrink-0 items-center justify-between px-4 py-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          組別歸屬
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          onClick={openAddAssignment}
+          title="新增歸屬"
+        >
+          <Plus />
+        </Button>
+      </div>
+
+      <div className="org-detail-assign-list">
+        <div className="flex flex-col gap-2">
+          {assignments.map((a) => {
+            const group = data.groups.find((g) => g.id === a.groupId);
+            const jl = data.jobLevels.find((j) => j.id === a.jobLevelId);
+            return (
+              <Card
+                key={a.id}
+                size="sm"
+                className="py-0 shadow-none"
+              >
+                <CardHeader className="gap-2 px-3 py-3">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                     {group?.name ?? '—'}
                     {a.isPrimaryGroup && (
-                      <Badge appearance="outline" color="brand" size="small">主組別</Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        主組別
+                      </Badge>
                     )}
-                  </span>
-                }
-                action={
-                  <Button appearance="subtle" size="small" icon={<Edit24Regular />}
-                    onClick={() => setEditingAssignment(a)} title="編輯歸屬" />
-                }
-              />
-              <Text size={200} block>職級：{jl?.name ?? '—'}</Text>
-              <Text size={200} block>
-                主管：
-                {a.supervisorIds
-                  .map((sid) => {
-                    const s = data.employees.find((e) => e.id === sid);
-                    return s ? `${s.name}${a.primarySupervisorId === sid ? '*' : ''}` : sid;
-                  })
-                  .join('、') || '—'}
-              </Text>
-            </Card>
-          );
-        })}
+                  </CardTitle>
+                  <CardAction>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setEditingAssignment(a)}
+                      title="編輯歸屬"
+                    >
+                      <Pencil />
+                    </Button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="space-y-1 px-3 pb-3 pt-0 text-xs text-muted-foreground">
+                  <p>職級：{jl?.name ?? '—'}</p>
+                  <p>
+                    主管：
+                    {a.supervisorIds
+                      .map((sid) => {
+                        const s = data.employees.find((e) => e.id === sid);
+                        return s ? `${s.name}${a.primarySupervisorId === sid ? '*' : ''}` : sid;
+                      })
+                      .join('、') || '—'}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
 
-        {assignments.length === 0 && (
-          <Text size={200} className="org-detail-empty">尚無組別歸屬</Text>
-        )}
+          {assignments.length === 0 && (
+            <p className="rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+              尚無組別歸屬
+            </p>
+          )}
+        </div>
       </div>
 
       {editingEmp && (
         <OrgModal container={portalContainer} onBackdropClick={() => setEditingEmp(false)}>
-          <EmployeeEditForm key={employee.id} employee={employee} onClose={() => setEditingEmp(false)} />
+          <EmployeeEditForm
+            key={employee.id}
+            employee={employee}
+            onClose={() => setEditingEmp(false)}
+            selectPortalContainer={portalContainer}
+          />
         </OrgModal>
       )}
 
@@ -316,6 +498,7 @@ export function OrgDetailPanel({ employeeId, onClose, portalContainer }: OrgDeta
             assignment={editingAssignment}
             isNew={false}
             onClose={() => setEditingAssignment(null)}
+            selectPortalContainer={portalContainer}
           />
         </OrgModal>
       )}
@@ -327,6 +510,7 @@ export function OrgDetailPanel({ employeeId, onClose, portalContainer }: OrgDeta
             assignment={newAssignmentDraft}
             isNew={true}
             onClose={closeAddAssignment}
+            selectPortalContainer={portalContainer}
           />
         </OrgModal>
       )}
