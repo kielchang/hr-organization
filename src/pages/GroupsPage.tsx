@@ -14,7 +14,7 @@ import { Add24Regular, Edit24Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import type { Group } from '../types/org';
 import { GroupForm } from '../components/GroupForm';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 
 export function GroupsPage() {
   const { data } = useOrg();

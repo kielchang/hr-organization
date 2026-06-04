@@ -16,7 +16,7 @@ import {
 } from '@fluentui/react-components';
 import { useState } from 'react';
 import type { ChangeEntry } from '../types/org';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 
 const changeTypeLabels: Record<string, string> = {
   employee_create: '新增員工',

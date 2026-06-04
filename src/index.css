@@ -107,6 +107,16 @@ code {
   gap: 4px;
 }
 
+.supervisor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.supervisor-field-label {
+  color: var(--colorNeutralForeground1, #242424);
+}
+
 .supervisor-checkboxes {
   display: flex;
   flex-direction: column;
@@ -233,8 +243,9 @@ code {
   background: #fafafa;
 }
 
-/* FluentProvider wrapper — 透明 passthrough，讓 portal 掛在 fullscreen 容器內 */
+/* FluentProvider：填滿圖表區，portal 掛在內（全螢幕時下拉選單仍可用） */
 .org-flow-fluent-root {
+  position: relative;
   width: 100%;
   height: 100%;
   background: transparent !important;
@@ -246,19 +257,36 @@ code {
   height: 100%;
 }
 
+/* React Flow 左上角 Panel：需可點擊，且下拉不被裁切 */
+.react-flow__panel.org-flow-panel {
+  pointer-events: all;
+  margin: 10px;
+  z-index: 10;
+}
+
 .org-flow-panel {
   background: rgba(255, 255, 255, 0.95);
   padding: 12px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   min-width: 220px;
+  max-width: min(320px, calc(100% - 24px));
+  overflow: visible;
 }
 
-/* 人員詳情獨立浮動方塊 — 寬度與 org-flow-panel 齊 */
+.org-flow-controls {
+  overflow: visible;
+}
+
+.org-flow-group-field {
+  min-width: 200px;
+}
+
+/* 人員詳情 — 在組別選擇下方 */
 .org-detail-float {
   position: absolute;
-  top: 128px;
-  left: 15px;
+  top: 132px;
+  left: 12px;
   min-width: 220px;
   max-height: calc(100% - 148px);
   background: rgba(255, 255, 255, 0.97);
@@ -269,7 +297,7 @@ code {
   z-index: 5;
 }
 
-/* AssignmentEditor card 跟著容器寬度走 */
+/* 詳情面板內 Card 跟著容器寬度走 */
 .org-detail-float .assignment-card,
 .org-detail-float .fui-Card {
   width: 100%;

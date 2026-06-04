@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
-import { OrgProvider } from './context/OrgContext';
+import { OrgProvider } from './context/OrgProvider';
 import { Layout } from './components/Layout';
 import { PeoplePage } from './pages/PeoplePage';
 import { GroupsPage } from './pages/GroupsPage';

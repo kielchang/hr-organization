@@ -1,25 +1,54 @@
 import { Title2, Text, Tab, TabList } from '@fluentui/react-components';
 import type { SelectTabData } from '@fluentui/react-components';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
-import { useOrg } from '../context/OrgContext';
+import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
+import { useOrg } from '../context/useOrg';
 
 type ChartMode = 'reporting' | 'membership';
 
+function pickDefaultGroupId(groups: { id: string; status: string }[]): string {
+  const active = groups.filter((g) => g.status === 'active');
+  return (
+    active.find((g) => g.id === 'g4')?.id ??
+    active[0]?.id ??
+    ALL_GROUPS_VIEW_ID
+  );
+}
+
+function resolveGroupId(
+  groupId: string,
+  groups: { id: string; status: string }[],
+): string {
+  if (groupId === ALL_GROUPS_VIEW_ID) return ALL_GROUPS_VIEW_ID;
+  const active = groups.filter((g) => g.status === 'active');
+  if (active.some((g) => g.id === groupId)) return groupId;
+  return pickDefaultGroupId(groups);
+}
+
 export function OrgChartPage() {
   const { data } = useOrg();
-  const defaultGroup =
-    data.groups.find((g) => g.status === 'active' && g.id === 'g4')?.id ??
-    data.groups.find((g) => g.status === 'active')?.id ??
-    '';
+
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
-  const [groupId, setGroupId] = useState(defaultGroup);
+  const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
-  const onTabSelect = (_e: unknown, data: SelectTabData) => {
-    setChartMode(data.value as ChartMode);
+  const resolvedGroupId = useMemo(
+    () => resolveGroupId(groupId, data.groups),
+    [groupId, data.groups],
+  );
+
+  const onTabSelect = (_e: unknown, tabData: SelectTabData) => {
+    setChartMode(tabData.value as ChartMode);
     setSelectedEmployeeId(null);
+  };
+
+  const chartProps = {
+    selectedGroupId: resolvedGroupId,
+    onGroupChange: setGroupId,
+    selectedEmployeeId,
+    onNodeSelect: setSelectedEmployeeId,
   };
 
   return (
@@ -38,19 +67,9 @@ export function OrgChartPage() {
       </Text>
       <div className="org-chart-layout">
         {chartMode === 'reporting' ? (
-          <OrgFlowChart
-            selectedGroupId={groupId}
-            onGroupChange={setGroupId}
-            selectedEmployeeId={selectedEmployeeId}
-            onNodeSelect={setSelectedEmployeeId}
-          />
+          <OrgFlowChart variant="reporting" {...chartProps} />
         ) : (
-          <GroupMembershipFlowChart
-            selectedGroupId={groupId}
-            onGroupChange={setGroupId}
-            selectedEmployeeId={selectedEmployeeId}
-            onNodeSelect={setSelectedEmployeeId}
-          />
+          <GroupMembershipFlowChart variant="membership" {...chartProps} />
         )}
       </div>
     </div>

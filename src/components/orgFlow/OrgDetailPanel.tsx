@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Badge,
   Button,
   Card,
   CardHeader,
+  Checkbox,
   Dropdown,
   Field,
   Input,
@@ -20,17 +21,15 @@ import {
   Save24Regular,
 } from '@fluentui/react-icons';
 import type { Assignment, Employee } from '../../types/org';
-import { useOrg } from '../../context/OrgContext';
+import { useOrg } from '../../context/useOrg';
 import { getActiveEmployees } from '../../services/validators';
 
 interface OrgDetailPanelProps {
   employeeId: string;
   onClose: () => void;
-  chartMode: 'reporting' | 'membership';
-  containerRef: React.RefObject<HTMLDivElement | null>;
+  portalContainer: HTMLElement | null;
 }
 
-// Modal 掛進 containerRef，全螢幕模式下也能正常顯示
 function OrgModal({
   container,
   onBackdropClick,
@@ -51,7 +50,6 @@ function OrgModal({
   );
 }
 
-// ─── 員工資料編輯表單（內嵌，不用 Dialog） ───────────────────────────
 function EmployeeEditForm({
   employee: initial,
   onClose,
@@ -106,7 +104,6 @@ function EmployeeEditForm({
   );
 }
 
-// ─── 組別歸屬編輯表單（內嵌，不用 Card） ────────────────────────────
 function AssignmentEditForm({
   assignment: initial,
   isNew,
@@ -172,25 +169,22 @@ function AssignmentEditForm({
           ))}
         </Dropdown>
       </Field>
-      <Field label="主管（可多選）">
+      <div className="supervisor-field">
+        <Text size={300} weight="semibold" className="supervisor-field-label">
+          主管（可多選）
+        </Text>
         <div className="supervisor-checkboxes">
-          {activeEmployees.map((e) => {
-            const cbId = `sup-${assignment.id}-${e.id}`;
-            return (
-              <label key={e.id} className="org-modal-check-label" htmlFor={cbId}>
-                <input
-                  type="checkbox"
-                  id={cbId}
-                  checked={assignment.supervisorIds.includes(e.id)}
-                  onChange={(ev) => toggleSupervisor(e.id, ev.target.checked)}
-                  className="org-modal-checkbox"
-                />
-                {e.name} ({e.employeeNo})
-              </label>
-            );
-          })}
+          {activeEmployees.map((e) => (
+            <Checkbox
+              key={e.id}
+              id={`${assignment.id}-supervisor-${e.id}`}
+              label={`${e.name} (${e.employeeNo})`}
+              checked={assignment.supervisorIds.includes(e.id)}
+              onChange={(_ev, d) => toggleSupervisor(e.id, !!d.checked)}
+            />
+          ))}
         </div>
-      </Field>
+      </div>
       {assignment.supervisorIds.length > 0 && (
         <Field label="主主管">
           <Dropdown
@@ -221,33 +215,34 @@ function AssignmentEditForm({
   );
 }
 
-// ─── 主元件 ────────────────────────────────────────────────────────────
-export function OrgDetailPanel({ employeeId, onClose, chartMode: _chartMode, containerRef }: OrgDetailPanelProps) {
-  const { data } = useOrg();
+export function OrgDetailPanel({ employeeId, onClose, portalContainer }: OrgDetailPanelProps) {
+  const { data, newAssignmentFor } = useOrg();
   const employee = data.employees.find((e) => e.id === employeeId);
   const assignments = data.assignments.filter((a) => a.employeeId === employeeId);
 
   const [editingEmp, setEditingEmp] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [addingAssignment, setAddingAssignment] = useState(false);
+  const [newAssignmentDraft, setNewAssignmentDraft] = useState<Assignment | null>(null);
+
+  useEffect(() => {
+    if (!employee) onClose();
+  }, [employee, onClose]);
 
   if (!employee) return null;
 
-  const container = containerRef.current;
+  const openAddAssignment = () => {
+    setNewAssignmentDraft(newAssignmentFor(employeeId));
+    setAddingAssignment(true);
+  };
 
-  const newAssignment = (): Assignment => ({
-    id: `a_${crypto.randomUUID().slice(0, 8)}`,
-    employeeId,
-    groupId: '',
-    jobLevelId: '',
-    supervisorIds: [],
-    primarySupervisorId: null,
-    isPrimaryGroup: false,
-  });
+  const closeAddAssignment = () => {
+    setAddingAssignment(false);
+    setNewAssignmentDraft(null);
+  };
 
   return (
     <div className="org-detail-panel-inner">
-      {/* 員工基本資料 */}
       <div className="org-detail-emp-row">
         <div className="org-detail-emp-info">
           <Person24Regular className="org-detail-emp-icon" />
@@ -263,12 +258,11 @@ export function OrgDetailPanel({ employeeId, onClose, chartMode: _chartMode, con
         </div>
       </div>
 
-      {/* 組別歸屬列表 */}
       <div className="org-detail-assignments">
         <div className="org-detail-section-header">
           <Text size={200} weight="semibold">組別歸屬</Text>
           <Button appearance="subtle" size="small" icon={<Add24Regular />}
-            onClick={() => setAddingAssignment(true)} title="新增歸屬" />
+            onClick={openAddAssignment} title="新增歸屬" />
         </div>
 
         {assignments.map((a) => {
@@ -309,17 +303,16 @@ export function OrgDetailPanel({ employeeId, onClose, chartMode: _chartMode, con
         )}
       </div>
 
-      {/* 員工編輯 Modal */}
       {editingEmp && (
-        <OrgModal container={container} onBackdropClick={() => setEditingEmp(false)}>
-          <EmployeeEditForm employee={employee} onClose={() => setEditingEmp(false)} />
+        <OrgModal container={portalContainer} onBackdropClick={() => setEditingEmp(false)}>
+          <EmployeeEditForm key={employee.id} employee={employee} onClose={() => setEditingEmp(false)} />
         </OrgModal>
       )}
 
-      {/* 組別歸屬編輯 Modal */}
       {editingAssignment && (
-        <OrgModal container={container} onBackdropClick={() => setEditingAssignment(null)}>
+        <OrgModal container={portalContainer} onBackdropClick={() => setEditingAssignment(null)}>
           <AssignmentEditForm
+            key={editingAssignment.id}
             assignment={editingAssignment}
             isNew={false}
             onClose={() => setEditingAssignment(null)}
@@ -327,13 +320,13 @@ export function OrgDetailPanel({ employeeId, onClose, chartMode: _chartMode, con
         </OrgModal>
       )}
 
-      {/* 新增歸屬 Modal */}
-      {addingAssignment && (
-        <OrgModal container={container} onBackdropClick={() => setAddingAssignment(false)}>
+      {addingAssignment && newAssignmentDraft && (
+        <OrgModal container={portalContainer} onBackdropClick={closeAddAssignment}>
           <AssignmentEditForm
-            assignment={newAssignment()}
+            key={newAssignmentDraft.id}
+            assignment={newAssignmentDraft}
             isNew={true}
-            onClose={() => setAddingAssignment(false)}
+            onClose={closeAddAssignment}
           />
         </OrgModal>
       )}

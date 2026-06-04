@@ -12,7 +12,7 @@ import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-compon
 import { Add24Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import type { Employee } from '../types/org';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 
 interface EmployeeListProps {
   selectedId: string | null;

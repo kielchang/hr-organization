@@ -14,7 +14,7 @@ import {
 import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-components';
 import { useState } from 'react';
 import type { Group } from '../types/org';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 
 interface GroupFormProps {
   open: boolean;

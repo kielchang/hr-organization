@@ -12,7 +12,7 @@ import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-compon
 import { Dismiss24Regular, Save24Regular } from '@fluentui/react-icons';
 import { useMemo, useState } from 'react';
 import type { Assignment } from '../types/org';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 import { getActiveEmployees } from '../services/validators';
 
 interface AssignmentEditorProps {
@@ -131,18 +131,22 @@ export function AssignmentEditor({
             ))}
         </Dropdown>
       </Field>
-      <Field label="主管（可多選）">
+      <div className="supervisor-field">
+        <Text size={300} weight="semibold" className="supervisor-field-label">
+          主管（可多選）
+        </Text>
         <div className="supervisor-checkboxes">
           {supervisorOptions.map((o) => (
             <Checkbox
               key={o.value}
+              id={`${assignment.id}-supervisor-${o.value}`}
               label={o.text}
               checked={assignment.supervisorIds.includes(o.value)}
               onChange={(_e, d) => toggleSupervisor(o.value, !!d.checked)}
             />
           ))}
         </div>
-      </Field>
+      </div>
       {assignment.supervisorIds.length > 0 && (
         <Field label="主主管">
           <Dropdown

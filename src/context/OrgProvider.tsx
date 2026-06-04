@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { downloadOrgData } from '../services/exportImport';
 import {
   createEmptyAssignment,
@@ -23,6 +16,7 @@ import {
   type DataVersionInfo,
 } from '../services/dataVersions';
 import type { Assignment, Employee, Group, OrgData } from '../types/org';
+import { OrgContext, type OrgContextValue } from './orgContextState';
 
 const emptyOrgData: OrgData = {
   version: 1,
@@ -70,27 +64,6 @@ function createInitialState(): {
     data: draft ?? seedData,
   };
 }
-
-interface OrgContextValue {
-  data: OrgData;
-  dataVersions: DataVersionInfo[];
-  activeVersionId: string;
-  activeVersion: DataVersionInfo | undefined;
-  selectDataVersion: (id: string) => void;
-  operator: string;
-  setOperator: (name: string) => void;
-  saveEmployee: (employee: Employee, isNew: boolean) => string | null;
-  removeEmployee: (id: string) => void;
-  saveGroup: (group: Group, isNew: boolean) => string | null;
-  saveAssignment: (assignment: Assignment, isNew: boolean) => string | null;
-  removeAssignment: (id: string) => void;
-  newAssignmentFor: (employeeId: string) => Assignment;
-  loadFromFile: (data: OrgData) => void;
-  exportData: (filename?: string) => void;
-  applyChange: (mutate: (current: OrgData) => { data: OrgData; error?: string }, onSuccess?: () => void) => string | null;
-}
-
-const OrgContext = createContext<OrgContextValue | null>(null);
 
 export function OrgProvider({ children }: { children: ReactNode }) {
   const [initial] = useState(createInitialState);
@@ -230,10 +203,4 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
-}
-
-export function useOrg(): OrgContextValue {
-  const ctx = useContext(OrgContext);
-  if (!ctx) throw new Error('useOrg must be used within OrgProvider');
-  return ctx;
 }

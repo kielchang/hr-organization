@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react';
 import { AssignmentEditor } from '../components/AssignmentEditor';
 import { EmployeeForm } from '../components/EmployeeForm';
 import { EmployeeList } from '../components/EmployeeList';
-import { useOrg } from '../context/OrgContext';
+import { useOrg } from '../context/useOrg';
 
 export function PeoplePage() {
   const { data, removeEmployee, removeAssignment, newAssignmentFor } = useOrg();

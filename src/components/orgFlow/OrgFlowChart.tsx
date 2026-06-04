@@ -6,34 +6,27 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
-  applyNodeChanges,
   useReactFlow,
   type Node,
-  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  Dropdown,
-  Field,
   FluentProvider,
   MessageBar,
   MessageBarBody,
-  Option,
-  Text,
   webLightTheme,
 } from '@fluentui/react-components';
-import type { OptionOnSelectData } from '@fluentui/react-components';
-import {
-  ALL_GROUPS_VIEW_ID,
-  buildOrgFlowGraph,
-} from '../../services/buildOrgFlowGraph';
-import { useOrg } from '../../context/OrgContext';
+import { buildOrgFlowGraph } from '../../services/buildOrgFlowGraph';
+import { useOrg } from '../../context/useOrg';
 import { EmployeeNode } from './EmployeeNode';
 import { OrgDetailPanel } from './OrgDetailPanel';
+import { OrgFlowControls, type OrgFlowChartVariant } from './OrgFlowControls';
+import { useDraggableFlowNodes } from './useDraggableFlowNodes';
 
 const nodeTypes = { employee: EmployeeNode } as const;
 
 interface OrgFlowChartProps {
+  variant: OrgFlowChartVariant;
   selectedGroupId: string;
   onGroupChange: (groupId: string) => void;
   selectedEmployeeId: string | null;
@@ -41,6 +34,7 @@ interface OrgFlowChartProps {
 }
 
 function FlowInner({
+  variant,
   selectedGroupId,
   onGroupChange,
   selectedEmployeeId,
@@ -59,17 +53,14 @@ function FlowInner({
     [data, selectedGroupId],
   );
 
-  const [nodes, setNodes] = useState(computedNodes);
-
-  useEffect(() => {
-    setNodes(computedNodes);
-  }, [computedNodes]);
-
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((nds) => applyNodeChanges(changes, nds) as typeof nds),
-    [],
+  const { nodes, onNodesChange } = useDraggableFlowNodes(
+    computedNodes,
+    selectedGroupId,
   );
+
+  const selectedEmployee = selectedEmployeeId
+    ? data.employees.find((e) => e.id === selectedEmployeeId)
+    : undefined;
 
   useEffect(() => {
     if (computedNodes.length > 0) {
@@ -81,7 +72,13 @@ function FlowInner({
   const [showMiniMap, setShowMiniMap] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const setChartContainer = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    setPortalContainer(node);
+  }, []);
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -111,25 +108,34 @@ function FlowInner({
   return (
     <div
       className={`org-flow-chart${isFullscreen ? ' org-flow-chart--fullscreen' : ''}`}
-      ref={containerRef}
+      ref={setChartContainer}
     >
-    <FluentProvider theme={webLightTheme} className="org-flow-fluent-root">
-      <ReactFlow
+      <FluentProvider theme={webLightTheme} className="org-flow-fluent-root">
+        <ReactFlow
         nodes={nodes as import('@xyflow/react').Node[]}
         edges={edges}
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={onNodesChange as import('@xyflow/react').OnNodesChange}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodesDraggable
         nodesConnectable={false}
         elementsSelectable
-        fitView
         minZoom={0.2}
         maxZoom={1.5}
       >
         <Background gap={16} />
         <Controls />
+
+        <Panel position="top-left" className="org-flow-panel">
+          <OrgFlowControls
+            variant={variant}
+            selectedGroupId={selectedGroupId}
+            onGroupChange={onGroupChange}
+            activeGroups={activeGroups}
+            mountNode={portalContainer}
+          />
+        </Panel>
 
         {/* 全螢幕按鈕 — 右上角 */}
         <Panel position="top-right" className="fullscreen-panel">
@@ -149,62 +155,30 @@ function FlowInner({
             onClick={() => setShowMiniMap((v) => !v)}
             title={showMiniMap ? '隱藏觀景窗' : '顯示觀景窗'}
           >
-            {showMiniMap ? '▼' : '▲'}　觀景窗
+            {showMiniMap ? '▼' : '▲'} 觀景窗
           </button>
           <div className={`minimap-slide${showMiniMap ? '' : ' minimap-slide--hidden'}`}>
             <MiniMap zoomable pannable nodeColor="#d0e4f7" nodeStrokeColor="#4a90d9" />
           </div>
         </Panel>
 
-        {/* 左上角：組別選擇 */}
-        <Panel position="top-left" className="org-flow-panel">
-          <Field label="檢視組別">
-            <Dropdown
-              value={
-                selectedGroupId === ALL_GROUPS_VIEW_ID
-                  ? '全公司'
-                  : (activeGroups.find((g) => g.id === selectedGroupId)?.name ??
-                    '選擇組別')
-              }
-              selectedOptions={[selectedGroupId]}
-              onOptionSelect={(_e, opt: OptionOnSelectData) => {
-                if (opt.optionValue) onGroupChange(opt.optionValue);
-              }}
-            >
-              <Option key={ALL_GROUPS_VIEW_ID} value={ALL_GROUPS_VIEW_ID} text="全公司">
-                全公司
-              </Option>
-              {activeGroups.map((g) => (
-                <Option key={g.id} value={g.id} text={g.name}>
-                  {g.name}
-                </Option>
-              ))}
-            </Dropdown>
-          </Field>
-          <Text size={200} className="org-flow-legend">
-            <span className="legend-solid">━</span> 主匯報
-            <span className="legend-dashed">┄</span> 虛線匯報
-          </Text>
-        </Panel>
-      </ReactFlow>
+        </ReactFlow>
 
-      {/* 人員詳情：獨立浮動方塊，位於 group selector 正下方 */}
-      {selectedEmployeeId && (
-        <div className="org-detail-float">
-          <OrgDetailPanel
-            employeeId={selectedEmployeeId}
-            onClose={() => onNodeSelect(null)}
-            chartMode="reporting"
-            containerRef={containerRef}
-          />
-        </div>
-      )}
+        {selectedEmployeeId && selectedEmployee && (
+          <div className="org-detail-float">
+            <OrgDetailPanel
+              employeeId={selectedEmployeeId}
+              onClose={() => onNodeSelect(null)}
+              portalContainer={portalContainer}
+            />
+          </div>
+        )}
 
-      {error && (
-        <MessageBar intent="error" className="org-flow-error">
-          <MessageBarBody>{error}</MessageBarBody>
-        </MessageBar>
-      )}
+        {error && (
+          <MessageBar intent="error" className="org-flow-error">
+            <MessageBarBody>{error}</MessageBarBody>
+          </MessageBar>
+        )}
       </FluentProvider>
     </div>
   );
