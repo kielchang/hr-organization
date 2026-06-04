@@ -21,8 +21,8 @@ body,
 
 /* ── 組織圖（結構性樣式；視覺以 Tailwind + shadcn token 為主） ── */
 .org-flow-chart {
-  /* 左欄三塊（檢視組別 / 人員詳情 / 觀景窗）之間距 */
-  --org-flow-left-chrome-gap: 0.75rem;
+  /* 左欄三塊（檢視組別 / 人員詳情 / 觀景窗）貼合，靠 hairline 分區（shadcn Sidebar 風） */
+  --org-flow-left-chrome-gap: 0rem;
 }
 
 /*
@@ -102,14 +102,6 @@ body,
 .react-flow__panel.org-flow-chrome-panel {
   pointer-events: all;
   z-index: 10;
-}
-
-/* 永遠對調：Controls 右下、觀景窗左下（寬度與檢視組別一致） */
-.org-flow-chart .react-flow__controls {
-  left: auto !important;
-  right: 0.75rem !important;
-  bottom: 0.75rem !important;
-  margin: 0 !important;
 }
 
 .org-flow-chart .org-flow-minimap-canvas {

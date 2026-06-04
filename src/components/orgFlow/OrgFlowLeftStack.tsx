@@ -2,7 +2,6 @@ import { useState, type RefObject } from 'react';
 import { cn } from '@/lib/utils';
 import { OrgFlowDrawerRail } from './OrgFlowDrawerRail';
 import { OrgFlowLeftDrawer } from './OrgFlowLeftDrawer';
-import { OrgFlowMiniMap } from './OrgFlowChartChrome';
 import { OrgDetailPanel } from './OrgDetailPanel';
 import { OrgFlowControls, type OrgFlowChartVariant } from './OrgFlowControls';
 import type { Group } from '../../types/org';
@@ -16,9 +15,6 @@ interface OrgFlowLeftStackProps {
   mountNode: HTMLElement | null;
   selectedEmployeeId: string | null;
   onCloseDetail: () => void;
-  showMiniMap: boolean;
-  onToggleMiniMap: () => void;
-  miniMapCompact: boolean;
 }
 
 export function OrgFlowLeftStack({
@@ -30,9 +26,6 @@ export function OrgFlowLeftStack({
   mountNode,
   selectedEmployeeId,
   onCloseDetail,
-  showMiniMap,
-  onToggleMiniMap,
-  miniMapCompact,
 }: OrgFlowLeftStackProps) {
   const hasDetail = !!selectedEmployeeId;
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -41,7 +34,7 @@ export function OrgFlowLeftStack({
     <div
       ref={sidebarRef}
       className={cn(
-        'org-flow-toolbar-shell flex h-full min-h-0 shrink-0 items-stretch rounded-none border-0 border-r border-border/50 bg-background/45 backdrop-blur-md',
+        'org-flow-toolbar-shell flex h-full min-h-0 shrink-0 items-stretch rounded-none border-0 border-r border-border/60 bg-card/85 shadow-sm backdrop-blur-md',
         drawerOpen && 'org-flow-toolbar-shell--open',
       )}
       onPointerDown={(e) => e.stopPropagation()}
@@ -68,12 +61,6 @@ export function OrgFlowLeftStack({
               />
             )}
           </div>
-
-          <OrgFlowMiniMap
-            show={showMiniMap}
-            onToggle={onToggleMiniMap}
-            compact={miniMapCompact}
-          />
         </OrgFlowLeftDrawer>
       )}
 

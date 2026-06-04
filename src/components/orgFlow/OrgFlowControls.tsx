@@ -28,7 +28,7 @@ export function OrgFlowControls({
   return (
     <div
       className={cn(
-        'flex w-full flex-col gap-0 rounded-xl border border-border bg-card/95 p-4 shadow-md ring-1 ring-foreground/5 backdrop-blur-sm',
+        'flex w-full flex-col gap-0 border-b border-border/60 bg-transparent px-4 py-3.5',
         className,
       )}
       onPointerDown={(e) => e.stopPropagation()}

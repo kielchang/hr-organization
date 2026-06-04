@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
-  Controls,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -19,7 +18,9 @@ import { useOrg } from '../../context/useOrg';
 import { AssignmentMemberNode } from './AssignmentMemberNode';
 import { ExternalSupervisorNode } from './ExternalSupervisorNode';
 import { GroupLabelNode } from './GroupLabelNode';
-import { OrgFlowFullscreenButton } from '../orgFlow/OrgFlowChartChrome';
+import { OrgFlowFullscreenButton, OrgFlowMiniMap } from '../orgFlow/OrgFlowChartChrome';
+import { OrgFlowControlBar, type OrgFlowNavMode } from '../orgFlow/OrgFlowControlBar';
+import { ORG_FLOW_NAV_PROPS } from '../orgFlow/orgFlowNav';
 import { OrgFlowLeftStack } from '../orgFlow/OrgFlowLeftStack';
 import type { OrgFlowChartVariant } from '../orgFlow/OrgFlowControls';
 import { useDraggableFlowNodes } from '../orgFlow/useDraggableFlowNodes';
@@ -74,6 +75,8 @@ function FlowInner({
 
   const hasDetail = !!selectedEmployeeId;
   const { showMiniMap, setShowMiniMap } = useOrgFlowMiniMapVisibility(hasDetail);
+  const [navMode, setNavMode] = useState<OrgFlowNavMode>('mouse');
+  const [chromeCollapsed, setChromeCollapsed] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -141,29 +144,40 @@ function FlowInner({
         minZoom={0.15}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
+        {...ORG_FLOW_NAV_PROPS[navMode]}
       >
         <Background gap={20} size={1} color="var(--border)" />
-        <Controls
-          className="!rounded-lg !border-border !bg-card/90 !shadow-md [&>button]:!border-border [&>button]:!bg-background [&>button]:hover:!bg-muted"
-        />
 
-        <Panel
-          position="top-left"
-          className="org-flow-chrome-panel org-flow-sidebar-panel !m-0 !top-0 !left-0"
-        >
-          <OrgFlowLeftStack
-            sidebarRef={sidebarRef}
-            variant={variant}
-            selectedGroupId={selectedGroupId}
-            onGroupChange={onGroupChange}
-            activeGroups={activeGroups}
-            mountNode={portalContainer}
-            selectedEmployeeId={selectedEmployeeId}
-            onCloseDetail={() => onNodeSelect(null)}
-            showMiniMap={showMiniMap}
-            onToggleMiniMap={() => setShowMiniMap((v) => !v)}
-            miniMapCompact={hasDetail}
-          />
+        {!chromeCollapsed && (
+          <Panel
+            position="top-left"
+            className="org-flow-chrome-panel org-flow-sidebar-panel !m-0 !top-0 !left-0"
+          >
+            <OrgFlowLeftStack
+              sidebarRef={sidebarRef}
+              variant={variant}
+              selectedGroupId={selectedGroupId}
+              onGroupChange={onGroupChange}
+              activeGroups={activeGroups}
+              mountNode={portalContainer}
+              selectedEmployeeId={selectedEmployeeId}
+              onCloseDetail={() => onNodeSelect(null)}
+            />
+          </Panel>
+        )}
+
+        <Panel position="bottom-right" className="org-flow-chrome-panel !m-3">
+          <div className="flex flex-col items-end gap-2">
+            {!chromeCollapsed && (
+              <OrgFlowMiniMap show={showMiniMap} onToggle={() => setShowMiniMap((v) => !v)} />
+            )}
+            <OrgFlowControlBar
+              navMode={navMode}
+              onNavModeChange={setNavMode}
+              chromeCollapsed={chromeCollapsed}
+              onToggleChrome={() => setChromeCollapsed((v) => !v)}
+            />
+          </div>
         </Panel>
 
         <OrgFlowFullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
