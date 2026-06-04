@@ -1,16 +1,17 @@
-import {
-  Badge,
-  Input,
-  List,
-  ListItem,
-  Text,
-  Button,
-  Dropdown,
-  Option,
-} from '@fluentui/react-components';
-import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-components';
-import { Add24Regular } from '@fluentui/react-icons';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { Employee } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -33,8 +34,7 @@ export function EmployeeList({
 
   const filtered = useMemo(() => {
     return data.employees.filter((e) => {
-      const matchStatus =
-        statusFilter === 'all' || e.status === statusFilter;
+      const matchStatus = statusFilter === 'all' || e.status === statusFilter;
       const q = search.trim().toLowerCase();
       const matchSearch =
         !q ||
@@ -44,56 +44,62 @@ export function EmployeeList({
     });
   }, [data.employees, search, statusFilter]);
 
+  const statusLabel =
+    statusFilter === 'all' ? '全部' : statusFilter === 'active' ? '在職' : '離職';
+
   return (
-    <div className="employee-list">
-      <div className="employee-list-toolbar">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm ring-1 ring-foreground/5">
+      <div className="flex flex-col gap-2">
         <Input
           placeholder="搜尋姓名或工號"
           value={search}
-          onChange={(_e, d) => setSearch(d.value)}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <Dropdown
-          value={
-            statusFilter === 'all'
-              ? '全部'
-              : statusFilter === 'active'
-                ? '在職'
-                : '離職'
-          }
-          selectedOptions={[statusFilter]}
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) {
-              setStatusFilter(opt.optionValue as 'all' | 'active' | 'inactive');
-            }
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => {
+            if (value) setStatusFilter(value as typeof statusFilter);
           }}
         >
-          <Option value="all">全部</Option>
-          <Option value="active">在職</Option>
-          <Option value="inactive">離職</Option>
-        </Dropdown>
-        <Button icon={<Add24Regular />} onClick={onAddEmployee}>
+          <SelectTrigger className="w-full bg-background">
+            <SelectValue>{statusLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部</SelectItem>
+            <SelectItem value="active">在職</SelectItem>
+            <SelectItem value="inactive">離職</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button type="button" onClick={onAddEmployee}>
+          <Plus className="size-4" />
           新增員工
         </Button>
       </div>
-      <List selectionMode="single">
-        {filtered.map((e: Employee) => (
-          <ListItem
-            key={e.id}
-            aria-selected={selectedId === e.id}
-            onClick={() => onSelect(e.id)}
-            className={selectedId === e.id ? 'list-item-selected' : ''}
-          >
-            <Text weight="semibold">{e.name}</Text>
-            <Text size={200}>{e.employeeNo}</Text>
-            <Badge
-              appearance="outline"
-              color={e.status === 'active' ? 'success' : 'informative'}
-            >
-              {e.status === 'active' ? '在職' : '離職'}
-            </Badge>
-          </ListItem>
-        ))}
-      </List>
+      <ScrollArea className="h-[min(420px,50vh)]">
+        <ul className="flex flex-col gap-1 pr-2">
+          {filtered.map((e: Employee) => (
+            <li key={e.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(e.id)}
+                className={cn(
+                  'flex w-full flex-col gap-1 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:bg-muted/80',
+                  selectedId === e.id && 'border-border bg-accent/50',
+                )}
+              >
+                <span className="font-medium">{e.name}</span>
+                <span className="text-xs text-muted-foreground">{e.employeeNo}</span>
+                <Badge
+                  variant={e.status === 'active' ? 'secondary' : 'outline'}
+                  className="w-fit"
+                >
+                  {e.status === 'active' ? '在職' : '離職'}
+                </Badge>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </ScrollArea>
     </div>
   );
 }

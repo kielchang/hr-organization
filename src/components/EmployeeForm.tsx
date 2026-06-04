@@ -1,18 +1,21 @@
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogBody,
-  DialogContent,
-  DialogSurface,
-  DialogTitle,
-  Dropdown,
-  Field,
-  Input,
-  Option,
-} from '@fluentui/react-components';
-import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-components';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { Employee } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -57,56 +60,63 @@ export function EmployeeForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(_e, d) => !d.open && onClose()}>
-      <DialogSurface>
-        <DialogBody>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
           <DialogTitle>{isNew ? '新增員工' : '編輯員工'}</DialogTitle>
-          <DialogContent>
-            {error && <p className="form-error">{error}</p>}
-            <Field label="工號" required>
-              <Input
-                value={employee.employeeNo}
-                onChange={(_e, d) =>
-                  setEmployee((e) => ({ ...e, employeeNo: d.value }))
+        </DialogHeader>
+        <div className="grid gap-4">
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="grid gap-2">
+            <Label htmlFor="employee-no">工號</Label>
+            <Input
+              id="employee-no"
+              value={employee.employeeNo}
+              onChange={(e) =>
+                setEmployee((emp) => ({ ...emp, employeeNo: e.target.value }))
+              }
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="employee-name">姓名</Label>
+            <Input
+              id="employee-name"
+              value={employee.name}
+              onChange={(e) => setEmployee((emp) => ({ ...emp, name: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="employee-status">狀態</Label>
+            <Select
+              value={employee.status}
+              onValueChange={(value) => {
+                if (value) {
+                  setEmployee((emp) => ({
+                    ...emp,
+                    status: value as Employee['status'],
+                  }));
                 }
-              />
-            </Field>
-            <Field label="姓名" required>
-              <Input
-                value={employee.name}
-                onChange={(_e, d) =>
-                  setEmployee((e) => ({ ...e, name: d.value }))
-                }
-              />
-            </Field>
-            <Field label="狀態">
-              <Dropdown
-                value={employee.status === 'active' ? '在職' : '離職'}
-                selectedOptions={[employee.status]}
-                onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-                  if (opt.optionValue) {
-                    setEmployee((e) => ({
-                      ...e,
-                      status: opt.optionValue as Employee['status'],
-                    }));
-                  }
-                }}
-              >
-                <Option value="active">在職</Option>
-                <Option value="inactive">離職</Option>
-              </Dropdown>
-            </Field>
-          </DialogContent>
-          <DialogActions>
-            <Button appearance="secondary" onClick={onClose}>
-              取消
-            </Button>
-            <Button appearance="primary" onClick={onSave}>
-              儲存
-            </Button>
-          </DialogActions>
-        </DialogBody>
-      </DialogSurface>
+              }}
+            >
+              <SelectTrigger id="employee-status" className="w-full bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">在職</SelectItem>
+                <SelectItem value="inactive">離職</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            取消
+          </Button>
+          <Button type="button" onClick={onSave}>
+            儲存
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

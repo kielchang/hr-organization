@@ -1,20 +1,19 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
   TableCell,
+  TableHead,
   TableHeader,
-  TableHeaderCell,
   TableRow,
-  Text,
-  Title2,
-  Dialog,
-  DialogSurface,
-  DialogBody,
-  DialogTitle,
-  DialogContent,
-  Button,
-} from '@fluentui/react-components';
-import { useState } from 'react';
+} from '@/components/ui/table';
 import type { ChangeEntry } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
@@ -44,78 +43,88 @@ export function ChangeLogPage() {
   };
 
   return (
-    <div>
-      <Title2>調整紀錄</Title2>
-      <Text block className="page-desc">
-        每次變更會寫入紀錄並自動下載完整 org-data JSON。若要更新各環境共用的初始資料可覆蓋{' '}
-        <code>src/data/org-data.json</code>；本機試用版本請放到{' '}
-        <code>src/data/mock/</code>（已在 .gitignore）。
-      </Text>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHeaderCell>時間</TableHeaderCell>
-            <TableHeaderCell>操作者</TableHeaderCell>
-            <TableHeaderCell>類型</TableHeaderCell>
-            <TableHeaderCell>摘要</TableHeaderCell>
-            <TableHeaderCell>Diff</TableHeaderCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.changeLog.length === 0 ? (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-2xl font-semibold tracking-tight">調整紀錄</h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          每次變更會寫入紀錄並自動下載完整 org-data JSON。若要更新各環境共用的初始資料可覆蓋{' '}
+          <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">src/data/org-data.json</code>
+          ；本機試用版本請放到{' '}
+          <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">src/data/mock/</code>
+          （已在 .gitignore）。
+        </p>
+      </header>
+      <div className="rounded-xl border border-border bg-card shadow-sm ring-1 ring-foreground/5">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={5}>
-                <Text>尚無調整紀錄</Text>
-              </TableCell>
+              <TableHead>時間</TableHead>
+              <TableHead>操作者</TableHead>
+              <TableHead>類型</TableHead>
+              <TableHead>摘要</TableHead>
+              <TableHead className="w-20">Diff</TableHead>
             </TableRow>
-          ) : (
-            data.changeLog.map((entry) => (
-              <TableRow key={entry.id}>
-                <TableCell>{formatTime(entry.timestamp)}</TableCell>
-                <TableCell>{entry.operator}</TableCell>
-                <TableCell>
-                  {changeTypeLabels[entry.changeType] ?? entry.changeType}
-                </TableCell>
-                <TableCell>{entry.summary}</TableCell>
-                <TableCell>
-                  {(entry.before || entry.after) && (
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      onClick={() => setDiffEntry(entry)}
-                    >
-                      檢視
-                    </Button>
-                  )}
+          </TableHeader>
+          <TableBody>
+            {data.changeLog.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-muted-foreground">
+                  尚無調整紀錄
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-      <Dialog
-        open={!!diffEntry}
-        onOpenChange={(_e, d) => !d.open && setDiffEntry(null)}
-      >
-        <DialogSurface>
-          <DialogBody>
+            ) : (
+              data.changeLog.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell>{formatTime(entry.timestamp)}</TableCell>
+                  <TableCell>{entry.operator}</TableCell>
+                  <TableCell>
+                    {changeTypeLabels[entry.changeType] ?? entry.changeType}
+                  </TableCell>
+                  <TableCell className="max-w-md whitespace-normal">
+                    {entry.summary}
+                  </TableCell>
+                  <TableCell>
+                    {(entry.before || entry.after) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDiffEntry(entry)}
+                      >
+                        檢視
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={!!diffEntry} onOpenChange={(open) => !open && setDiffEntry(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
             <DialogTitle>變更內容</DialogTitle>
-            <DialogContent>
-              {diffEntry?.before && (
-                <>
-                  <Text weight="semibold">變更前</Text>
-                  <pre className="diff-pre">{diffEntry.before}</pre>
-                </>
-              )}
-              {diffEntry?.after && (
-                <>
-                  <Text weight="semibold">變更後</Text>
-                  <pre className="diff-pre">{diffEntry.after}</pre>
-                </>
-              )}
-            </DialogContent>
-          </DialogBody>
-        </DialogSurface>
+          </DialogHeader>
+          <div className="grid gap-4">
+            {diffEntry?.before && (
+              <div className="grid gap-2">
+                <p className="text-sm font-semibold">變更前</p>
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs">
+                  {diffEntry.before}
+                </pre>
+              </div>
+            )}
+            {diffEntry?.after && (
+              <div className="grid gap-2">
+                <p className="text-sm font-semibold">變更後</p>
+                <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs">
+                  {diffEntry.after}
+                </pre>
+              </div>
+            )}
+          </div>
+        </DialogContent>
       </Dialog>
     </div>
   );

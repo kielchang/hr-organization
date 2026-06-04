@@ -1,16 +1,22 @@
-import {
-  Button,
-  Card,
-  CardHeader,
-  Checkbox,
-  Dropdown,
-  Field,
-  Option,
-  Text,
-} from '@fluentui/react-components';
-import type { OptionOnSelectData, SelectionEvents } from '@fluentui/react-components';
-import { Dismiss24Regular, Save24Regular } from '@fluentui/react-icons';
+import { X, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { Assignment } from '../types/org';
 import { useOrg } from '../context/useOrg';
 import { getActiveEmployees } from '../services/validators';
@@ -67,129 +73,132 @@ export function AssignmentEditor({
   };
 
   return (
-    <Card className="assignment-card">
-      <CardHeader
-        header={
-          <Text weight="semibold">
-            {data.groups.find((g) => g.id === assignment.groupId)?.name ??
-              '新歸屬'}
-          </Text>
-        }
-        action={
+    <Card size="sm" className="gap-3">
+      <CardHeader>
+        <CardTitle>
+          {data.groups.find((g) => g.id === assignment.groupId)?.name ?? '新歸屬'}
+        </CardTitle>
+        <CardAction>
           <Button
-            appearance="subtle"
-            icon={<Dismiss24Regular />}
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onCancel}
             aria-label="取消"
-          />
-        }
-      />
-      {error && (
-        <Text style={{ color: 'var(--colorPaletteRedForeground1)' }}>{error}</Text>
-      )}
-      <Field label="組別" required>
-        <Dropdown
-          placeholder="選擇組別"
-          value={
-            activeGroups.find((g) => g.id === assignment.groupId)?.name ?? ''
-          }
-          selectedOptions={assignment.groupId ? [assignment.groupId] : []}
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) {
-              setAssignment((a) => ({ ...a, groupId: opt.optionValue! }));
-            }
-          }}
-        >
-          {activeGroups.map((g) => (
-            <Option key={g.id} value={g.id} text={g.name}>
-              {g.name}
-            </Option>
-          ))}
-        </Dropdown>
-      </Field>
-      <Field label="職級" required>
-        <Dropdown
-          placeholder="選擇職級"
-          value={
-            data.jobLevels.find((j) => j.id === assignment.jobLevelId)?.name ?? ''
-          }
-          selectedOptions={
-            assignment.jobLevelId ? [assignment.jobLevelId] : []
-          }
-          onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-            if (opt.optionValue) {
-              setAssignment((a) => ({ ...a, jobLevelId: opt.optionValue! }));
-            }
-          }}
-        >
-          {[...data.jobLevels]
-            .sort((a, b) => b.rank - a.rank)
-            .map((j) => (
-              <Option key={j.id} value={j.id} text={j.name}>
-                {j.name}
-              </Option>
-            ))}
-        </Dropdown>
-      </Field>
-      <div className="supervisor-field">
-        <Text size={300} weight="semibold" className="supervisor-field-label">
-          主管（可多選）
-        </Text>
-        <div className="supervisor-checkboxes">
-          {supervisorOptions.map((o) => (
-            <Checkbox
-              key={o.value}
-              id={`${assignment.id}-supervisor-${o.value}`}
-              label={o.text}
-              checked={assignment.supervisorIds.includes(o.value)}
-              onChange={(_e, d) => toggleSupervisor(o.value, !!d.checked)}
-            />
-          ))}
-        </div>
-      </div>
-      {assignment.supervisorIds.length > 0 && (
-        <Field label="主主管">
-          <Dropdown
-            placeholder="選擇主主管"
-            value={
-              data.employees.find((e) => e.id === assignment.primarySupervisorId)
-                ?.name ?? ''
-            }
-            selectedOptions={
-              assignment.primarySupervisorId
-                ? [assignment.primarySupervisorId]
-                : []
-            }
-            onOptionSelect={(_e: SelectionEvents, opt: OptionOnSelectData) => {
-              setAssignment((a) => ({
-                ...a,
-                primarySupervisorId: opt.optionValue ?? null,
-              }));
+          >
+            <X className="size-4" />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-3 pt-0">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="grid gap-2">
+          <Label>組別</Label>
+          <Select
+            value={assignment.groupId || undefined}
+            onValueChange={(value) => {
+              if (value) setAssignment((a) => ({ ...a, groupId: value }));
             }}
           >
-            {assignment.supervisorIds.map((sid) => {
-              const e = data.employees.find((x) => x.id === sid);
-              return (
-                <Option key={sid} value={sid} text={e?.name ?? sid}>
-                  {e?.name ?? sid}
-                </Option>
-              );
-            })}
-          </Dropdown>
-        </Field>
-      )}
-      <Checkbox
-        label="設為主組別"
-        checked={assignment.isPrimaryGroup}
-        onChange={(_e, d) =>
-          setAssignment((a) => ({ ...a, isPrimaryGroup: !!d.checked }))
-        }
-      />
-      <div className="assignment-card-actions">
-        <Button appearance="primary" icon={<Save24Regular />} onClick={onSave}>
-          儲存
-        </Button>
-      </div>
+            <SelectTrigger className="w-full bg-background">
+              <SelectValue placeholder="選擇組別" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeGroups.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label>職級</Label>
+          <Select
+            value={assignment.jobLevelId || undefined}
+            onValueChange={(value) => {
+              if (value) setAssignment((a) => ({ ...a, jobLevelId: value }));
+            }}
+          >
+            <SelectTrigger className="w-full bg-background">
+              <SelectValue placeholder="選擇職級" />
+            </SelectTrigger>
+            <SelectContent>
+              {[...data.jobLevels]
+                .sort((a, b) => b.rank - a.rank)
+                .map((j) => (
+                  <SelectItem key={j.id} value={j.id}>
+                    {j.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label className="text-muted-foreground">主管（可多選）</Label>
+          <div className="flex max-h-40 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-2">
+            {supervisorOptions.map((o) => (
+              <label
+                key={o.value}
+                htmlFor={`${assignment.id}-supervisor-${o.value}`}
+                className="flex cursor-pointer items-center gap-2 text-sm"
+              >
+                <Checkbox
+                  id={`${assignment.id}-supervisor-${o.value}`}
+                  checked={assignment.supervisorIds.includes(o.value)}
+                  onCheckedChange={(checked) =>
+                    toggleSupervisor(o.value, checked === true)
+                  }
+                />
+                {o.text}
+              </label>
+            ))}
+          </div>
+        </div>
+        {assignment.supervisorIds.length > 0 && (
+          <div className="grid gap-2">
+            <Label>主主管</Label>
+            <Select
+              value={assignment.primarySupervisorId ?? undefined}
+              onValueChange={(value) => {
+                setAssignment((a) => ({
+                  ...a,
+                  primarySupervisorId: value ?? null,
+                }));
+              }}
+            >
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="選擇主主管" />
+              </SelectTrigger>
+              <SelectContent>
+                {assignment.supervisorIds.map((sid) => {
+                  const e = data.employees.find((x) => x.id === sid);
+                  return (
+                    <SelectItem key={sid} value={sid}>
+                      {e?.name ?? sid}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={assignment.isPrimaryGroup}
+            onCheckedChange={(checked) =>
+              setAssignment((a) => ({ ...a, isPrimaryGroup: checked === true }))
+            }
+          />
+          設為主組別
+        </label>
+        <div className="flex justify-end">
+          <Button type="button" onClick={onSave}>
+            <Save className="size-4" />
+            儲存
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }

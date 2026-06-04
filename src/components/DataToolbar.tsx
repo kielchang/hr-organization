@@ -1,15 +1,8 @@
 import { useRef } from 'react';
-import {
-  Input,
-  Label,
-  Toolbar,
-  ToolbarButton,
-  ToolbarGroup,
-} from '@fluentui/react-components';
-import {
-  ArrowDownload24Regular,
-  ArrowUpload24Regular,
-} from '@fluentui/react-icons';
+import { Download, Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { parseOrgDataFile } from '../services/exportImport';
 import { useOrg } from '../context/useOrg';
 import { VersionSelector } from './VersionSelector';
@@ -31,33 +24,35 @@ export function DataToolbar() {
   };
 
   return (
-    <Toolbar className="data-toolbar">
-      <ToolbarGroup className="data-toolbar-versions">
+    <div className="flex flex-wrap items-end gap-4">
+      <div className="min-w-[min(100%,320px)] flex-1">
         <VersionSelector />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <Label htmlFor="operator">操作者</Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Label htmlFor="operator" className="shrink-0 text-muted-foreground">
+          操作者
+        </Label>
         <Input
           id="operator"
           value={operator}
-          onChange={(_e, d) => setOperator(d.value)}
-          size="small"
-          style={{ width: 140 }}
+          onChange={(e) => setOperator(e.target.value)}
+          className="w-36"
         />
-      </ToolbarGroup>
-      <ToolbarGroup>
-        <ToolbarButton
-          icon={<ArrowDownload24Regular />}
-          onClick={() => exportData()}
-        >
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => exportData()}>
+          <Download className="size-4" />
           匯出目前資料
-        </ToolbarButton>
-        <ToolbarButton
-          icon={<ArrowUpload24Regular />}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => fileRef.current?.click()}
         >
+          <Upload className="size-4" />
           從檔案載入
-        </ToolbarButton>
+        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -65,7 +60,7 @@ export function DataToolbar() {
           hidden
           onChange={onFileChange}
         />
-      </ToolbarGroup>
-    </Toolbar>
+      </div>
+    </div>
   );
 }

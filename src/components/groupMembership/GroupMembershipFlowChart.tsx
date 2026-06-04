@@ -122,12 +122,13 @@ function FlowInner({
     <div
       ref={setChartContainer}
       className={cn(
-        'org-flow-chart relative h-full min-h-[480px] overflow-hidden rounded-xl border border-border bg-muted/25 shadow-sm',
+        'org-flow-chart relative h-full min-h-[480px] overflow-hidden rounded-xl border border-border bg-background shadow-sm',
         isFullscreen && 'org-flow-chart--fullscreen',
       )}
       style={chartStyle}
     >
       <ReactFlow
+        colorMode="light"
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
