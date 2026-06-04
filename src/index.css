@@ -326,6 +326,11 @@ code {
 
 .org-flow-chart .org-flow-minimap-canvas {
   width: 100% !important;
+  height: 100% !important;
+}
+
+.org-flow-chart .org-flow-minimap-canvas .react-flow__minimap-svg {
+  display: block;
 }
 
 .org-flow-chart--fullscreen,

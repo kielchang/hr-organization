@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Maximize2, Minimize2 } from 'lucide-react';
 import { MiniMap, Panel } from '@xyflow/react';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,27 @@ export function OrgFlowMiniMap({
   compact = false,
   className,
 }: OrgFlowMiniMapPanelProps) {
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [minimapSize, setMinimapSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    const el = measureRef.current;
+    if (!el || !show) return;
+
+    const syncSize = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width < 1 || height < 1) return;
+      setMinimapSize({ width: Math.round(width), height: Math.round(height) });
+    };
+
+    syncSize();
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [show, compact]);
+
   return (
     <div
       className={cn(
@@ -79,14 +101,22 @@ export function OrgFlowMiniMap({
               : 'max-h-0',
           )}
         >
-          <MiniMap
-            zoomable
-            pannable
+          <div
+            ref={measureRef}
             className={cn(
-              'org-flow-minimap-canvas !relative !bottom-auto !right-auto !m-0 !w-full !rounded-none !shadow-none',
-              compact ? '!h-[5rem]' : '!h-[10rem]',
+              'w-full shrink-0',
+              compact ? 'h-[5rem]' : 'h-[10rem]',
             )}
-          />
+          >
+            {minimapSize ? (
+              <MiniMap
+                zoomable
+                pannable
+                style={{ width: minimapSize.width, height: minimapSize.height }}
+                className="org-flow-minimap-canvas !relative !bottom-auto !right-auto !m-0 !h-full !w-full !rounded-none !shadow-none"
+              />
+            ) : null}
+          </div>
         </div>
     </div>
   );
