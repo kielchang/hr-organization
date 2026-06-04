@@ -219,9 +219,7 @@ code {
 }
 
 .org-chart-page .org-chart-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 16px;
+  position: relative;
   height: calc(100vh - 200px);
   min-height: 520px;
 }
@@ -235,6 +233,14 @@ code {
   background: #fafafa;
 }
 
+/* FluentProvider wrapper — 透明 passthrough，讓 portal 掛在 fullscreen 容器內 */
+.org-flow-fluent-root {
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  color: inherit;
+}
+
 .org-flow-chart .react-flow {
   width: 100%;
   height: 100%;
@@ -245,7 +251,29 @@ code {
   padding: 12px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  min-width: 200px;
+  min-width: 220px;
+}
+
+/* 人員詳情獨立浮動方塊 — 寬度與 org-flow-panel 齊 */
+.org-detail-float {
+  position: absolute;
+  top: 128px;
+  left: 15px;
+  min-width: 220px;
+  max-height: calc(100% - 148px);
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow-y: auto;
+  z-index: 5;
+}
+
+/* AssignmentEditor card 跟著容器寬度走 */
+.org-detail-float .assignment-card,
+.org-detail-float .fui-Card {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .org-flow-legend {
@@ -261,12 +289,110 @@ code {
   opacity: 0.6;
 }
 
+.org-flow-chart--fullscreen {
+  position: fixed !important;
+  inset: 0;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+}
+
+.react-flow__panel.fullscreen-panel {
+  padding: 0;
+  margin: 10px;
+}
+
+.fullscreen-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #444;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: background 0.15s, color 0.15s;
+}
+
+.fullscreen-btn:hover {
+  background: #eaf0fb;
+  color: #2563eb;
+}
+
 .org-flow-error {
   position: absolute;
   bottom: 12px;
   left: 12px;
   right: 12px;
   z-index: 10;
+}
+
+/* 整個 minimap 區塊是一個盒子：邊框在最外層，按鈕和地圖共用 */
+.react-flow__panel.minimap-panel {
+  padding: 0;
+  margin: 10px;
+}
+
+.minimap-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: #fff;
+}
+
+/* 按鈕當 header，無自身邊框，靠 parent 的 border */
+.minimap-toggle-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border: none;
+  border-bottom: 1px solid #c8c8c8;
+  background: #f5f5f5;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.minimap-toggle-tab:hover {
+  background: #eaf0fb;
+  color: #2563eb;
+}
+
+/* 收起時移除分隔線（MiniMap 已不見，不需要分隔） */
+.minimap-panel:has(.minimap-slide--hidden) .minimap-toggle-tab {
+  border-bottom: none;
+}
+
+/* MiniMap 脫離預設絕對定位，交由 Panel 流式排列 */
+.minimap-panel .react-flow__minimap {
+  position: relative !important;
+  bottom: auto !important;
+  right: auto !important;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  display: block;
+}
+
+.minimap-slide {
+  overflow: hidden;
+  max-height: 200px;
+  transition: max-height 0.28s ease;
+}
+
+.minimap-slide--hidden {
+  max-height: 0;
 }
 
 .employee-node {
@@ -327,12 +453,156 @@ code {
   pointer-events: none;
 }
 
-.org-chart-sidebar {
+/* 左上角 panel 分隔線（組別選擇與人員詳情之間） */
+.org-flow-panel-divider {
+  border: none;
+  border-top: 1px solid #e8e8e8;
+  margin: 8px 0 4px;
+}
+
+/* 人員詳情區塊 */
+.org-detail-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+}
+
+.org-detail-emp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.org-detail-emp-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.org-detail-emp-icon {
+  flex-shrink: 0;
+  color: #666;
+}
+
+.org-detail-emp-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.org-detail-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #999;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.org-detail-close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.org-detail-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.org-detail-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.org-detail-assign-card {
+  padding: 6px 8px !important;
+}
+
+.org-detail-assign-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.org-detail-empty {
+  color: #aaa;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* ── Org Modal（portal 掛在 org-flow-chart 內，全螢幕也能顯示） ── */
+.org-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.org-modal-content {
   background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  width: 420px;
+  max-width: calc(100% - 40px);
+  max-height: calc(100% - 40px);
   overflow-y: auto;
+}
+
+.org-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.org-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.org-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.org-modal-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.org-modal-checkbox {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--colorBrandBackground, #0078d4);
 }
 
 .sidebar-card {

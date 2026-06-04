@@ -34,6 +34,26 @@ const emptyOrgData: OrgData = {
   changeLog: [],
 };
 
+const DRAFT_STORAGE_KEY = 'hr-org-draft';
+
+function saveDraft(data: OrgData) {
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // storage full or unavailable — silently ignore
+  }
+}
+
+function loadDraft(): OrgData | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as OrgData;
+  } catch {
+    return null;
+  }
+}
+
 function createInitialState(): {
   dataVersions: DataVersionInfo[];
   activeVersionId: string;
@@ -42,10 +62,12 @@ function createInitialState(): {
   const dataVersions = loadDataVersions();
   const activeVersionId = pickDefaultVersionId(dataVersions);
   const version = dataVersions.find((v) => v.id === activeVersionId);
+  const seedData = cloneOrgData(version?.data ?? emptyOrgData);
+  const draft = loadDraft();
   return {
     dataVersions,
     activeVersionId,
-    data: cloneOrgData(version?.data ?? emptyOrgData),
+    data: draft ?? seedData,
   };
 }
 
@@ -95,9 +117,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   );
 
   const commit = useCallback(
-    (next: OrgData, autoExport = true) => {
+    (next: OrgData) => {
       setData(next);
-      if (autoExport) downloadOrgData(next);
+      saveDraft(next);
     },
     [],
   );
@@ -161,7 +183,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     (incoming: OrgData) => {
       const next = importOrgData(incoming, operator);
       setData(next);
-      downloadOrgData(next);
+      saveDraft(next);
     },
     [operator],
   );
