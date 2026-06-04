@@ -1,0 +1,5 @@
+# 成員歸屬 CSV 範本（# 開頭為說明列，匯入時會略過）
+# 一列 = 一筆「員工在某組別的歸屬」；主管工號以 | 分隔
+employeeNo,employeeName,employeeStatus,groupCode,groupName,parentGroupCode,groupStatus,jobLevelCode,jobLevelName,jobLevelRank,supervisorEmployeeNos,primarySupervisorEmployeeNo,isPrimaryGroup
+E001,王大明,active,CEO,總經理室,,active,DIR,總監,50,,,1
+E002,李小華,active,HR,人資部,CEO,active,DIR,總監,50,E001,E001,1

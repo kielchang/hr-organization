@@ -1,0 +1,18 @@
+# 成員歸屬 CSV：一列一筆 assignment
+# 主管工號以 | 分隔；isPrimaryGroup 填 1/0
+#
+employeeNo,employeeName,employeeStatus,groupCode,groupName,parentGroupCode,groupStatus,jobLevelCode,jobLevelName,jobLevelRank,supervisorEmployeeNos,primarySupervisorEmployeeNo,isPrimaryGroup
+E001,王大明,active,CEO,總經理室,,active,DIR,總監,50,,,1
+E002,李小華,active,HR,人資部,CEO,active,DIR,總監,50,E001,E001,1
+E011,蔡淑芬,active,HR,人資部,CEO,active,ST,專員,10,E002,E002,1
+E003,張美玲,active,RD,研發部,CEO,active,DIR,總監,50,E001,E001,1
+E004,陳志強,active,RD,研發部,CEO,active,MGR,經理,40,E003,E003,1
+E004,陳志強,active,FE,前端組,RD,active,MGR,經理,40,E003,E003,0
+E005,林雅婷,active,FE,前端組,RD,active,SR,資深專員,20,E004,E004,1
+E006,黃建國,active,FE,前端組,RD,active,ST,專員,10,E004|E005,E004,1
+E006,黃建國,active,PD,產品部,CEO,active,ST,專員,10,E008,E008,0
+E012,楊志豪,active,FE,前端組,RD,active,ST,專員,10,E005,E005,1
+E007,吳佳穎,active,MKT,行銷部,CEO,active,DIR,總監,50,E001,E001,1
+E010,劉俊傑,active,MKT,行銷部,CEO,active,MGR,經理,40,E007,E007,1
+E008,鄭浩然,active,PD,產品部,CEO,active,MGR,經理,40,E001,E001,1
+E009,許文雅,active,PD,產品部,CEO,active,SR,資深專員,20,E008,E008,1
