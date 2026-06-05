@@ -5,6 +5,7 @@ import {
   GitBranch,
   History,
   Users,
+  Workflow,
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
 
@@ -12,6 +13,7 @@ const navItems = [
   { to: '/', label: '人員與歸屬', icon: Users },
   { to: '/groups', label: '組別管理', icon: Building2 },
   { to: '/org-chart', label: '組織圖', icon: GitBranch },
+  { to: '/bpmn', label: 'BPMN 流程', icon: Workflow },
   { to: '/changelog', label: '調整紀錄', icon: History },
   { to: '/csv-import', label: 'CSV 匯入', icon: FileSpreadsheet },
 ] as const;
