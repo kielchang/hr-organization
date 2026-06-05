@@ -13,6 +13,7 @@ import '@xyflow/react/dist/style.css';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import {
+  ALL_GROUPS_VIEW_ID,
   ORG_FLOW_LEVEL_GAP,
   buildOrgFlowGraph,
   levelFromTopY,
@@ -120,6 +121,7 @@ function FlowInner({
     allComputedNodes,
     selectedGroupId,
     ORG_FLOW_LEVEL_GAP,
+    isEditMode,
   );
 
   const onNodeDragStop = useCallback(
@@ -130,10 +132,27 @@ function FlowInner({
       const newLevel = levelFromTopY(node.position.y);
       const assignment = orgData.assignments.find((a) => a.id === d.assignmentId);
       if (!assignment || assignment.level === newLevel) return;
-      const result = upsertAssignment(orgData, { ...assignment, level: newLevel }, operator, false);
-      if (!result.error) onDraftChange(result.data);
+
+      // Assignments visible in current view (scope level calculations to view)
+      const viewAssignments = selectedGroupId === ALL_GROUPS_VIEW_ID
+        ? orgData.assignments
+        : orgData.assignments.filter((a) => a.groupId === selectedGroupId);
+      const currentMinLevel = Math.min(...viewAssignments.map((a) => a.level ?? 1));
+
+      if (newLevel < currentMinLevel) {
+        // Top-node dragged up past the minimum:
+        // Keep top node at current min level; shift ALL other assignments down by 1.
+        const updatedAssignments = orgData.assignments.map((a) =>
+          a.id === assignment.id ? a : { ...a, level: (a.level ?? 1) + 1 },
+        );
+        onDraftChange({ ...orgData, assignments: updatedAssignments });
+      } else {
+        // Normal case: only this node's level changes.
+        const result = upsertAssignment(orgData, { ...assignment, level: newLevel }, operator, false);
+        if (!result.error) onDraftChange(result.data);
+      }
     },
-    [isEditMode, orgData, operator, onDraftChange],
+    [isEditMode, orgData, selectedGroupId, operator, onDraftChange],
   );
 
   const onConnect = useCallback(

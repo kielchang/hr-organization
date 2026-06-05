@@ -181,7 +181,7 @@ export function EditModeToolbar({
         open={showPublishConfirm}
         onOpenChange={setShowPublishConfirm}
         title="發布異動？"
-        description="將目前的草稿發布為正式資料，並儲存至本機。此動作會覆蓋現有的已發布資料。"
+        description="將目前的草稿發布為一個新的版本（以發布時間命名），儲存至本機並可在「資料版本」中切換。"
         confirmLabel="確定發布"
         cancelLabel="取消"
         onConfirm={onPublish}

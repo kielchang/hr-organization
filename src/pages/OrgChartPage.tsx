@@ -42,7 +42,7 @@ const chartDescriptions: Record<ChartMode, string> = {
 };
 
 export function OrgChartPage() {
-  const { data, applyChange } = useOrg();
+  const { data, publishVersion } = useOrg();
 
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
@@ -79,14 +79,16 @@ export function OrgChartPage() {
     return data;
   }, [data, editSession.isEditMode, editSession.session]);
 
-  // Compute diff result when previewing a snapshot
+  // Compute diff result when previewing a snapshot:
+  // Compare original base data (when edit mode was entered) vs the previewed snapshot,
+  // so users can see what changed from the original state to that checkpoint.
   const diffResult = useMemo(() => {
     if (!editSession.session?.previewingSnapshotId || !editSession.session) return null;
     const snapshot = editSession.session.snapshots.find(
       (s) => s.id === editSession.session!.previewingSnapshotId,
     );
     if (!snapshot) return null;
-    return computeOrgDiff(snapshot.orgData, editSession.session.draftData);
+    return computeOrgDiff(editSession.session.baseData, snapshot.orgData);
   }, [editSession.session]);
 
   const handleEnterEditMode = () => {
@@ -108,8 +110,7 @@ export function OrgChartPage() {
   const handlePublish = () => {
     const draft = editSession.getDraftData();
     if (!draft) return;
-    const snapshot = cloneOrgData(draft);
-    applyChange(() => ({ data: snapshot }));
+    publishVersion(cloneOrgData(draft));
     editSession.exitEditMode();
     setShowSnapshotPanel(false);
     setStaleDataWarning(false);

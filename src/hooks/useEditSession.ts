@@ -24,6 +24,7 @@ export function useEditSession(): UseEditSessionReturn {
 
   const enterEditMode = useCallback((baseData: OrgData) => {
     setSession({
+      baseData: cloneOrgData(baseData),
       draftData: cloneOrgData(baseData),
       snapshots: [],
       previewingSnapshotId: null,

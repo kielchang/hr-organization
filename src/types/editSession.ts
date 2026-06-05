@@ -9,6 +9,7 @@ export interface EditSnapshot {
 }
 
 export interface EditSession {
+  baseData: OrgData;           // original published data when edit mode was entered
   draftData: OrgData;
   snapshots: EditSnapshot[];
   previewingSnapshotId: string | null;
@@ -23,6 +24,7 @@ export interface OrgDiffResult {
   addedAssignmentIds: Set<string>;
   removedAssignmentIds: Set<string>;
   modifiedAssignmentIds: Set<string>;
+  assignmentChangedEmployeeIds: Set<string>; // employee IDs with any assignment change (level, supervisor, etc.)
   addedEdgeKeys: Set<string>;
   removedEdgeKeys: Set<string>;
 }
