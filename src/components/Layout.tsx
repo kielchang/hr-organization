@@ -5,13 +5,16 @@ import {
   GitBranch,
   History,
   Users,
+  Workflow,
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
+import { DeployInfo } from './DeployInfo';
 
 const navItems = [
   { to: '/', label: '人員與歸屬', icon: Users },
   { to: '/groups', label: '組別管理', icon: Building2 },
   { to: '/org-chart', label: '組織圖', icon: GitBranch },
+  { to: '/bpmn', label: 'BPMN 流程', icon: Workflow },
   { to: '/changelog', label: '調整紀錄', icon: History },
   { to: '/csv-import', label: 'CSV 匯入', icon: FileSpreadsheet },
 ] as const;
@@ -43,7 +46,10 @@ export function Layout() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border bg-card px-6 py-4">
-          <DataToolbar />
+          <div className="flex items-center justify-between gap-4">
+            <DataToolbar />
+            <DeployInfo />
+          </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
           <Outlet />

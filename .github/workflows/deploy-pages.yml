@@ -1,0 +1,143 @@
+name: Deploy Branches to GitHub Pages
+
+# 每次 push（任何 branch）或手動觸發時，重建「所有」branch 並一次部署。
+# 用 vite build --base 旗標，因此不需修改各 branch 的 vite.config，
+# 也不需把此 workflow 複製到每個 branch。
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (all branches)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch all remote branches
+        run: git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+      - name: Build every branch
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/site"
+          mkdir -p "$OUT"
+          echo "[]" > "$OUT/branches.json"
+
+          # 列出所有遠端 branch（排除 gh-pages 與 HEAD）
+          BRANCHES=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
+            | sed 's|^origin/||' \
+            | grep -v -E '^(gh-pages|HEAD)$' | sort -u)
+
+          echo "將建置以下 branch:"
+          echo "$BRANCHES"
+
+          for BR in $BRANCHES; do
+            SAFE=$(echo "$BR" | sed 's|[^a-zA-Z0-9._-]|-|g')
+            echo "::group::Build $BR -> $SAFE"
+
+            # 切到該 branch 的程式碼（detached），並清掉前一個 branch 殘留的未追蹤檔
+            git checkout -f "origin/$BR"
+            git clean -fdx -e node_modules
+
+            TS=$(git log -1 --format=%cI "origin/$BR")
+
+            # 用 --base 覆寫 base path；跳過 tsc 型別檢查，型別錯誤不阻擋預覽部署
+            if npm ci && VITE_BRANCH_NAME="$BR" VITE_DEPLOY_TIME="$TS" \
+                 npx vite build --base="/hr-organization/$SAFE/"; then
+              mkdir -p "$OUT/$SAFE"
+              cp -r dist/. "$OUT/$SAFE/"
+              python3 - "$OUT/branches.json" "$BR" "$SAFE" "$TS" <<'PY'
+          import json, sys
+          path, raw, safe, ts = sys.argv[1:5]
+          data = json.load(open(path))
+          data = [b for b in data if b.get('safe') != safe]
+          data.append({'raw': raw, 'safe': safe, 'deployTime': ts})
+          json.dump(data, open(path, 'w'), ensure_ascii=False, indent=2)
+          PY
+              echo "✅ $BR 建置成功"
+            else
+              echo "⚠️ $BR 建置失敗，略過"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: Generate root index page
+        run: |
+          OUT="$RUNNER_TEMP/site"
+          touch "$OUT/.nojekyll"
+          cat > "$OUT/index.html" << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html lang="zh-TW">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>HR 組織 — 版本列表</title>
+            <style>
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+              h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+              .subtitle { color: #94a3b8; font-size: 0.875rem; margin-bottom: 2rem; }
+              .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+              .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.25rem; text-decoration: none; color: inherit; transition: border-color 0.15s, background 0.15s; display: block; }
+              .card:hover { border-color: #60a5fa; background: #1e3a5f; }
+              .card-branch { font-family: monospace; font-size: 0.9rem; font-weight: 600; color: #60a5fa; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; word-break: break-all; }
+              .card-branch::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+              .card-time { font-size: 0.75rem; color: #64748b; }
+              .badge { display: inline-block; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 9999px; background: #1d4ed8; color: #bfdbfe; margin-left: 0.5rem; }
+            </style>
+          </head>
+          <body>
+            <h1>HR 組織架構調整工具</h1>
+            <p class="subtitle">選擇要查看的 Branch 版本</p>
+            <div class="grid" id="grid"></div>
+            <script>
+              const base = location.pathname.replace(/\/index\.html$/, '');
+              // cache-bust 避免 CDN / 瀏覽器回傳舊的版本清單
+              fetch(base + '/branches.json?t=' + Date.now(), { cache: 'no-store' })
+                .then(r => r.json())
+                .then(branches => {
+                  const grid = document.getElementById('grid');
+                  branches.sort((a, b) => new Date(b.deployTime) - new Date(a.deployTime));
+                  branches.forEach((b, i) => {
+                    const card = document.createElement('a');
+                    card.href = base + '/' + b.safe + '/';
+                    card.className = 'card';
+                    const time = b.deployTime ? new Date(b.deployTime).toLocaleString('zh-TW') : '—';
+                    card.innerHTML = `
+                      <div class="card-branch">${b.raw}${i === 0 ? '<span class="badge">最新</span>' : ''}</div>
+                      <div class="card-time">部署時間：${time}</div>
+                    `;
+                    grid.appendChild(card);
+                  });
+                })
+                .catch(() => {
+                  document.getElementById('grid').innerHTML = '<p style="color:#64748b">暫無部署版本</p>';
+                });
+            </script>
+          </body>
+          </html>
+          HTMLEOF
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ runner.temp }}/site
+          force_orphan: true

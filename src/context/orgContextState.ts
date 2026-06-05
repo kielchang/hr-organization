@@ -8,6 +8,14 @@ export interface OrgContextValue {
   activeVersionId: string;
   activeVersion: DataVersionInfo | undefined;
   selectDataVersion: (id: string) => void;
+  /** 發布草稿為新的本機版本，回傳新版本 id */
+  publishVersion: (draft: OrgData) => string;
+  /** 刪除一個本機發布版本（內建版本不受影響） */
+  deletePublishedVersion: (id: string) => void;
+  /** 將所有本機發布版本匯出成可攜帶的整包檔 */
+  exportPublishedVersions: () => void;
+  /** 從整包檔匯入發布版本（合併、去重），回傳錯誤訊息或 null */
+  importPublishedVersions: (raw: unknown) => string | null;
   operator: string;
   setOperator: (name: string) => void;
   saveEmployee: (employee: Employee, isNew: boolean) => string | null;

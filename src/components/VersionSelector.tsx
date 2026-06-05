@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select,
   SelectContent,
@@ -10,11 +13,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
-import { validationBadge } from '@/lib/uiSemantics';
+import { buttonIntent, validationBadge } from '@/lib/uiSemantics';
 import { useOrg } from '../context/useOrg';
 
 export function VersionSelector() {
-  const { dataVersions, activeVersionId, selectDataVersion, activeVersion } = useOrg();
+  const {
+    dataVersions,
+    activeVersionId,
+    selectDataVersion,
+    activeVersion,
+    deletePublishedVersion,
+  } = useOrg();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const canDelete = activeVersion?.source === 'published';
 
   const versionOptions = useMemo(
     () =>
@@ -58,6 +69,17 @@ export function VersionSelector() {
             {activeVersion.valid ? '驗證通過' : '驗證失敗'}
           </Badge>
         )}
+        {canDelete && (
+          <Button
+            type="button"
+            size="sm"
+            variant={buttonIntent.danger}
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="size-3.5" />
+            刪除此版本
+          </Button>
+        )}
       </div>
       {activeVersion && !activeVersion.valid && activeVersion.errors.length > 0 && (
         <Alert variant="destructive">
@@ -69,6 +91,19 @@ export function VersionSelector() {
             </ul>
           </AlertDescription>
         </Alert>
+      )}
+
+      {activeVersion && (
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          title="刪除此發布版本？"
+          description={`將永久移除「${activeVersion.label}」，此動作無法復原。內建版本不受影響。`}
+          confirmLabel="確定刪除"
+          cancelLabel="取消"
+          danger
+          onConfirm={() => deletePublishedVersion(activeVersionId)}
+        />
       )}
     </div>
   );
