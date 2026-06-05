@@ -403,7 +403,7 @@ export function OrgDetailPanel({
   return (
     <div
       className={cn(
-        'org-detail-panel w-full bg-transparent',
+        'org-detail-panel w-[280px] max-h-[calc(100vh-17rem)] rounded-xl border border-border bg-card/95 shadow-lg ring-1 ring-foreground/5 backdrop-blur-sm',
         className,
       )}
     >

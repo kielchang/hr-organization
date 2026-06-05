@@ -1,14 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReactFlow, useStore } from '@xyflow/react';
-import {
-  ChevronDown,
-  Minus,
-  Mouse,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Touchpad,
-} from 'lucide-react';
+import { ChevronDown, Minus, Mouse, Plus, Touchpad } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type OrgFlowNavMode = 'mouse' | 'trackpad';
@@ -16,9 +8,6 @@ export type OrgFlowNavMode = 'mouse' | 'trackpad';
 interface OrgFlowControlBarProps {
   navMode: OrgFlowNavMode;
   onNavModeChange: (mode: OrgFlowNavMode) => void;
-  /** 周邊工具（左側工具欄＋觀景窗）是否收合 */
-  chromeCollapsed: boolean;
-  onToggleChrome: () => void;
   className?: string;
 }
 
@@ -49,8 +38,6 @@ const navOptions: {
 export function OrgFlowControlBar({
   navMode,
   onNavModeChange,
-  chromeCollapsed,
-  onToggleChrome,
   className,
 }: OrgFlowControlBarProps) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
@@ -127,15 +114,6 @@ export function OrgFlowControlBar({
           <ChevronDown
             className={cn('!size-3 transition-transform', menuOpen && 'rotate-180')}
           />
-        </button>
-        <button
-          type="button"
-          className={iconBtn}
-          onClick={onToggleChrome}
-          title={chromeCollapsed ? '展開周邊工具' : '收合周邊工具'}
-          aria-pressed={chromeCollapsed}
-        >
-          {chromeCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
         </button>
         <button
           type="button"

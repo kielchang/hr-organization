@@ -21,11 +21,10 @@ import { GroupLabelNode } from './GroupLabelNode';
 import { OrgFlowFullscreenButton, OrgFlowMiniMap } from '../orgFlow/OrgFlowChartChrome';
 import { OrgFlowControlBar, type OrgFlowNavMode } from '../orgFlow/OrgFlowControlBar';
 import { ORG_FLOW_NAV_PROPS } from '../orgFlow/orgFlowNav';
-import { OrgFlowLeftStack } from '../orgFlow/OrgFlowLeftStack';
+import { OrgFlowTopBar } from '../orgFlow/OrgFlowTopBar';
+import { OrgDetailPanel } from '../orgFlow/OrgDetailPanel';
 import type { OrgFlowChartVariant } from '../orgFlow/OrgFlowControls';
 import { useDraggableFlowNodes } from '../orgFlow/useDraggableFlowNodes';
-import { useOrgFlowMiniMapVisibility } from '../orgFlow/useOrgFlowMiniMapVisibility';
-import { useOrgFlowSidebarWidth } from '../orgFlow/useOrgFlowSidebarWidth';
 
 const nodeTypes = {
   assignmentMember: AssignmentMemberNode,
@@ -74,12 +73,10 @@ function FlowInner({
   }, [computedNodes, edges, fitView, selectedGroupId]);
 
   const hasDetail = !!selectedEmployeeId;
-  const { showMiniMap, setShowMiniMap } = useOrgFlowMiniMapVisibility(hasDetail);
+  const [showMiniMap, setShowMiniMap] = useState(true);
   const [navMode, setNavMode] = useState<OrgFlowNavMode>('mouse');
-  const [chromeCollapsed, setChromeCollapsed] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const sidebarRef = useRef<HTMLDivElement>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -87,13 +84,6 @@ function FlowInner({
     containerRef.current = node;
     setPortalContainer(node);
   }, []);
-
-  const sidebarWidth = useOrgFlowSidebarWidth(sidebarRef, true);
-
-  const chartStyle =
-    sidebarWidth > 0
-      ? ({ '--org-flow-sidebar-width': `${sidebarWidth}px` } as React.CSSProperties)
-      : undefined;
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -128,7 +118,6 @@ function FlowInner({
         'org-flow-chart relative h-full min-h-[480px] overflow-hidden rounded-xl border border-border bg-background shadow-sm',
         isFullscreen && 'org-flow-chart--fullscreen',
       )}
-      style={chartStyle}
     >
       <ReactFlow
         colorMode="light"
@@ -148,39 +137,36 @@ function FlowInner({
       >
         <Background gap={20} size={1} color="var(--border)" />
 
-        {!chromeCollapsed && (
-          <Panel
-            position="top-left"
-            className="org-flow-chrome-panel org-flow-sidebar-panel !m-0 !top-0 !left-0"
-          >
-            <OrgFlowLeftStack
-              sidebarRef={sidebarRef}
+        {/* 左上角：檢視組別（底線下拉）＋圖例，下方堆疊人員詳情卡片 */}
+        <Panel position="top-left" className="org-flow-chrome-panel !m-3">
+          <div className="flex flex-col items-start gap-3">
+            <OrgFlowTopBar
               variant={variant}
               selectedGroupId={selectedGroupId}
               onGroupChange={onGroupChange}
               activeGroups={activeGroups}
               mountNode={portalContainer}
-              selectedEmployeeId={selectedEmployeeId}
-              onCloseDetail={() => onNodeSelect(null)}
             />
-          </Panel>
-        )}
-
-        <Panel position="bottom-right" className="org-flow-chrome-panel !m-3">
-          <div className="flex flex-col items-end gap-2">
-            {!chromeCollapsed && (
-              <OrgFlowMiniMap show={showMiniMap} onToggle={() => setShowMiniMap((v) => !v)} />
+            {hasDetail && (
+              <OrgDetailPanel
+                employeeId={selectedEmployeeId}
+                onClose={() => onNodeSelect(null)}
+                portalContainer={portalContainer}
+              />
             )}
-            <OrgFlowControlBar
-              navMode={navMode}
-              onNavModeChange={setNavMode}
-              chromeCollapsed={chromeCollapsed}
-              onToggleChrome={() => setChromeCollapsed((v) => !v)}
-            />
           </div>
         </Panel>
 
+        {/* 右上角：全螢幕 */}
         <OrgFlowFullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+
+        {/* 右下角：觀景窗 + 控制列 */}
+        <Panel position="bottom-right" className="org-flow-chrome-panel !m-3">
+          <div className="flex flex-col items-end gap-2">
+            <OrgFlowMiniMap show={showMiniMap} onToggle={() => setShowMiniMap((v) => !v)} />
+            <OrgFlowControlBar navMode={navMode} onNavModeChange={setNavMode} />
+          </div>
+        </Panel>
       </ReactFlow>
 
       {error && (
