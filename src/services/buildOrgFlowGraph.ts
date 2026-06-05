@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 import type { EmployeeNodeData } from '../components/orgFlow/EmployeeNode';
 import type { Assignment, OrgData } from '../types/org';
+import type { NodeDiffStatus } from '../types/editSession';
 import {
   detectReportingCycle,
   detectReportingCycleFromAssignments,
@@ -161,6 +162,7 @@ function pickDisplayAssignment(
 export function buildOrgFlowGraph(
   data: OrgData,
   groupId: string,
+  diffMap?: Map<string, NodeDiffStatus>,
 ): OrgFlowGraphResult {
   const isAllGroups = groupId === ALL_GROUPS_VIEW_ID;
   const activeGroupIds = new Set(
@@ -212,6 +214,7 @@ export function buildOrgFlowGraph(
           ? (displayGroup?.name ?? '全公司')
           : group!.name,
         level: assignment.level,
+        diffStatus: diffMap?.get(eid),
       },
     };
   });

@@ -5,6 +5,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type Connection,
+  type Edge,
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -15,7 +17,7 @@ import {
   buildOrgFlowGraph,
   levelFromTopY,
 } from '../../services/buildOrgFlowGraph';
-import { useOrg } from '../../context/useOrg';
+import { buildNodeDiffMap } from '../../services/computeOrgDiff';
 import { EmployeeNode, type EmployeeNodeData } from './EmployeeNode';
 import { OrgFlowLevelLines } from './OrgFlowLevelLines';
 import { OrgFlowFullscreenButton, OrgFlowMiniMap } from './OrgFlowChartChrome';
@@ -23,17 +25,26 @@ import { OrgFlowControlBar, type OrgFlowNavMode } from './OrgFlowControlBar';
 import { ORG_FLOW_NAV_PROPS } from './orgFlowNav';
 import { OrgFlowTopBar } from './OrgFlowTopBar';
 import { OrgDetailPanel } from './OrgDetailPanel';
+import { DiffLegend } from './DiffLegend';
 import type { OrgFlowChartVariant } from './OrgFlowControls';
 import { useDraggableFlowNodes } from './useDraggableFlowNodes';
+import type { OrgData, Assignment, Employee } from '../../types/org';
+import type { OrgDiffResult } from '../../types/editSession';
+import { upsertAssignment, upsertEmployee, createEmptyAssignment } from '../../services/orgOperations';
+import { useOrg } from '../../context/useOrg';
 
 const nodeTypes = { employee: EmployeeNode } as const;
 
-interface OrgFlowChartProps {
+export interface OrgFlowChartProps {
   variant: OrgFlowChartVariant;
   selectedGroupId: string;
   onGroupChange: (groupId: string) => void;
   selectedEmployeeId: string | null;
   onNodeSelect: (employeeId: string | null) => void;
+  isEditMode: boolean;
+  orgData: OrgData;
+  diffResult?: OrgDiffResult | null;
+  onDraftChange: (next: OrgData) => void;
 }
 
 function FlowInner({
@@ -42,37 +53,135 @@ function FlowInner({
   onGroupChange,
   selectedEmployeeId,
   onNodeSelect,
+  isEditMode,
+  orgData,
+  diffResult,
+  onDraftChange,
 }: OrgFlowChartProps) {
-  const { data, saveAssignment } = useOrg();
+  const { operator } = useOrg();
   const { fitView } = useReactFlow();
 
   const activeGroups = useMemo(
-    () => data.groups.filter((g) => g.status === 'active'),
-    [data.groups],
+    () => orgData.groups.filter((g) => g.status === 'active'),
+    [orgData.groups],
   );
 
-  const { nodes: computedNodes, edges, error, levels, bounds } = useMemo(
-    () => buildOrgFlowGraph(data, selectedGroupId),
-    [data, selectedGroupId],
+  const { nodes: computedNodes, edges: baseEdges, error, levels, bounds } = useMemo(
+    () => buildOrgFlowGraph(orgData, selectedGroupId),
+    [orgData, selectedGroupId],
   );
+
+  // Inject diffStatus into nodes when diffResult is present
+  const diffMap = useMemo(() => {
+    if (!diffResult) return undefined;
+    const nodeIds = computedNodes.map((n) => n.id);
+    return buildNodeDiffMap(diffResult, nodeIds);
+  }, [diffResult, computedNodes]);
+
+  // Build nodes with diff map applied
+  const { nodes: computedNodesWithDiff } = useMemo(() => {
+    if (!diffMap) return { nodes: computedNodes };
+    return {
+      nodes: computedNodes.map((n) => ({
+        ...n,
+        data: { ...n.data, diffStatus: diffMap.get(n.id) },
+      })),
+    };
+  }, [computedNodes, diffMap]);
+
+  // Append ghost nodes for removed employees during diff preview
+  const { nodes: allComputedNodes, edges } = useMemo(() => {
+    if (!diffResult || !diffResult.removedEmployeeIds.size) {
+      return { nodes: computedNodesWithDiff, edges: baseEdges };
+    }
+    const ghostNodes: Node<EmployeeNodeData>[] = [];
+    for (const eid of diffResult.removedEmployeeIds) {
+      const emp = orgData.employees.find((e) => e.id === eid);
+      if (!emp) continue;
+      ghostNodes.push({
+        id: `ghost-${eid}`,
+        type: 'employee',
+        position: { x: -300, y: 0 },
+        data: {
+          employee: emp,
+          assignmentId: '',
+          jobLevelName: '已移除',
+          isPrimaryGroup: false,
+          groupName: '',
+          diffStatus: 'removed',
+        },
+        draggable: false,
+      });
+    }
+    return { nodes: [...computedNodesWithDiff, ...ghostNodes], edges: baseEdges };
+  }, [computedNodesWithDiff, baseEdges, diffResult, orgData.employees]);
 
   const { nodes, onNodesChange } = useDraggableFlowNodes(
-    computedNodes,
+    allComputedNodes,
     selectedGroupId,
     ORG_FLOW_LEVEL_GAP,
   );
 
-  // 拖到另一層（或範圍外新層）放開 → 依最終 Y 反推層級、更新該 assignment（持久化）
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      if (!isEditMode) return;
       const d = node.data as EmployeeNodeData;
       if (d.levelTopY == null) return;
       const newLevel = levelFromTopY(node.position.y);
-      const assignment = data.assignments.find((a) => a.id === d.assignmentId);
+      const assignment = orgData.assignments.find((a) => a.id === d.assignmentId);
       if (!assignment || assignment.level === newLevel) return;
-      saveAssignment({ ...assignment, level: newLevel }, false);
+      const result = upsertAssignment(orgData, { ...assignment, level: newLevel }, operator, false);
+      if (!result.error) onDraftChange(result.data);
     },
-    [data.assignments, saveAssignment],
+    [isEditMode, orgData, operator, onDraftChange],
+  );
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!isEditMode) return;
+      const { source: supervisorId, target: subordinateId } = connection;
+      if (!supervisorId || !subordinateId) return;
+      const targetAssignment = orgData.assignments.find(
+        (a) => a.employeeId === subordinateId && a.groupId === selectedGroupId,
+      );
+      if (!targetAssignment) return;
+      if (targetAssignment.supervisorIds.includes(supervisorId)) return;
+      const updated: Assignment = {
+        ...targetAssignment,
+        supervisorIds: [...targetAssignment.supervisorIds, supervisorId],
+        primarySupervisorId: targetAssignment.primarySupervisorId ?? supervisorId,
+      };
+      const result = upsertAssignment(orgData, updated, operator, false);
+      if (!result.error) onDraftChange(result.data);
+    },
+    [isEditMode, orgData, selectedGroupId, operator, onDraftChange],
+  );
+
+  const onEdgesDelete = useCallback(
+    (deletedEdges: Edge[]) => {
+      if (!isEditMode) return;
+      let next = orgData;
+      for (const edge of deletedEdges) {
+        const supervisorId = edge.source;
+        const subordinateId = edge.target;
+        const targetAssignment = next.assignments.find(
+          (a) => a.employeeId === subordinateId && a.groupId === selectedGroupId,
+        );
+        if (!targetAssignment) continue;
+        const updated: Assignment = {
+          ...targetAssignment,
+          supervisorIds: targetAssignment.supervisorIds.filter((s) => s !== supervisorId),
+          primarySupervisorId:
+            targetAssignment.primarySupervisorId === supervisorId
+              ? null
+              : targetAssignment.primarySupervisorId,
+        };
+        const result = upsertAssignment(next, updated, operator, false);
+        if (!result.error) next = result.data;
+      }
+      if (next !== orgData) onDraftChange(next);
+    },
+    [isEditMode, orgData, selectedGroupId, operator, onDraftChange],
   );
 
   useEffect(() => {
@@ -111,7 +220,7 @@ function FlowInner({
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      onNodeSelect(node.id);
+      onNodeSelect(node.id.startsWith('ghost-') ? null : node.id);
     },
     [onNodeSelect],
   );
@@ -119,6 +228,32 @@ function FlowInner({
   const onPaneClick = useCallback(() => {
     onNodeSelect(null);
   }, [onNodeSelect]);
+
+  // Save callbacks for OrgDetailPanel — write to draft in edit mode
+  const handleSaveEmployee = useCallback(
+    (employee: Employee, isNew: boolean): string | null => {
+      const result = upsertEmployee(orgData, employee, operator, isNew);
+      if (result.error) return result.error;
+      onDraftChange(result.data);
+      return null;
+    },
+    [orgData, operator, onDraftChange],
+  );
+
+  const handleSaveAssignment = useCallback(
+    (assignment: Assignment, isNew: boolean): string | null => {
+      const result = upsertAssignment(orgData, assignment, operator, isNew);
+      if (result.error) return result.error;
+      onDraftChange(result.data);
+      return null;
+    },
+    [orgData, operator, onDraftChange],
+  );
+
+  const handleNewAssignment = useCallback(
+    (employeeId: string): Assignment => createEmptyAssignment(employeeId),
+    [],
+  );
 
   return (
     <div
@@ -137,9 +272,12 @@ function FlowInner({
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
-        nodesDraggable
-        nodesConnectable={false}
+        onConnect={onConnect}
+        onEdgesDelete={onEdgesDelete}
+        nodesDraggable={isEditMode}
+        nodesConnectable={isEditMode}
         elementsSelectable
+        deleteKeyCode={isEditMode ? 'Backspace' : null}
         minZoom={0.2}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
@@ -147,12 +285,10 @@ function FlowInner({
       >
         <Background gap={20} size={1} color="var(--border)" />
 
-        {/* 匯報層階層線（畫布座標，置於節點下方） */}
         {levels && bounds && (
           <OrgFlowLevelLines levels={levels} bounds={bounds} />
         )}
 
-        {/* 左上角：檢視組別（底線下拉）＋圖例，下方堆疊人員詳情卡片 */}
         <Panel position="top-left" className="org-flow-chrome-panel !m-3">
           <div className="flex flex-col items-start gap-3">
             <OrgFlowTopBar
@@ -162,20 +298,31 @@ function FlowInner({
               activeGroups={activeGroups}
               mountNode={portalContainer}
             />
-            {hasDetail && (
+            {hasDetail && selectedEmployeeId && (
               <OrgDetailPanel
                 employeeId={selectedEmployeeId}
                 onClose={() => onNodeSelect(null)}
                 portalContainer={portalContainer}
+                orgData={orgData}
+                isEditMode={isEditMode}
+                onSaveEmployee={handleSaveEmployee}
+                onSaveAssignment={handleSaveAssignment}
+                onNewAssignment={handleNewAssignment}
               />
             )}
           </div>
         </Panel>
 
-        {/* 右上角：全螢幕 */}
+        {diffResult && (
+          <Panel position="bottom-left" className="org-flow-chrome-panel !m-3">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 shadow-sm">
+              <DiffLegend />
+            </div>
+          </Panel>
+        )}
+
         <OrgFlowFullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
 
-        {/* 右下角：觀景窗 + 控制列 */}
         <Panel position="bottom-right" className="org-flow-chrome-panel !m-3">
           <div className="flex flex-col items-end gap-2">
             <OrgFlowMiniMap show={showMiniMap} onToggle={() => setShowMiniMap((v) => !v)} />

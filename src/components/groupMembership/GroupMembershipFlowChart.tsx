@@ -25,6 +25,7 @@ import { OrgFlowTopBar } from '../orgFlow/OrgFlowTopBar';
 import { OrgDetailPanel } from '../orgFlow/OrgDetailPanel';
 import type { OrgFlowChartVariant } from '../orgFlow/OrgFlowControls';
 import { useDraggableFlowNodes } from '../orgFlow/useDraggableFlowNodes';
+import { createEmptyAssignment } from '../../services/orgOperations';
 
 const nodeTypes = {
   assignmentMember: AssignmentMemberNode,
@@ -147,11 +148,16 @@ function FlowInner({
               activeGroups={activeGroups}
               mountNode={portalContainer}
             />
-            {hasDetail && (
+            {hasDetail && selectedEmployeeId && (
               <OrgDetailPanel
                 employeeId={selectedEmployeeId}
                 onClose={() => onNodeSelect(null)}
                 portalContainer={portalContainer}
+                orgData={data}
+                isEditMode={false}
+                onSaveEmployee={() => null}
+                onSaveAssignment={() => null}
+                onNewAssignment={createEmptyAssignment}
               />
             )}
           </div>

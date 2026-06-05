@@ -6,6 +6,7 @@ import {
   Save,
   User,
   X,
+  Eye,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,14 +35,18 @@ import {
   toSelectOptions,
 } from '@/lib/selectOptions';
 import { buttonIntent, tagBadge } from '@/lib/uiSemantics';
-import type { Assignment, Employee } from '../../types/org';
-import { useOrg } from '../../context/useOrg';
+import type { Assignment, Employee, OrgData } from '../../types/org';
 import { getActiveEmployees } from '../../services/validators';
 
 interface OrgDetailPanelProps {
   employeeId: string;
   onClose: () => void;
   portalContainer: HTMLElement | null;
+  orgData: OrgData;
+  isEditMode: boolean;
+  onSaveEmployee: (employee: Employee, isNew: boolean) => string | null;
+  onSaveAssignment: (assignment: Assignment, isNew: boolean) => string | null;
+  onNewAssignment: (employeeId: string) => Assignment;
   className?: string;
 }
 
@@ -88,13 +93,16 @@ function EmployeeEditForm({
   employee: initial,
   onClose,
   selectPortalContainer,
+  orgData,
+  onSaveEmployee,
 }: {
   employee: Employee;
   onClose: () => void;
-  /** 與檢視組別相同：全螢幕時下拉需掛在圖表容器內 */
   selectPortalContainer: HTMLElement | null;
+  orgData: OrgData;
+  onSaveEmployee: (employee: Employee, isNew: boolean) => string | null;
 }) {
-  const { saveEmployee } = useOrg();
+  void orgData;
   const [employee, setEmployee] = useState<Employee>(initial);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +111,7 @@ function EmployeeEditForm({
       setError('請填寫工號與姓名');
       return;
     }
-    const err = saveEmployee(employee, false);
+    const err = onSaveEmployee(employee, false);
     if (err) { setError(err); return; }
     onClose();
   };
@@ -182,18 +190,21 @@ function AssignmentEditForm({
   isNew,
   onClose,
   selectPortalContainer,
+  orgData,
+  onSaveAssignment,
 }: {
   assignment: Assignment;
   isNew: boolean;
   onClose: () => void;
   selectPortalContainer: HTMLElement | null;
+  orgData: OrgData;
+  onSaveAssignment: (assignment: Assignment, isNew: boolean) => string | null;
 }) {
-  const { data, saveAssignment } = useOrg();
   const [assignment, setAssignment] = useState(initial);
   const [error, setError] = useState<string | null>(null);
 
-  const activeGroups = data.groups.filter((g) => g.status === 'active');
-  const activeEmployees = getActiveEmployees(data.employees).filter(
+  const activeGroups = orgData.groups.filter((g) => g.status === 'active');
+  const activeEmployees = getActiveEmployees(orgData.employees).filter(
     (e) => e.id !== assignment.employeeId,
   );
 
@@ -206,8 +217,8 @@ function AssignmentEditForm({
   };
 
   const sortedJobLevels = useMemo(
-    () => [...data.jobLevels].sort((a, b) => b.rank - a.rank),
-    [data.jobLevels],
+    () => [...orgData.jobLevels].sort((a, b) => b.rank - a.rank),
+    [orgData.jobLevels],
   );
 
   const groupOptions = useMemo(
@@ -234,7 +245,7 @@ function AssignmentEditForm({
 
   const primarySupervisorOptions = useMemo(() => {
     const items = assignment.supervisorIds.map((sid) => {
-      const e = data.employees.find((x) => x.id === sid);
+      const e = orgData.employees.find((x) => x.id === sid);
       return { id: sid, name: e?.name ?? '—' };
     });
     return toSelectOptions(
@@ -243,10 +254,10 @@ function AssignmentEditForm({
       (o) => o.id,
       (o) => o.name,
     );
-  }, [assignment.supervisorIds, assignment.primarySupervisorId, data.employees]);
+  }, [assignment.supervisorIds, assignment.primarySupervisorId, orgData.employees]);
 
   const onSave = () => {
-    const err = saveAssignment(assignment, isNew);
+    const err = onSaveAssignment(assignment, isNew);
     if (err) { setError(err); return; }
     onClose();
   };
@@ -373,11 +384,15 @@ export function OrgDetailPanel({
   employeeId,
   onClose,
   portalContainer,
+  orgData,
+  isEditMode,
+  onSaveEmployee,
+  onSaveAssignment,
+  onNewAssignment,
   className,
 }: OrgDetailPanelProps) {
-  const { data, newAssignmentFor } = useOrg();
-  const employee = data.employees.find((e) => e.id === employeeId);
-  const assignments = data.assignments.filter((a) => a.employeeId === employeeId);
+  const employee = orgData.employees.find((e) => e.id === employeeId);
+  const assignments = orgData.assignments.filter((a) => a.employeeId === employeeId);
 
   const [editingEmp, setEditingEmp] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
@@ -391,7 +406,7 @@ export function OrgDetailPanel({
   if (!employee) return null;
 
   const openAddAssignment = () => {
-    setNewAssignmentDraft(newAssignmentFor(employeeId));
+    setNewAssignmentDraft(onNewAssignment(employeeId));
     setAddingAssignment(true);
   };
 
@@ -416,15 +431,21 @@ export function OrgDetailPanel({
           <p className="text-xs text-muted-foreground">{employee.employeeNo}</p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button
-            type="button"
-            variant={buttonIntent.edit}
-            size="icon-sm"
-            onClick={() => setEditingEmp(true)}
-            title="編輯員工資料"
-          >
-            <Pencil />
-          </Button>
+          {isEditMode ? (
+            <Button
+              type="button"
+              variant={buttonIntent.edit}
+              size="icon-sm"
+              onClick={() => setEditingEmp(true)}
+              title="編輯員工資料"
+            >
+              <Pencil />
+            </Button>
+          ) : (
+            <span title="檢視模式" className="flex size-7 items-center justify-center text-muted-foreground">
+              <Eye className="size-4" />
+            </span>
+          )}
           <ModalCloseButton onClick={onClose} />
         </div>
       </div>
@@ -435,22 +456,24 @@ export function OrgDetailPanel({
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           組別歸屬
         </p>
-        <Button
-          type="button"
-          variant={buttonIntent.create}
-          size="icon-sm"
-          onClick={openAddAssignment}
-          title="新增歸屬"
-        >
-          <Plus />
-        </Button>
+        {isEditMode && (
+          <Button
+            type="button"
+            variant={buttonIntent.create}
+            size="icon-sm"
+            onClick={openAddAssignment}
+            title="新增歸屬"
+          >
+            <Plus />
+          </Button>
+        )}
       </div>
 
       <div className="org-detail-assign-list">
         <div className="flex flex-col gap-2">
           {assignments.map((a) => {
-            const group = data.groups.find((g) => g.id === a.groupId);
-            const jl = data.jobLevels.find((j) => j.id === a.jobLevelId);
+            const group = orgData.groups.find((g) => g.id === a.groupId);
+            const jl = orgData.jobLevels.find((j) => j.id === a.jobLevelId);
             return (
               <Card
                 key={a.id}
@@ -466,17 +489,19 @@ export function OrgDetailPanel({
                       </Badge>
                     )}
                   </CardTitle>
-                  <CardAction>
-                    <Button
-                      type="button"
-                      variant={buttonIntent.edit}
-                      size="icon-sm"
-                      onClick={() => setEditingAssignment(a)}
-                      title="編輯歸屬"
-                    >
-                      <Pencil />
-                    </Button>
-                  </CardAction>
+                  {isEditMode && (
+                    <CardAction>
+                      <Button
+                        type="button"
+                        variant={buttonIntent.edit}
+                        size="icon-sm"
+                        onClick={() => setEditingAssignment(a)}
+                        title="編輯歸屬"
+                      >
+                        <Pencil />
+                      </Button>
+                    </CardAction>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-1 px-3 pb-3 pt-0 text-xs text-muted-foreground">
                   <p>職級：{jl?.name ?? '—'}</p>
@@ -484,7 +509,7 @@ export function OrgDetailPanel({
                     主管：
                     {a.supervisorIds
                       .map((sid) => {
-                        const s = data.employees.find((e) => e.id === sid);
+                        const s = orgData.employees.find((e) => e.id === sid);
                         return s ? `${s.name}${a.primarySupervisorId === sid ? '*' : ''}` : sid;
                       })
                       .join('、') || '—'}
@@ -502,18 +527,20 @@ export function OrgDetailPanel({
         </div>
       </div>
 
-      {editingEmp && (
+      {isEditMode && editingEmp && (
         <OrgModal container={portalContainer} onBackdropClick={() => setEditingEmp(false)}>
           <EmployeeEditForm
             key={employee.id}
             employee={employee}
             onClose={() => setEditingEmp(false)}
             selectPortalContainer={portalContainer}
+            orgData={orgData}
+            onSaveEmployee={onSaveEmployee}
           />
         </OrgModal>
       )}
 
-      {editingAssignment && (
+      {isEditMode && editingAssignment && (
         <OrgModal
           container={portalContainer}
           onBackdropClick={() => setEditingAssignment(null)}
@@ -524,11 +551,13 @@ export function OrgDetailPanel({
             isNew={false}
             onClose={() => setEditingAssignment(null)}
             selectPortalContainer={portalContainer}
+            orgData={orgData}
+            onSaveAssignment={onSaveAssignment}
           />
         </OrgModal>
       )}
 
-      {addingAssignment && newAssignmentDraft && (
+      {isEditMode && addingAssignment && newAssignmentDraft && (
         <OrgModal container={portalContainer} onBackdropClick={closeAddAssignment}>
           <AssignmentEditForm
             key={newAssignmentDraft.id}
@@ -536,6 +565,8 @@ export function OrgDetailPanel({
             isNew
             onClose={closeAddAssignment}
             selectPortalContainer={portalContainer}
+            orgData={orgData}
+            onSaveAssignment={onSaveAssignment}
           />
         </OrgModal>
       )}
