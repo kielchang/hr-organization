@@ -1,25 +1,31 @@
 import { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
-import type { BpmnProcess, BpmnStore, SimulationSession } from '../types/bpmn';
+import type { BpmnProcess, BpmnStore, ImpactBaseline, SimulationSession } from '../types/bpmn';
+import type { OrgData } from '../types/org';
 import { defaultExpenseProcess } from '../data/bpmn-defaults';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'bpmn-store-v2';
 
-/** v1→v2 migration：補上 schemaVersion, simulationHistory, process.status/version */
+/** v1→v2 migration：補 schemaVersion / simulationHistory / process.status / version */
 function migrateV1(raw: Record<string, unknown>): BpmnStore {
   const processes = ((raw.processes as BpmnProcess[] | undefined) ?? []).map((p) => ({
     status: 'active' as const,
     version: 1,
     ...p,
-    // 各節點若無 approverResolution，保持 undefined（fallback 在 resolver 中處理）
   }));
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     processes,
     activeSession: null,
     simulationHistory: [],
+    impactBaseline: null,
   };
+}
+
+/** v2→v3 migration：補 impactBaseline */
+function migrateV2(raw: BpmnStore): BpmnStore {
+  return { ...raw, schemaVersion: 3, impactBaseline: null };
 }
 
 function loadStore(): BpmnStore {
@@ -27,9 +33,10 @@ function loadStore(): BpmnStore {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as BpmnStore;
-      if (parsed.schemaVersion === 2) return parsed;
+      if (parsed.schemaVersion === 3) return parsed;
+      if (parsed.schemaVersion === 2) return migrateV2(parsed);
     }
-    // 嘗試讀舊格式
+    // Attempt to read old v1 format
     const oldRaw = localStorage.getItem('bpmn-store-v1');
     if (oldRaw) {
       const oldParsed = JSON.parse(oldRaw) as Record<string, unknown>;
@@ -37,10 +44,11 @@ function loadStore(): BpmnStore {
     }
   } catch { /* ignore */ }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     processes: [defaultExpenseProcess],
     activeSession: null,
     simulationHistory: [],
+    impactBaseline: null,
   };
 }
 
@@ -55,7 +63,9 @@ type Action =
   | { type: 'DELETE_PROCESS'; id: string }
   | { type: 'SET_SESSION'; session: SimulationSession | null }
   | { type: 'UPDATE_SESSION'; session: SimulationSession }
-  | { type: 'ADD_TO_HISTORY'; session: SimulationSession };
+  | { type: 'ADD_TO_HISTORY'; session: SimulationSession }
+  | { type: 'CAPTURE_BASELINE'; baseline: ImpactBaseline }
+  | { type: 'CLEAR_BASELINE' };
 
 function reducer(state: BpmnStore, action: Action): BpmnStore {
   switch (action.type) {
@@ -73,7 +83,6 @@ function reducer(state: BpmnStore, action: Action): BpmnStore {
     case 'UPDATE_SESSION':
       return { ...state, activeSession: action.session };
     case 'ADD_TO_HISTORY': {
-      // 避免重複加入同一 session
       const already = state.simulationHistory.some((s) => s.id === action.session.id);
       if (already) return state;
       return {
@@ -81,6 +90,10 @@ function reducer(state: BpmnStore, action: Action): BpmnStore {
         simulationHistory: [action.session, ...state.simulationHistory].slice(0, 100),
       };
     }
+    case 'CAPTURE_BASELINE':
+      return { ...state, impactBaseline: action.baseline };
+    case 'CLEAR_BASELINE':
+      return { ...state, impactBaseline: null };
     default:
       return state;
   }
@@ -95,6 +108,8 @@ interface BpmnContextValue {
   setSession: (s: SimulationSession | null) => void;
   updateSession: (s: SimulationSession) => void;
   addToHistory: (s: SimulationSession) => void;
+  captureBaseline: (orgData: OrgData, label?: string) => void;
+  clearBaseline: () => void;
 }
 
 const BpmnContext = createContext<BpmnContextValue | null>(null);
@@ -124,10 +139,35 @@ export function BpmnProvider({ children }: { children: React.ReactNode }) {
     (s: SimulationSession) => dispatch({ type: 'ADD_TO_HISTORY', session: s }),
     [],
   );
+  const captureBaseline = useCallback(
+    (orgData: OrgData, label?: string) =>
+      dispatch({
+        type: 'CAPTURE_BASELINE',
+        baseline: {
+          capturedAt: new Date().toISOString(),
+          label: label ?? `快照 ${new Date().toLocaleString('zh-TW')}`,
+          data: orgData,
+        },
+      }),
+    [],
+  );
+  const clearBaseline = useCallback(
+    () => dispatch({ type: 'CLEAR_BASELINE' }),
+    [],
+  );
 
   return (
     <BpmnContext.Provider
-      value={{ store, upsertProcess, deleteProcess, setSession, updateSession, addToHistory }}
+      value={{
+        store,
+        upsertProcess,
+        deleteProcess,
+        setSession,
+        updateSession,
+        addToHistory,
+        captureBaseline,
+        clearBaseline,
+      }}
     >
       {children}
     </BpmnContext.Provider>

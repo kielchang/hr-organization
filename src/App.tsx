@@ -10,6 +10,7 @@ import { CsvImportPage } from './pages/CsvImportPage';
 import { BpmnListPage } from './pages/BpmnListPage';
 import { BpmnDesignerPage } from './pages/BpmnDesignerPage';
 import { BpmnSimulatePage } from './pages/BpmnSimulatePage';
+import { BpmnImpactPage } from './pages/BpmnImpactPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
               <Route path="changelog" element={<ChangeLogPage />} />
               <Route path="csv-import" element={<CsvImportPage />} />
               <Route path="bpmn" element={<BpmnListPage />} />
+              <Route path="bpmn/impact" element={<BpmnImpactPage />} />
               <Route path="bpmn/:processId" element={<BpmnDesignerPage />} />
               <Route path="bpmn/:processId/simulate" element={<BpmnSimulatePage />} />
             </Route>

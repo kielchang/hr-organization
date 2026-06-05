@@ -161,10 +161,85 @@ export interface SimulationSession {
 // ─── Store shape ──────────────────────────────────────────────────────────────
 
 export interface BpmnStore {
-  /** Schema 版本（v1=舊格式無此欄；v2=本版）（新增） */
+  /** Schema 版本（v1=舊格式無此欄；v2=本版；v3=加入影響分析基準） */
   schemaVersion: number;
   processes: BpmnProcess[];
   activeSession: SimulationSession | null;
-  /** 已完成的模擬紀錄（稽核歷程）（新增） */
+  /** 已完成的模擬紀錄（稽核歷程） */
   simulationHistory: SimulationSession[];
+  /** 影響分析基準快照 */
+  impactBaseline?: ImpactBaseline | null;
+}
+
+// ─── Impact Analysis ──────────────────────────────────────────────────────────
+
+import type { OrgData } from './org';
+
+/** 探測情境：requester × 金額帶，用於影響比對與健檢 */
+export interface ProbeScenario {
+  requesterId: string;
+  requesterName: string;
+  amount: number;
+  amountBandLabel: string;
+  category: string;
+}
+
+export type ImpactLevel = 'critical' | 'high' | 'medium' | 'none';
+
+// ── 即時健檢（無基準）──────────────────────────────────────────────────────
+
+export interface NodeHealth {
+  nodeId: string;
+  nodeLabel: string;
+  mode: ApproverResolutionMode;
+  /** 0 個可核准人的申請人 */
+  brokenRequesters: { id: string; name: string }[];
+  /** 僅 1 個可核准人（單點風險） */
+  spofRequesters: { id: string; name: string }[];
+  okScenarioCount: number;
+  severity: 'critical' | 'warning' | 'ok';
+}
+
+export interface ProcessHealth {
+  processId: string;
+  processName: string;
+  nodes: NodeHealth[];
+  severity: 'critical' | 'warning' | 'ok';
+}
+
+// ── 變更影響（before vs after）────────────────────────────────────────────────
+
+export interface NodeApproverChange {
+  nodeId: string;
+  nodeLabel: string;
+  before: { id: string; name: string }[];
+  after: { id: string; name: string }[];
+  /** after 為空、before 非空 → 斷裂 */
+  becameBroken: boolean;
+}
+
+export interface ScenarioImpact {
+  scenario: ProbeScenario;
+  pathChanged: boolean;
+  pathBeforeLabels: string[];
+  pathAfterLabels: string[];
+  /** 僅收錄有變動的節點 */
+  nodeApproverChanges: NodeApproverChange[];
+}
+
+export interface ProcessImpact {
+  processId: string;
+  processName: string;
+  affectedScenarios: ScenarioImpact[];
+  affectedNodeIds: string[];
+  affectedRequesterIds: string[];
+  severity: ImpactLevel;
+}
+
+// ── 基準快照 ──────────────────────────────────────────────────────────────────
+
+export interface ImpactBaseline {
+  capturedAt: string;
+  label: string;
+  data: OrgData;
 }
