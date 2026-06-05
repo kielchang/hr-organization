@@ -125,7 +125,7 @@ function FlowInner({
   );
 
   const onNodeDragStop = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+    (_: MouseEvent | TouchEvent | React.MouseEvent, node: Node) => {
       if (!isEditMode) return;
       const d = node.data as EmployeeNodeData;
       if (d.levelTopY == null) return;

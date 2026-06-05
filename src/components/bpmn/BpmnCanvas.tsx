@@ -54,7 +54,6 @@ function CanvasInner({
   edges: initEdges,
   highlightedNodeIds = [],
   onNodesChange: notifyNodes,
-  onEdgesChange: notifyEdges,
   onNodeSelect,
   readonly = false,
 }: BpmnCanvasProps) {

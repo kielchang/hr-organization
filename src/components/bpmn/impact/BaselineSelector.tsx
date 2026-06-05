@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Camera, Trash2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -97,7 +96,7 @@ export function BaselineSelector({
           {validVersions.length === 0 ? (
             <p className="text-xs text-muted-foreground">無可用版本（請先匯入 org-data JSON）</p>
           ) : (
-            <Select value={selectedVersionId} onValueChange={onSelectVersion}>
+            <Select value={selectedVersionId} onValueChange={(v) => v && onSelectVersion(v)}>
               <SelectTrigger className="h-8 text-xs flex-1">
                 <SelectValue placeholder="選擇基準版本…" />
               </SelectTrigger>

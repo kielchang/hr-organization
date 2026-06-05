@@ -68,7 +68,7 @@ export function SimulationExpenseForm({ employees, orgLookup, onSubmit, onCancel
       {/* 申請人 */}
       <div className="space-y-1">
         <Label className="text-xs">申請人</Label>
-        <Select value={form.requesterId} onValueChange={(v) => field('requesterId', v)}>
+        <Select value={form.requesterId} onValueChange={(v) => field('requesterId', v ?? '')}>
           <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>
@@ -105,7 +105,7 @@ export function SimulationExpenseForm({ employees, orgLookup, onSubmit, onCancel
       {/* 費用類別 */}
       <div className="space-y-1">
         <Label className="text-xs">費用類別</Label>
-        <Select value={form.category} onValueChange={(v) => field('category', v)}>
+        <Select value={form.category} onValueChange={(v) => field('category', v ?? '')}>
           <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>

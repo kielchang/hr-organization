@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, AlertTriangle, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import type { ProcessImpact, NodeApproverChange, ScenarioImpact } from '../../../types/bpmn';
+import type { ProcessImpact, ScenarioImpact } from '../../../types/bpmn';
 
 interface Props {
   impact: ProcessImpact;

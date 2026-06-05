@@ -65,8 +65,9 @@ export function BpmnPropertiesPanel({ node, edge, jobLevels, onNodeChange, onEdg
               <Select
                 value={cond?.variable ?? condVar}
                 onValueChange={(v) => {
-                  setCondVar(v);
-                  onEdgeChange({ ...edge, condition: { variable: v, operator: cond?.operator ?? '<', value: cond?.value ?? 0 } });
+                  const variable = v ?? '';
+                  setCondVar(variable);
+                  onEdgeChange({ ...edge, condition: { variable, operator: cond?.operator ?? '<', value: cond?.value ?? 0 } });
                 }}
               >
                 <SelectTrigger className="h-7 text-xs">

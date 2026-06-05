@@ -8,6 +8,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
+import { DeployInfo } from './DeployInfo';
 
 const navItems = [
   { to: '/', label: '人員與歸屬', icon: Users },
@@ -45,7 +46,10 @@ export function Layout() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-border bg-card px-6 py-4">
-          <DataToolbar />
+          <div className="flex items-center justify-between gap-4">
+            <DataToolbar />
+            <DeployInfo />
+          </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
           <Outlet />

@@ -10,9 +10,9 @@ const STORAGE_KEY = 'bpmn-store-v2';
 /** v1→v2 migration：補 schemaVersion / simulationHistory / process.status / version */
 function migrateV1(raw: Record<string, unknown>): BpmnStore {
   const processes = ((raw.processes as BpmnProcess[] | undefined) ?? []).map((p) => ({
-    status: 'active' as const,
-    version: 1,
     ...p,
+    status: p.status ?? ('active' as const),
+    version: p.version ?? 1,
   }));
   return {
     schemaVersion: 3,

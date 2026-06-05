@@ -16,6 +16,7 @@ export function ExternalSupervisorNode({ data, selected }: NodeProps) {
     <div
       className={orgFlowNodeClass(
         !!selected,
+        undefined,
         cn(
           'border-dashed border-amber-500/50 bg-amber-50/80 dark:bg-amber-950/30',
           selected && 'border-amber-600 ring-amber-500/25',

@@ -17,7 +17,7 @@ export function AssignmentMemberNode({ data, selected }: NodeProps) {
   const d = data as AssignmentMemberNodeData;
   return (
     <div
-      className={orgFlowNodeClass(!!selected, 'border-primary/40 ring-primary/10')}
+      className={orgFlowNodeClass(!!selected, undefined, 'border-primary/40 ring-primary/10')}
     >
       <Handle
         type="target"

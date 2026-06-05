@@ -170,7 +170,7 @@ export function SimulationStepPanel({ session, process, employees, assignments, 
               </div>
 
               {eligibleEmployees.length > 0 ? (
-                <Select value={actorId} onValueChange={setActorId}>
+                <Select value={actorId} onValueChange={(v) => setActorId(v ?? '')}>
                   <SelectTrigger className="h-7 text-xs">
                     <SelectValue placeholder="選擇核准人（選填）" />
                   </SelectTrigger>

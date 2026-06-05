@@ -261,7 +261,7 @@ export function resolvePath(
         nextEdge = matched;
       } else {
         const defaultId = current.data.defaultEdgeId as string | undefined;
-        nextEdge = (defaultId && outEdges.find((e) => e.id === defaultId)) ?? outEdges[0];
+        nextEdge = (defaultId ? outEdges.find((e) => e.id === defaultId) : undefined) ?? outEdges[0];
       }
     }
 
