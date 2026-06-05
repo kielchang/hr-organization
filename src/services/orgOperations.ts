@@ -214,5 +214,6 @@ export function createEmptyAssignment(employeeId: string): Assignment {
     supervisorIds: [],
     primarySupervisorId: null,
     isPrimaryGroup: false,
+    level: 1,
   };
 }

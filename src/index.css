@@ -44,6 +44,26 @@ body,
   height: 100%;
 }
 
+/* 匯報層階層線：水平虛線，置於節點下方、邊線之下 */
+.org-flow-level-line {
+  z-index: -1;
+  height: 0;
+  border-top: 1px dashed color-mix(in oklab, var(--border) 80%, transparent);
+  pointer-events: none;
+}
+
+.org-flow-level-label {
+  position: absolute;
+  left: 0;
+  top: -1.4rem;
+  padding: 0 0.375rem;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--background) 85%, transparent);
+  border-radius: 4px;
+}
+
 .react-flow__panel.org-flow-chrome-panel {
   pointer-events: all;
   z-index: 10;

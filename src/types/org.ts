@@ -30,6 +30,8 @@ export interface Assignment {
   supervisorIds: string[];
   primarySupervisorId: string | null;
   isPrimaryGroup: boolean;
+  /** 組織層級（1-indexed 匯報層）；組織圖以此判斷垂直層級，可拖拉改動 */
+  level?: number;
 }
 
 export type ChangeType =

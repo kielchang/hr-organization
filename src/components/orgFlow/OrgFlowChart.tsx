@@ -10,9 +10,14 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { buildOrgFlowGraph } from '../../services/buildOrgFlowGraph';
+import {
+  ORG_FLOW_LEVEL_GAP,
+  buildOrgFlowGraph,
+  levelFromTopY,
+} from '../../services/buildOrgFlowGraph';
 import { useOrg } from '../../context/useOrg';
-import { EmployeeNode } from './EmployeeNode';
+import { EmployeeNode, type EmployeeNodeData } from './EmployeeNode';
+import { OrgFlowLevelLines } from './OrgFlowLevelLines';
 import { OrgFlowFullscreenButton, OrgFlowMiniMap } from './OrgFlowChartChrome';
 import { OrgFlowControlBar, type OrgFlowNavMode } from './OrgFlowControlBar';
 import { ORG_FLOW_NAV_PROPS } from './orgFlowNav';
@@ -38,7 +43,7 @@ function FlowInner({
   selectedEmployeeId,
   onNodeSelect,
 }: OrgFlowChartProps) {
-  const { data } = useOrg();
+  const { data, saveAssignment } = useOrg();
   const { fitView } = useReactFlow();
 
   const activeGroups = useMemo(
@@ -46,7 +51,7 @@ function FlowInner({
     [data.groups],
   );
 
-  const { nodes: computedNodes, edges, error } = useMemo(
+  const { nodes: computedNodes, edges, error, levels, bounds } = useMemo(
     () => buildOrgFlowGraph(data, selectedGroupId),
     [data, selectedGroupId],
   );
@@ -54,6 +59,20 @@ function FlowInner({
   const { nodes, onNodesChange } = useDraggableFlowNodes(
     computedNodes,
     selectedGroupId,
+    ORG_FLOW_LEVEL_GAP,
+  );
+
+  // 拖到另一層（或範圍外新層）放開 → 依最終 Y 反推層級、更新該 assignment（持久化）
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const d = node.data as EmployeeNodeData;
+      if (d.levelTopY == null) return;
+      const newLevel = levelFromTopY(node.position.y);
+      const assignment = data.assignments.find((a) => a.id === d.assignmentId);
+      if (!assignment || assignment.level === newLevel) return;
+      saveAssignment({ ...assignment, level: newLevel }, false);
+    },
+    [data.assignments, saveAssignment],
   );
 
   useEffect(() => {
@@ -116,6 +135,7 @@ function FlowInner({
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
         onNodesChange={onNodesChange as import('@xyflow/react').OnNodesChange}
         onNodeClick={onNodeClick}
+        onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
         nodesDraggable
         nodesConnectable={false}
@@ -126,6 +146,11 @@ function FlowInner({
         {...ORG_FLOW_NAV_PROPS[navMode]}
       >
         <Background gap={20} size={1} color="var(--border)" />
+
+        {/* 匯報層階層線（畫布座標，置於節點下方） */}
+        {levels && bounds && (
+          <OrgFlowLevelLines levels={levels} bounds={bounds} />
+        )}
 
         {/* 左上角：檢視組別（底線下拉）＋圖例，下方堆疊人員詳情卡片 */}
         <Panel position="top-left" className="org-flow-chrome-panel !m-3">

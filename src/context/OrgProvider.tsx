@@ -10,6 +10,7 @@ import {
   upsertGroup,
 } from '../services/orgOperations';
 import { cloneOrgData } from '../services/exportImport';
+import { backfillAssignmentLevels } from '../services/assignmentLevels';
 import {
   loadDataVersions,
   pickDefaultVersionId,
@@ -61,7 +62,7 @@ function createInitialState(): {
   return {
     dataVersions,
     activeVersionId,
-    data: draft ?? seedData,
+    data: backfillAssignmentLevels(draft ?? seedData),
   };
 }
 
@@ -84,7 +85,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       const version = dataVersions.find((v) => v.id === id);
       if (!version) return;
       setActiveVersionId(id);
-      setData(cloneOrgData(version.data));
+      setData(backfillAssignmentLevels(cloneOrgData(version.data)));
     },
     [dataVersions],
   );
@@ -154,7 +155,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const loadFromFile = useCallback(
     (incoming: OrgData) => {
-      const next = importOrgData(incoming, operator);
+      const next = backfillAssignmentLevels(importOrgData(incoming, operator));
       setData(next);
       saveDraft(next);
     },

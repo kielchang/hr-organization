@@ -6,9 +6,15 @@ import { orgFlowNodeClass } from './orgFlowNodeStyles';
 
 export interface EmployeeNodeData extends Record<string, unknown> {
   employee: Employee;
+  /** 顯示用的 assignment id（拖拉改層級時更新此筆） */
+  assignmentId: string;
   jobLevelName: string;
   isPrimaryGroup: boolean;
   groupName: string;
+  /** 組織層級值（1-indexed） */
+  level?: number;
+  /** 該層的固定 top Y（拖曳吸附基準） */
+  levelTopY?: number;
 }
 
 export function EmployeeNode({ data, selected }: NodeProps) {
