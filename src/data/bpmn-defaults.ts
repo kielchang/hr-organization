@@ -6,6 +6,8 @@ export const defaultExpenseProcess: BpmnProcess = {
   name: '費用申請流程',
   description: '一般費用申請，依金額自動路由至對應核決層級',
   category: '財務',
+  status: 'active',
+  version: 1,
   createdAt: '2026-06-05T08:00:00+08:00',
   updatedAt: '2026-06-05T08:00:00+08:00',
 
@@ -21,65 +23,73 @@ export const defaultExpenseProcess: BpmnProcess = {
     {
       id: 'n-start',
       type: 'bpmnStart',
-      position: { x: 80, y: 200 },
+      position: { x: 60, y: 200 },
       data: { label: '開始' },
     },
     {
       id: 'n-submit',
       type: 'bpmnUserTask',
-      position: { x: 220, y: 176 },
+      position: { x: 200, y: 176 },
       data: {
         label: '填寫費用申請',
         taskType: 'submit',
+        // 任何在職員工都可提交
         assigneeJobLevelIds: ['jl4', 'jl3', 'jl2', 'jl1', 'jl5'],
+        approverResolution: { mode: 'byJobLevel', jobLevelIds: ['jl4', 'jl3', 'jl2', 'jl1', 'jl5'] },
       },
     },
     {
       id: 'n-gw-amount',
       type: 'bpmnExclusiveGateway',
-      position: { x: 420, y: 188 },
+      position: { x: 400, y: 188 },
       data: { label: '金額判斷', defaultEdgeId: 'e-gw-high' },
     },
     {
       id: 'n-approve-low',
       type: 'bpmnUserTask',
-      position: { x: 580, y: 80 },
+      position: { x: 560, y: 80 },
       data: {
         label: '副理核准',
         taskType: 'approve',
         assigneeJobLevelIds: ['jl2'],
+        // 找申請人所在組的副理（group-scoped）
+        approverResolution: { mode: 'groupJobLevel', jobLevelIds: ['jl2'], fallback: 'byJobLevel' },
       },
     },
     {
       id: 'n-approve-mid',
       type: 'bpmnUserTask',
-      position: { x: 580, y: 200 },
+      position: { x: 560, y: 200 },
       data: {
         label: '經理核准',
         taskType: 'approve',
         assigneeJobLevelIds: ['jl1'],
+        // 找申請人所在組的經理
+        approverResolution: { mode: 'groupJobLevel', jobLevelIds: ['jl1'], fallback: 'byJobLevel' },
       },
     },
     {
       id: 'n-approve-high',
       type: 'bpmnUserTask',
-      position: { x: 580, y: 320 },
+      position: { x: 560, y: 320 },
       data: {
         label: '總監核准',
         taskType: 'approve',
         assigneeJobLevelIds: ['jl5'],
+        // 向上追溯直到 rank >= 50（總監）
+        approverResolution: { mode: 'orgHierarchy', minJobLevelRank: 50, fallback: 'byJobLevel' },
       },
     },
     {
       id: 'n-notify',
       type: 'bpmnServiceTask',
-      position: { x: 780, y: 188 },
+      position: { x: 760, y: 188 },
       data: { label: '通知出納', taskType: 'notify' },
     },
     {
       id: 'n-end',
       type: 'bpmnEnd',
-      position: { x: 960, y: 200 },
+      position: { x: 940, y: 200 },
       data: { label: '結束' },
     },
   ],

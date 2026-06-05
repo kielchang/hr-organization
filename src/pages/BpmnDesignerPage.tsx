@@ -77,6 +77,8 @@ export function BpmnDesignerPage() {
       name,
       description,
       category,
+      status: process.status ?? 'active',
+      version: (process.version ?? 0) + 1,
       nodes,
       edges,
       approvalThresholds: thresholds,

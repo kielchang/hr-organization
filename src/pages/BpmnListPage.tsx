@@ -20,6 +20,8 @@ function newProcess(): BpmnProcess {
     ],
     edges: [{ id: 'e-se', source: 'n-start', target: 'n-end' }],
     approvalThresholds: [],
+    status: 'draft',
+    version: 1,
     createdAt: now,
     updatedAt: now,
   };
@@ -66,7 +68,14 @@ export function BpmnListPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium">{p.name}</p>
                   <Badge variant="outline" className="text-[10px]">{p.category}</Badge>
+                  <Badge
+                    variant={p.status === 'active' ? 'success' : p.status === 'archived' ? 'muted' : 'warning'}
+                    className="text-[10px]"
+                  >
+                    {p.status === 'active' ? '啟用' : p.status === 'draft' ? '草稿' : '封存'}
+                  </Badge>
                   <Badge variant="secondary" className="text-[10px]">{p.nodes.length} 節點</Badge>
+                  <Badge variant="ghost" className="text-[10px]">v{p.version ?? 1}</Badge>
                 </div>
                 {p.description && (
                   <p className="mt-0.5 text-sm text-muted-foreground truncate">{p.description}</p>
