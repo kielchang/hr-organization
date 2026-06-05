@@ -11,6 +11,12 @@ export function useDraggableFlowNodes<T extends Node>(
   computedNodes: T[],
   resetKey: string,
   snapStep?: number,
+  /**
+   * 是否在 computedNodes 重算時保留目前的拖曳位置。
+   * 僅編輯模式需要（避免拖曳中途因資料重算而位置跳掉）；
+   * 檢視模式應永遠跟隨資料計算的位置，否則切換版本/資料後會殘留舊位置。
+   */
+  preserveDraggedPositions = true,
 ) {
   const [nodes, setNodes] = useState<T[]>(computedNodes);
   const resetKeyRef = useRef(resetKey);
@@ -24,6 +30,11 @@ export function useDraggableFlowNodes<T extends Node>(
       return;
     }
 
+    if (!preserveDraggedPositions) {
+      setNodes(computedNodes);
+      return;
+    }
+
     setNodes((current) => {
       if (current.length === 0) return computedNodes;
       const byId = new Map(current.map((n) => [n.id, n]));
@@ -32,7 +43,7 @@ export function useDraggableFlowNodes<T extends Node>(
         return prev ? { ...cn, position: prev.position } : cn;
       });
     });
-  }, [computedNodes, resetKey]);
+  }, [computedNodes, resetKey, preserveDraggedPositions]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => {

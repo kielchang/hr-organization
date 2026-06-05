@@ -2,9 +2,13 @@ import seedRaw from '../data/org-data.json';
 import { cloneOrgData, parseOrgDataRaw } from './exportImport';
 import { validateOrgData } from './validators';
 import type { OrgData } from '../types/org';
+import type { PublishedVersion } from './publishedVersions';
 
 export const SEED_DATA_PATH = 'src/data/org-data.json';
 export const MOCK_DATA_DIR = 'src/data/mock';
+
+/** 版本來源：seed=內建初始檔、mock=內建範例檔、published=本機發布版本 */
+export type DataVersionSource = 'seed' | 'mock' | 'published';
 
 export interface DataVersionInfo {
   id: string;
@@ -16,6 +20,7 @@ export interface DataVersionInfo {
   version: number;
   exportedAt: string;
   isSeed: boolean;
+  source: DataVersionSource;
 }
 
 const emptyOrgData: OrgData = {
@@ -59,6 +64,7 @@ function parseVersionEntry(
   filename: string,
   isSeed: boolean,
 ): DataVersionInfo {
+  const source: DataVersionSource = isSeed ? 'seed' : 'mock';
   try {
     const data = cloneOrgData(parseOrgDataRaw(raw));
     const errors = validateOrgData(data);
@@ -72,6 +78,7 @@ function parseVersionEntry(
       version: data.version,
       exportedAt: data.exportedAt,
       isSeed,
+      source,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : '無法解析檔案';
@@ -85,8 +92,27 @@ function parseVersionEntry(
       version: 0,
       exportedAt: '',
       isSeed,
+      source,
     };
   }
+}
+
+/** 將本機發布版本轉成下拉選單可用的 DataVersionInfo（標籤前綴「發布」）。 */
+export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
+  const data = cloneOrgData(pv.data);
+  const errors = validateOrgData(data);
+  return {
+    id: pv.id,
+    filename: `${pv.id}.json`,
+    label: `發布 · ${pv.label}`,
+    valid: errors.length === 0,
+    errors,
+    data,
+    version: data.version,
+    exportedAt: pv.publishedAt,
+    isSeed: false,
+    source: 'published',
+  };
 }
 
 export function loadDataVersions(): DataVersionInfo[] {

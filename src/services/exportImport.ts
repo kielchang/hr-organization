@@ -48,6 +48,18 @@ export function downloadOrgData(data: OrgData, filename?: string): void {
   URL.revokeObjectURL(url);
 }
 
+export function downloadJson(payload: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function parseOrgDataRaw(raw: unknown): OrgData {
   if (!raw || typeof raw !== 'object') {
     throw new Error('無效的組織資料格式');

@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 import type { EmployeeNodeData } from '../components/orgFlow/EmployeeNode';
 import type { Assignment, OrgData } from '../types/org';
+import type { NodeDiffStatus } from '../types/editSession';
 import {
   detectReportingCycle,
   detectReportingCycleFromAssignments,
@@ -138,14 +139,20 @@ function applyLevelBands(laidOut: Node<EmployeeNodeData>[]): {
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs.map((x) => x + NODE_WIDTH));
 
-  // 標籤用「位置序」：最上面（最小 level）永遠是第 1 層，
-  // 頂部插一層時，下面各層的層號自動 +1。
-  const levels: OrgFlowLevelLine[] = usedLevels.map((lv, i) => ({
-    level: lv,
-    topY: topYOf(lv),
-    y: topYOf(lv) + NODE_HEIGHT / 2,
-    label: `第 ${i + 1} 層`,
-  }));
+  // 層級輔助線 = 真實層級樹：從該組最高層（min level）連續填滿到最低層（max level），
+  // 中間若有跨層空缺（無節點的層）也保留空白輔助線；標籤用實際 level 值，
+  // 不再重新編號，讓單組檢視能反映該組在公司整體中的真實層級位置。
+  const minLevel = usedLevels[0];
+  const maxLevel = usedLevels[usedLevels.length - 1];
+  const levels: OrgFlowLevelLine[] = [];
+  for (let lv = minLevel; lv <= maxLevel; lv++) {
+    levels.push({
+      level: lv,
+      topY: topYOf(lv),
+      y: topYOf(lv) + NODE_HEIGHT / 2,
+      label: `第 ${lv} 層`,
+    });
+  }
 
   return { nodes, levels, bounds: { minX, maxX } };
 }
@@ -161,6 +168,7 @@ function pickDisplayAssignment(
 export function buildOrgFlowGraph(
   data: OrgData,
   groupId: string,
+  diffMap?: Map<string, NodeDiffStatus>,
 ): OrgFlowGraphResult {
   const isAllGroups = groupId === ALL_GROUPS_VIEW_ID;
   const activeGroupIds = new Set(
@@ -212,6 +220,7 @@ export function buildOrgFlowGraph(
           ? (displayGroup?.name ?? '全公司')
           : group!.name,
         level: assignment.level,
+        diffStatus: diffMap?.get(eid),
       },
     };
   });

@@ -1,9 +1,17 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
+import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
+import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
+import { computeOrgDiff } from '../services/computeOrgDiff';
 import { useOrg } from '../context/useOrg';
+import { useEditSession } from '../hooks/useEditSession';
+import { cloneOrgData } from '../services/exportImport';
+import type { OrgData } from '../types/org';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { X } from 'lucide-react';
 
 type ChartMode = 'reporting' | 'membership';
 
@@ -34,32 +42,118 @@ const chartDescriptions: Record<ChartMode, string> = {
 };
 
 export function OrgChartPage() {
-  const { data } = useOrg();
+  const { data, publishVersion } = useOrg();
 
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
+  const [staleDataWarning, setStaleDataWarning] = useState(false);
+
+  const editSession = useEditSession();
+  const prevPublishedRef = useRef<OrgData>(data);
+
+  // Detect if published data changes while in edit mode
+  useEffect(() => {
+    if (editSession.isEditMode && data !== prevPublishedRef.current) {
+      setStaleDataWarning(true);
+    }
+    prevPublishedRef.current = data;
+  }, [data, editSession.isEditMode]);
 
   const resolvedGroupId = useMemo(
-    () => resolveGroupId(groupId, data.groups),
-    [groupId, data.groups],
+    () => {
+      const sourceData = editSession.isEditMode && editSession.session
+        ? editSession.session.draftData
+        : data;
+      return resolveGroupId(groupId, sourceData.groups);
+    },
+    [groupId, data, editSession.isEditMode, editSession.session],
   );
+
+  // The data source depends on mode
+  const orgData = useMemo((): OrgData => {
+    if (editSession.isEditMode && editSession.session) {
+      return editSession.session.draftData;
+    }
+    return data;
+  }, [data, editSession.isEditMode, editSession.session]);
+
+  // Compute diff result when previewing a snapshot:
+  // Compare original base data (when edit mode was entered) vs the previewed snapshot,
+  // so users can see what changed from the original state to that checkpoint.
+  const diffResult = useMemo(() => {
+    if (!editSession.session?.previewingSnapshotId || !editSession.session) return null;
+    const snapshot = editSession.session.snapshots.find(
+      (s) => s.id === editSession.session!.previewingSnapshotId,
+    );
+    if (!snapshot) return null;
+    return computeOrgDiff(editSession.session.baseData, snapshot.orgData);
+  }, [editSession.session]);
+
+  const handleEnterEditMode = () => {
+    editSession.enterEditMode(data);
+    setStaleDataWarning(false);
+  };
+
+  const handleExitEditMode = () => {
+    editSession.exitEditMode();
+    setShowSnapshotPanel(false);
+    setStaleDataWarning(false);
+  };
+
+  const handleSaveCheckpoint = (description: string) => {
+    editSession.saveCheckpoint(description);
+    setShowSnapshotPanel(true);
+  };
+
+  const handlePublish = () => {
+    const draft = editSession.getDraftData();
+    if (!draft) return;
+    publishVersion(cloneOrgData(draft));
+    editSession.exitEditMode();
+    setShowSnapshotPanel(false);
+    setStaleDataWarning(false);
+  };
+
+  const handleDraftChange = (next: OrgData) => {
+    editSession.mutateDraft(() => next);
+  };
 
   const chartProps = {
     selectedGroupId: resolvedGroupId,
     onGroupChange: setGroupId,
     selectedEmployeeId,
     onNodeSelect: setSelectedEmployeeId,
+    isEditMode: editSession.isEditMode,
+    orgData,
+    diffResult,
+    onDraftChange: handleDraftChange,
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold tracking-tight">組織圖</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {chartDescriptions[chartMode]}
         </p>
       </header>
+
+      {staleDataWarning && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>底層資料已在外部變更。建議捨棄目前草稿後重新進入編輯模式。</span>
+            <button
+              type="button"
+              onClick={() => setStaleDataWarning(false)}
+              className="shrink-0 text-amber-600 hover:text-amber-900"
+            >
+              <X className="size-4" />
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs
         value={chartMode}
@@ -74,11 +168,43 @@ export function OrgChartPage() {
         </TabsList>
       </Tabs>
 
-      <div className="relative h-[calc(100vh-13rem)] min-h-[520px]">
-        {chartMode === 'reporting' ? (
-          <OrgFlowChart variant="reporting" {...chartProps} />
-        ) : (
-          <GroupMembershipFlowChart variant="membership" {...chartProps} />
+      {/* Edit mode toolbar — only for reporting chart */}
+      {chartMode === 'reporting' && (
+        <EditModeToolbar
+          isEditMode={editSession.isEditMode}
+          session={editSession.session}
+          showSnapshotPanel={showSnapshotPanel}
+          onEnterEditMode={handleEnterEditMode}
+          onExitEditMode={handleExitEditMode}
+          onSaveCheckpoint={handleSaveCheckpoint}
+          onPublish={handlePublish}
+          onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
+        />
+      )}
+
+      {/* Chart area + optional snapshot panel */}
+      <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
+        <div className="relative min-h-[480px] flex-1">
+          {chartMode === 'reporting' ? (
+            <OrgFlowChart variant="reporting" {...chartProps} />
+          ) : (
+            <GroupMembershipFlowChart variant="membership" {...{
+              selectedGroupId: resolvedGroupId,
+              onGroupChange: setGroupId,
+              selectedEmployeeId,
+              onNodeSelect: setSelectedEmployeeId,
+            }} />
+          )}
+        </div>
+
+        {chartMode === 'reporting' && editSession.isEditMode && showSnapshotPanel && editSession.session && (
+          <SnapshotPanel
+            snapshots={editSession.session.snapshots}
+            previewingSnapshotId={editSession.session.previewingSnapshotId}
+            onPreview={editSession.previewSnapshot}
+            onRollback={editSession.rollbackToSnapshot}
+            onClose={() => setShowSnapshotPanel(false)}
+          />
         )}
       </div>
     </div>
