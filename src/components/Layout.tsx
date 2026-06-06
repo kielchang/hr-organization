@@ -9,7 +9,6 @@ import {
   History,
   TriangleAlert,
   Users,
-  Workflow,
   X,
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
@@ -22,7 +21,7 @@ const navItems = [
   { to: '/org-chart', label: '組織圖', icon: GitBranch },
   { to: '/health', label: '規劃健檢', icon: Activity },
   { to: '/compare', label: '情境比較', icon: GitCompare },
-  { to: '/bpmn', label: 'BPMN 流程', icon: Workflow },
+  { to: '/bpmn/impact', label: '變更影響', icon: TriangleAlert },
   { to: '/changelog', label: '調整紀錄', icon: History },
   { to: '/csv-import', label: 'CSV 匯入', icon: FileSpreadsheet },
 ] as const;

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -50,15 +50,21 @@ export function BpmnImpactPage() {
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => navigate('/bpmn')}>
-          <ArrowLeft className="size-4" />返回
-        </Button>
         <div className="flex-1">
-          <h2 className="text-2xl font-semibold tracking-tight">流程影響分析</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">變更影響分析</h2>
           <p className="text-sm text-muted-foreground">
-            比較組織調整前後，各 BPMN 流程的核准人與路徑變化
+            比較組織調整前後，動到哪些作業／決策流程的核准人與路徑——協助規劃決策
           </p>
         </div>
+      </div>
+
+      {/* HR-friendly intro callout */}
+      <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+        完成組織調整後，這裡會告訴你：哪些作業／決策流程的
+        <strong className="font-semibold text-foreground">核准人</strong>
+        因人事變動而改變、哪些流程因匯報線斷鏈而
+        <strong className="font-semibold text-foreground">無法執行</strong>
+        。沒有流程資料時，可至下方「進階：管理流程定義」設定。
       </div>
 
       {/* Baseline Selector */}
@@ -82,7 +88,7 @@ export function BpmnImpactPage() {
             )}
           </TabsTrigger>
           <TabsTrigger value="health" className="gap-1.5">
-            即時健檢
+            流程健檢
             {processHealthList.some((h) => h.severity !== 'ok') && (
               <Badge variant="warning" className="text-[9px] ml-1">
                 {processHealthList.filter((h) => h.severity !== 'ok').length}
@@ -155,6 +161,18 @@ export function BpmnImpactPage() {
           </ScrollArea>
         </TabsContent>
       </Tabs>
+
+      {/* Secondary entry to manage BPMN process definitions */}
+      <div className="flex justify-end border-t border-border pt-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => navigate('/bpmn')}
+        >
+          進階：管理流程定義 →
+        </Button>
+      </div>
     </div>
   );
 }
