@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
+    "verify": "tsc -b && eslint . && vitest run --coverage && vite build",
+    "setup:hooks": "git config core.hooksPath .githooks",
     "preview": "vite preview",
     "import:csv": "tsx scripts/csv-to-org-json.ts",
     "generate:csv-sample": "tsx scripts/generate-csv-sample.ts"

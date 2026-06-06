@@ -152,4 +152,5 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 
 - [系統設計文件](docs/系統設計文件.md)：整體架構、資料模型、核心服務、開發方向與 Roadmap
 - [規劃：自動化測試與 schema 版控](docs/規劃-自動化測試與schema版控.md)：測試導入與 schema 版本管理的實作規劃
+- [工作流程：integration 分支](docs/工作流程-integration分支.md)：以常綠整合分支讓合併回 main 零阻塞
 </content>
