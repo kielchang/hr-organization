@@ -4,13 +4,16 @@
 > 本文件為**規劃**；提供選型、架構、檔案落點、實作順序與驗收標準。
 > 建立日期：2026-06-06。
 >
-> **實作進度（2026-06-06）**：核心已完成 ✅
+> **實作進度（2026-06-06）**：全部完成 ✅
 > - Vitest 設定、`src/test/setup.ts`、`test`/`test:watch`/`test:cov` scripts
 > - 通用 migration 框架 `src/services/migrations/`（`runMigrations` + `orgMigrations` + `bpmnMigrations`）
 > - OrgData 導入 `schemaVersion`；BPMN 統一 key `bpmn-store` 並集中 migration
-> - Phase A 核心 services 與 migration 測試（共 43 個測試）、CI `test.yml`
+> - Phase A 核心 services + Phase C 圖形建構 + Phase D Provider 測試（共 **77 個測試**）
+> - `OrgData.version` → `contentVersion` 更名（相容舊匯出檔）
+> - **既有 ESLint 債清零（11 → 0）**；CI `test.yml` lint/tsc/coverage 皆硬性把關
+> - **覆蓋率門檻**（vitest thresholds）作回歸防護
 >
-> **未完成（後續）**：Phase C 圖形建構測試、Phase D 元件/Provider 測試、覆蓋率門檻、`version`→`contentVersion` 更名、清理既有 lint 債。
+> **後續可再強化**：提高覆蓋率門檻、補 OrgProvider 與頁面層測試、改善 `BpmnCanvas` 對外部節點變更的同步。
 
 ---
 
