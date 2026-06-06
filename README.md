@@ -36,8 +36,23 @@
 
 ```bash
 npm install
-npm run dev
+npm run dev      # 純前端開發（localStorage 模式）
 ```
+
+### 用 Docker Compose 一鍵啟動整套（DB + API + 前端）
+
+```bash
+docker compose up -d --build   # 首次或改動後加 --build
+docker compose ps              # 查看服務狀態
+docker compose logs -f api     # 看後端日誌
+docker compose down            # 停止（加 -v 連資料庫卷一起清）
+```
+
+- 前端：http://localhost:8088 （已內建指向後端 API）
+- API：http://localhost:3001/api/health
+- PostgreSQL：localhost:55432（對外埠，避免與本機 5432 衝突）
+
+> 後端為 opt-in：純前端 `npm run dev` 不需要後端；要前後端整合（雲端版本持久化）才需起 compose 或設定 `VITE_API_URL`。
 
 瀏覽器開啟終端機顯示的網址（通常為 http://localhost:5173）。
 
