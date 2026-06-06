@@ -5,9 +5,9 @@ import { emp, makeOrgData } from '../test/fixtures';
 import { EmployeeForm } from './EmployeeForm';
 
 /**
- * EmployeeForm 以 Dialog 呈現新增／編輯員工，直接渲染元件可避開
- * PeoplePage 重用同一表單實例造成的預填問題（見最終報告 bug 註記），
- * 聚焦驗證表單本身的填寫、驗證與儲存流程。
+ * EmployeeForm 以 Dialog 呈現新增／編輯員工。直接渲染元件，聚焦驗證表單本身的
+ * 填寫、驗證與儲存流程；父頁面以 key 強制重新掛載確保切換新增/編輯時正確預填
+ * （見 PeoplePage 測試）。
  */
 describe('EmployeeForm 員工表單', () => {
   it('開啟後顯示工號、姓名與狀態欄位', async () => {

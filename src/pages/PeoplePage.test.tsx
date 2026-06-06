@@ -96,4 +96,24 @@ describe('PeoplePage 人員與歸屬', () => {
     // 儲存後新歸屬卡片應列出行銷部
     await waitFor(() => expect(screen.getByText(/行銷部/)).toBeInTheDocument());
   });
+
+  it('回歸：編輯員工帶入所選員工資料、新增員工為空白表單', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PeoplePage />);
+
+    // 編輯員工 → 應以目前選取員工資料預填（修正前會因表單重用而錯亂）
+    await user.click(screen.getByRole('button', { name: /編輯員工/ }));
+    await screen.findByRole('dialog');
+    const editedNo = (screen.getByLabelText('工號') as HTMLInputElement).value;
+    expect(editedNo).not.toBe('');
+    expect(screen.getByRole('heading', { name: '編輯員工' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '取消' }));
+
+    // 新增員工 → 應為空白表單（修正前會誤帶選取員工且 isNew）
+    await user.click(screen.getByRole('button', { name: /新增員工/ }));
+    await screen.findByRole('dialog');
+    expect(screen.getByRole('heading', { name: '新增員工' })).toBeInTheDocument();
+    expect(screen.getByLabelText('工號')).toHaveValue('');
+    expect(screen.getByLabelText('姓名')).toHaveValue('');
+  });
 });

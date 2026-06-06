@@ -20,6 +20,8 @@ export function GroupsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Group | null>(null);
   const [isNew, setIsNew] = useState(false);
+  // 每次開啟表單就 +1，作為 GroupForm 的 key 強制重新掛載（依當下 group/isNew 重新預填）。
+  const [formKey, setFormKey] = useState(0);
 
   const sorted = useMemo(
     () => [...data.groups].sort((a, b) => a.code.localeCompare(b.code)),
@@ -33,12 +35,14 @@ export function GroupsPage() {
     setEditing(null);
     setIsNew(true);
     setFormOpen(true);
+    setFormKey((k) => k + 1);
   };
 
   const openEdit = (g: Group) => {
     setEditing(g);
     setIsNew(false);
     setFormOpen(true);
+    setFormKey((k) => k + 1);
   };
 
   return (
@@ -92,6 +96,7 @@ export function GroupsPage() {
         </Table>
       </div>
       <GroupForm
+        key={formKey}
         open={formOpen}
         group={editing}
         isNew={isNew}

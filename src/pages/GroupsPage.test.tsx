@@ -47,9 +47,9 @@ describe('GroupsPage 組別管理', () => {
     await user.click(within(rdRow).getByRole('button', { name: '編輯' }));
     await screen.findByRole('dialog');
     expect(screen.getByRole('heading', { name: '編輯組別' })).toBeInTheDocument();
-    // 註：因 GroupForm 重用同一實例（useState 僅初始化一次），
-    // 此處欄位未被既有資料預填，屬已知問題（見最終報告 bug 註記）。
-    expect(screen.getByLabelText('代碼')).toHaveValue('');
+    // 編輯時應以該列既有資料預填（父層以 key 強制重新掛載表單後修正）。
+    expect(screen.getByLabelText('代碼')).toHaveValue('RD');
+    expect(screen.getByLabelText('名稱')).toHaveValue('研發部');
   });
 
   it('新增表單填入重複代碼時顯示「組別代碼已存在」', async () => {
