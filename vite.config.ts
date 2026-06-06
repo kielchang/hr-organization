@@ -38,6 +38,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // 只跑前端 src 內的測試；後端 server/ 有自己的 Vitest 設定。
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

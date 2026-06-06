@@ -12,6 +12,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "verify": "tsc -b && eslint . && vitest run --coverage && vite build",
+    "verify:server": "npm --prefix server run verify",
+    "verify:all": "npm run verify && npm run verify:server",
     "setup:hooks": "git config core.hooksPath .githooks",
     "preview": "vite preview",
     "import:csv": "tsx scripts/csv-to-org-json.ts",

@@ -1,0 +1,25 @@
+{
+  "name": "hr-organization-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "HR organization backend API (Fastify + PostgreSQL)",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.8"
+  }
+}

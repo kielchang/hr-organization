@@ -6,11 +6,23 @@ if [ "$SKIP_VERIFY" = "1" ]; then
   exit 0
 fi
 
-echo "▶ pre-push 驗證中（tsc + lint + test + build）…"
+echo "▶ pre-push 前端驗證中（tsc + lint + test + build）…"
 if ! npm run verify; then
   echo ""
-  echo "✗ 驗證未通過，已擋下推送。修正後再推，或以 SKIP_VERIFY=1 git push 強制（不建議）。"
+  echo "✗ 前端驗證未通過，已擋下推送。修正後再推，或以 SKIP_VERIFY=1 git push 強制（不建議）。"
   exit 1
 fi
+
+if [ -d server/node_modules ]; then
+  echo "▶ pre-push 後端驗證中（tsc + test）…"
+  if ! npm run verify:server; then
+    echo ""
+    echo "✗ 後端驗證未通過，已擋下推送。"
+    exit 1
+  fi
+else
+  echo "⚠️  略過後端驗證：server/node_modules 不存在（請先 npm --prefix server install）"
+fi
+
 echo "✓ 驗證通過，允許推送。"
 exit 0
