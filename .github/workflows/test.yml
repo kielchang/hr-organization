@@ -42,24 +42,29 @@ jobs:
     defaults:
       run:
         working-directory: server
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: hr
-          POSTGRES_PASSWORD: hr
-          POSTGRES_DB: hr_org
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U hr -d hr_org"
-          --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgresql://hr:hr@localhost:5432/hr_org
       TEST_DATABASE_URL: postgresql://hr:hr@localhost:5432/hr_org
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # 以 step 啟動 Postgres（取代 services:），對 registry 拉取超時加上重試，
+      # 避免 Docker Hub 暫時性逾時讓整合測試 job 失敗。
+      - name: Start PostgreSQL (with pull retry)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull postgres:16-alpine && break || { echo "pull retry $i"; sleep 10; }
+          done
+          docker run -d --name pg \
+            -e POSTGRES_USER=hr -e POSTGRES_PASSWORD=hr -e POSTGRES_DB=hr_org \
+            -p 5432:5432 postgres:16-alpine
+          echo "waiting for postgres..."
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U hr -d hr_org && exit 0
+            sleep 2
+          done
+          echo "postgres did not become ready" >&2 && exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
