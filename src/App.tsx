@@ -1,36 +1,51 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { OrgProvider } from './context/OrgProvider';
 import { BpmnProvider } from './context/BpmnProvider';
 import { Layout } from './components/Layout';
-import { PeoplePage } from './pages/PeoplePage';
-import { GroupsPage } from './pages/GroupsPage';
-import { OrgChartPage } from './pages/OrgChartPage';
-import { ChangeLogPage } from './pages/ChangeLogPage';
-import { CsvImportPage } from './pages/CsvImportPage';
-import { BpmnListPage } from './pages/BpmnListPage';
-import { BpmnDesignerPage } from './pages/BpmnDesignerPage';
-import { BpmnSimulatePage } from './pages/BpmnSimulatePage';
-import { BpmnImpactPage } from './pages/BpmnImpactPage';
+
+// 以路由為單位做 code-splitting：React Flow / dagre 等較重的相依只在
+// 進入組織圖／BPMN 等頁面時才載入，縮小首屏 bundle。
+const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })));
+const GroupsPage = lazy(() => import('./pages/GroupsPage').then((m) => ({ default: m.GroupsPage })));
+const OrgChartPage = lazy(() => import('./pages/OrgChartPage').then((m) => ({ default: m.OrgChartPage })));
+const ChangeLogPage = lazy(() => import('./pages/ChangeLogPage').then((m) => ({ default: m.ChangeLogPage })));
+const CsvImportPage = lazy(() => import('./pages/CsvImportPage').then((m) => ({ default: m.CsvImportPage })));
+const BpmnListPage = lazy(() => import('./pages/BpmnListPage').then((m) => ({ default: m.BpmnListPage })));
+const BpmnDesignerPage = lazy(() => import('./pages/BpmnDesignerPage').then((m) => ({ default: m.BpmnDesignerPage })));
+const BpmnSimulatePage = lazy(() => import('./pages/BpmnSimulatePage').then((m) => ({ default: m.BpmnSimulatePage })));
+const BpmnImpactPage = lazy(() => import('./pages/BpmnImpactPage').then((m) => ({ default: m.BpmnImpactPage })));
+
+function PageFallback() {
+  return (
+    <div className="flex h-full w-full items-center justify-center py-24 text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" />
+    </div>
+  );
+}
 
 function App() {
   return (
     <OrgProvider>
       <BpmnProvider>
         <BrowserRouter>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<PeoplePage />} />
-              <Route path="groups" element={<GroupsPage />} />
-              <Route path="org-chart" element={<OrgChartPage />} />
-              <Route path="changelog" element={<ChangeLogPage />} />
-              <Route path="csv-import" element={<CsvImportPage />} />
-              <Route path="bpmn" element={<BpmnListPage />} />
-              <Route path="bpmn/impact" element={<BpmnImpactPage />} />
-              <Route path="bpmn/:processId" element={<BpmnDesignerPage />} />
-              <Route path="bpmn/:processId/simulate" element={<BpmnSimulatePage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route index element={<PeoplePage />} />
+                <Route path="groups" element={<GroupsPage />} />
+                <Route path="org-chart" element={<OrgChartPage />} />
+                <Route path="changelog" element={<ChangeLogPage />} />
+                <Route path="csv-import" element={<CsvImportPage />} />
+                <Route path="bpmn" element={<BpmnListPage />} />
+                <Route path="bpmn/impact" element={<BpmnImpactPage />} />
+                <Route path="bpmn/:processId" element={<BpmnDesignerPage />} />
+                <Route path="bpmn/:processId/simulate" element={<BpmnSimulatePage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </BpmnProvider>
     </OrgProvider>
