@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
+  Activity,
   Building2,
   FileSpreadsheet,
   GitBranch,
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/', label: '人員與歸屬', icon: Users },
   { to: '/groups', label: '組別管理', icon: Building2 },
   { to: '/org-chart', label: '組織圖', icon: GitBranch },
+  { to: '/health', label: '規劃健檢', icon: Activity },
   { to: '/bpmn', label: 'BPMN 流程', icon: Workflow },
   { to: '/changelog', label: '調整紀錄', icon: History },
   { to: '/csv-import', label: 'CSV 匯入', icon: FileSpreadsheet },

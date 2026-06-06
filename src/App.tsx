@@ -10,6 +10,7 @@ import { Layout } from './components/Layout';
 const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })));
 const GroupsPage = lazy(() => import('./pages/GroupsPage').then((m) => ({ default: m.GroupsPage })));
 const OrgChartPage = lazy(() => import('./pages/OrgChartPage').then((m) => ({ default: m.OrgChartPage })));
+const OrgHealthPage = lazy(() => import('./pages/OrgHealthPage').then((m) => ({ default: m.OrgHealthPage })));
 const ChangeLogPage = lazy(() => import('./pages/ChangeLogPage').then((m) => ({ default: m.ChangeLogPage })));
 const CsvImportPage = lazy(() => import('./pages/CsvImportPage').then((m) => ({ default: m.CsvImportPage })));
 const BpmnListPage = lazy(() => import('./pages/BpmnListPage').then((m) => ({ default: m.BpmnListPage })));
@@ -36,6 +37,7 @@ function App() {
                 <Route index element={<PeoplePage />} />
                 <Route path="groups" element={<GroupsPage />} />
                 <Route path="org-chart" element={<OrgChartPage />} />
+                <Route path="health" element={<OrgHealthPage />} />
                 <Route path="changelog" element={<ChangeLogPage />} />
                 <Route path="csv-import" element={<CsvImportPage />} />
                 <Route path="bpmn" element={<BpmnListPage />} />
