@@ -11,6 +11,7 @@ import {
 } from '../services/orgOperations';
 import { cloneOrgData } from '../services/exportImport';
 import { backfillAssignmentLevels } from '../services/assignmentLevels';
+import { ORG_SCHEMA_VERSION, migrateOrgData } from '../services/migrations/orgMigrations';
 import {
   loadDataVersions,
   pickDefaultVersionId,
@@ -28,6 +29,7 @@ import type { Assignment, Employee, Group, OrgData } from '../types/org';
 import { OrgContext, type OrgContextValue } from './orgContextState';
 
 const emptyOrgData: OrgData = {
+  schemaVersion: ORG_SCHEMA_VERSION,
   version: 1,
   exportedAt: new Date().toISOString(),
   employees: [],
@@ -52,7 +54,8 @@ function loadDraft(): OrgData | null {
   try {
     const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as OrgData;
+    // 舊草稿可能缺 schemaVersion，載入時升級到目前結構。
+    return migrateOrgData(JSON.parse(raw));
   } catch {
     return null;
   }

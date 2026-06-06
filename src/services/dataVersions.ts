@@ -1,5 +1,6 @@
 import seedRaw from '../data/org-data.json';
 import { cloneOrgData, parseOrgDataRaw } from './exportImport';
+import { migrateOrgData } from './migrations/orgMigrations';
 import { validateOrgData } from './validators';
 import type { OrgData } from '../types/org';
 import type { PublishedVersion } from './publishedVersions';
@@ -24,6 +25,7 @@ export interface DataVersionInfo {
 }
 
 const emptyOrgData: OrgData = {
+  schemaVersion: 0,
   version: 0,
   exportedAt: '',
   employees: [],
@@ -99,7 +101,8 @@ function parseVersionEntry(
 
 /** 將本機發布版本轉成下拉選單可用的 DataVersionInfo（標籤前綴「發布」）。 */
 export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
-  const data = cloneOrgData(pv.data);
+  // 舊發布版本可能缺 schemaVersion，轉成下拉資訊時一併升級。
+  const data = migrateOrgData(cloneOrgData(pv.data));
   const errors = validateOrgData(data);
   return {
     id: pv.id,

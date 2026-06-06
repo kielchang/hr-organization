@@ -1,4 +1,5 @@
 import type { EntityStatus, OrgData } from '../types/org';
+import { ORG_SCHEMA_VERSION } from './migrations/orgMigrations';
 import { validateOrgData } from './validators';
 import { parseCsv } from './csvParse';
 
@@ -284,6 +285,7 @@ export function csvMemberRowsToOrgData(
   );
 
   const data: OrgData = {
+    schemaVersion: ORG_SCHEMA_VERSION,
     version: options?.version ?? 1,
     exportedAt: options?.exportedAt ?? new Date().toISOString(),
     employees: [...employees.values()],
@@ -307,6 +309,7 @@ export function csvMemberRowsToOrgData(
 
 function emptyOrgData(options?: { version?: number; exportedAt?: string }): OrgData {
   return {
+    schemaVersion: ORG_SCHEMA_VERSION,
     version: options?.version ?? 1,
     exportedAt: options?.exportedAt ?? new Date().toISOString(),
     employees: [],

@@ -57,6 +57,9 @@ export interface ChangeEntry {
 }
 
 export interface OrgData {
+  /** 資料**結構** schema 版本（migration 用），與下方 `version`（內容版本）不同。 */
+  schemaVersion: number;
+  /** 使用者面的內容版本（發布時遞增），非 schema 版本。 */
   version: number;
   exportedAt: string;
   employees: Employee[];
