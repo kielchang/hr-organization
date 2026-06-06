@@ -128,7 +128,7 @@ export function AssignmentEditor({
         <div className="grid gap-2">
           <Label htmlFor={`${assignment.id}-group`}>組別</Label>
           <Select
-            value={assignment.groupId || undefined}
+            value={assignment.groupId || null}
             onValueChange={(value) => {
               if (value) setAssignment((a) => ({ ...a, groupId: value }));
             }}
@@ -150,7 +150,7 @@ export function AssignmentEditor({
         <div className="grid gap-2">
           <Label htmlFor={`${assignment.id}-joblevel`}>職級</Label>
           <Select
-            value={assignment.jobLevelId || undefined}
+            value={assignment.jobLevelId || null}
             onValueChange={(value) => {
               if (value) setAssignment((a) => ({ ...a, jobLevelId: value }));
             }}
@@ -194,7 +194,7 @@ export function AssignmentEditor({
           <div className="grid gap-2">
             <Label htmlFor={`${assignment.id}-primarysup`}>主主管</Label>
             <Select
-              value={assignment.primarySupervisorId ?? undefined}
+              value={assignment.primarySupervisorId}
               onValueChange={(value) => {
                 setAssignment((a) => ({
                   ...a,
