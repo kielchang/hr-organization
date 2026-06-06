@@ -6,6 +6,8 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY . .
+RUN npx prisma generate
 
 EXPOSE 3001
-CMD ["npm", "run", "start"]
+# 啟動前先套用尚未執行的 migration，再啟動 API。
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]

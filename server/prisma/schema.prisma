@@ -2,7 +2,9 @@
 // P1 僅放置 schema 起點（版本快照表），尚未在程式中使用 Prisma client。
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native：本機開發；linux-musl-openssl-3.0.x：docker（node:22-alpine）執行期需要
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
