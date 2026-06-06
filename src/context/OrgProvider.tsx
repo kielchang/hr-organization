@@ -158,9 +158,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     [allVersions],
   );
 
-  /** 發布草稿為一個新的本機版本（自動以時間戳命名），並切換為當前版本。 */
-  const publishVersion = useCallback((draft: OrgData) => {
-    const { created } = addPublishedVersion(draft);
+  /** 發布草稿為一個新的本機版本（自動以時間戳命名，可指定生效日），並切換為當前版本。 */
+  const publishVersion = useCallback((draft: OrgData, effectiveDate?: string) => {
+    const { created } = addPublishedVersion(draft, undefined, effectiveDate);
     setDataVersions(loadAllVersions());
     setActiveVersionId(created.id);
     const next = backfillAssignmentLevels(cloneOrgData(created.data));

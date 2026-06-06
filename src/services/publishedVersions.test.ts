@@ -28,6 +28,17 @@ describe('publishedVersions', () => {
     expect(created.label.length).toBeGreaterThan(0);
   });
 
+  it('可記錄生效日（effectiveDate）', () => {
+    const { created } = addPublishedVersion(makeOrgData(), '排程版', '2026-12-31');
+    expect(created.effectiveDate).toBe('2026-12-31');
+    expect(loadPublishedVersions()[0].effectiveDate).toBe('2026-12-31');
+  });
+
+  it('未指定生效日時不帶 effectiveDate', () => {
+    const { created } = addPublishedVersion(makeOrgData(), '即時版');
+    expect(created.effectiveDate).toBeUndefined();
+  });
+
   it('依 id 刪除', () => {
     const { created } = addPublishedVersion(makeOrgData(), 'A');
     addPublishedVersion(makeOrgData(), 'B');

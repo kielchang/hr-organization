@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   danger?: boolean;
   onConfirm: () => void;
+  /** 額外內容（如輸入欄位），顯示於說明與按鈕之間。 */
+  children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -28,6 +31,7 @@ export function ConfirmDialog({
   cancelLabel = '取消',
   danger = false,
   onConfirm,
+  children,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -36,6 +40,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <DialogFooter>
           <Button
             type="button"

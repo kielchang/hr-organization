@@ -23,6 +23,8 @@ export interface DataVersionInfo {
   exportedAt: string;
   isSeed: boolean;
   source: DataVersionSource;
+  /** 生效日（YYYY-MM-DD），僅發布版本可能有；未設＝發布即生效。 */
+  effectiveDate?: string;
 }
 
 const emptyOrgData: OrgData = {
@@ -118,6 +120,7 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
     exportedAt: pv.publishedAt,
     isSeed: false,
     source: 'published',
+    effectiveDate: pv.effectiveDate,
   };
 }
 

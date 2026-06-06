@@ -14,7 +14,7 @@ interface EditModeToolbarProps {
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
   onSaveCheckpoint: (description: string) => void;
-  onPublish: () => void;
+  onPublish: (effectiveDate?: string) => void;
   onToggleSnapshotPanel: () => void;
 }
 
@@ -32,6 +32,7 @@ export function EditModeToolbar({
   const [checkpointDesc, setCheckpointDesc] = useState('');
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [effectiveDate, setEffectiveDate] = useState('');
 
   const snapshotCount = session?.snapshots.length ?? 0;
 
@@ -184,8 +185,21 @@ export function EditModeToolbar({
         description="將目前的草稿發布為一個新的版本（以發布時間命名），儲存至本機並可在「資料版本」中切換。"
         confirmLabel="確定發布"
         cancelLabel="取消"
-        onConfirm={onPublish}
-      />
+        onConfirm={() => onPublish(effectiveDate || undefined)}
+      >
+        <div className="grid gap-1.5">
+          <label htmlFor="publish-effective-date" className="text-sm text-muted-foreground">
+            生效日（選填，留空＝發布即生效）
+          </label>
+          <Input
+            id="publish-effective-date"
+            type="date"
+            value={effectiveDate}
+            onChange={(e) => setEffectiveDate(e.target.value)}
+            className="w-full"
+          />
+        </div>
+      </ConfirmDialog>
     </>
   );
 }

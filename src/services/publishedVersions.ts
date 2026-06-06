@@ -11,6 +11,8 @@ export interface PublishedVersion {
   label: string;
   publishedAt: string;
   data: OrgData;
+  /** 生效日（YYYY-MM-DD）；未設＝發布即生效。 */
+  effectiveDate?: string;
 }
 
 export interface PublishedVersionsBundle {
@@ -54,12 +56,14 @@ function persist(list: PublishedVersion[]) {
 export function addPublishedVersion(
   data: OrgData,
   label?: string,
+  effectiveDate?: string,
 ): { versions: PublishedVersion[]; created: PublishedVersion } {
   const created: PublishedVersion = {
     id: newId(),
     label: label?.trim() || timestampLabel(),
     publishedAt: new Date().toISOString(),
     data: cloneOrgData(data),
+    ...(effectiveDate ? { effectiveDate } : {}),
   };
   const next = [created, ...loadPublishedVersions()];
   persist(next);
