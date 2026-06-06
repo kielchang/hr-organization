@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import {
   createInMemoryVersionsRepository,
   type VersionsRepository,
@@ -8,12 +9,18 @@ import { registerVersionRoutes } from './routes/versions';
 export interface BuildAppOptions {
   /** 版本／草稿持久化實作；預設記憶體（之後可注入 Prisma 實作）。 */
   versionsRepo?: VersionsRepository;
+  /** 允許的 CORS 來源；預設由 CORS_ORIGIN 環境變數，未設則反射請求來源（開發用）。 */
+  corsOrigin?: string | boolean;
 }
 
 /** 建立並設定 Fastify app（不啟動監聽，方便測試以 inject 呼叫）。 */
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
   const versionsRepo = options.versionsRepo ?? createInMemoryVersionsRepository();
+  const corsOrigin =
+    options.corsOrigin ?? (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN : true);
+
+  app.register(cors, { origin: corsOrigin });
 
   app.get('/api/health', async () => ({
     status: 'ok',

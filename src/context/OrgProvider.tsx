@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { downloadOrgData, downloadJson } from '../services/exportImport';
 import {
   createEmptyAssignment,
@@ -14,11 +14,13 @@ import { backfillAssignmentLevels } from '../services/assignmentLevels';
 import { ORG_SCHEMA_VERSION, migrateOrgData } from '../services/migrations/orgMigrations';
 import { safeSetItem } from '../services/storage';
 import {
+  apiVersionToInfo,
   loadDataVersions,
   pickDefaultVersionId,
   publishedVersionToInfo,
   type DataVersionInfo,
 } from '../services/dataVersions';
+import { apiClient, isApiEnabled } from '../services/apiClient';
 import {
   addPublishedVersion,
   buildPublishedBundle,
@@ -112,15 +114,39 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   );
   const [data, setData] = useState<OrgData>(() => initial.data);
   const [operator, setOperator] = useState('HR User');
+  // 雲端（後端 API）版本：啟用 VITE_API_URL 時載入並併入下拉。與本機版本分開保存，
+  // 避免本機重新整理（loadAllVersions）覆寫掉雲端清單。
+  const [remoteVersions, setRemoteVersions] = useState<DataVersionInfo[]>([]);
+
+  // 下拉顯示的完整版本清單 = 本機（內建 + 發布）＋ 雲端（依 id 去重）。
+  const allVersions = useMemo(() => {
+    const ids = new Set(dataVersions.map((v) => v.id));
+    return [...dataVersions, ...remoteVersions.filter((v) => !ids.has(v.id))];
+  }, [dataVersions, remoteVersions]);
+
+  // 啟用後端時，載入雲端版本併入下拉（best-effort，失敗則維持本機清單）。
+  useEffect(() => {
+    if (!isApiEnabled()) return;
+    let cancelled = false;
+    apiClient
+      .listVersions()
+      .then((remote) => {
+        if (!cancelled) setRemoteVersions(remote.map(apiVersionToInfo));
+      })
+      .catch((err) => console.warn('載入雲端版本失敗', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeVersion = useMemo(
-    () => dataVersions.find((v) => v.id === activeVersionId),
-    [dataVersions, activeVersionId],
+    () => allVersions.find((v) => v.id === activeVersionId),
+    [allVersions, activeVersionId],
   );
 
   const selectDataVersion = useCallback(
     (id: string) => {
-      const version = dataVersions.find((v) => v.id === id);
+      const version = allVersions.find((v) => v.id === id);
       if (!version) return;
       const next = backfillAssignmentLevels(cloneOrgData(version.data));
       setActiveVersionId(id);
@@ -129,7 +155,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       saveDraft(next);
       saveActiveVersionId(id);
     },
-    [dataVersions],
+    [allVersions],
   );
 
   /** 發布草稿為一個新的本機版本（自動以時間戳命名），並切換為當前版本。 */
@@ -141,15 +167,40 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setData(next);
     saveDraft(next);
     saveActiveVersionId(created.id);
+    // 啟用後端時，寫穿到雲端並併入下拉（best-effort）。
+    if (isApiEnabled()) {
+      apiClient
+        .publishVersion(created.label, created.data)
+        .then((v) =>
+          setRemoteVersions((prev) =>
+            prev.some((p) => p.id === v.id) ? prev : [...prev, apiVersionToInfo(v)],
+          ),
+        )
+        .catch((err) => console.warn('發布到雲端失敗', err));
+    }
     return created.id;
   }, []);
 
   const deletePublishedVersionById = useCallback(
     (id: string) => {
-      deletePublishedVersionStorage(id);
-      const all = loadAllVersions();
-      setDataVersions(all);
+      const isRemote = remoteVersions.some((v) => v.id === id);
+      // 本機與雲端各自刪除；計算刪除後的可用清單以挑選 fallback。
+      let localList = dataVersions;
+      let remoteList = remoteVersions;
+      if (isRemote) {
+        remoteList = remoteVersions.filter((v) => v.id !== id);
+        setRemoteVersions(remoteList);
+        if (isApiEnabled()) {
+          apiClient.deleteVersion(id).catch((err) => console.warn('刪除雲端版本失敗', err));
+        }
+      } else {
+        deletePublishedVersionStorage(id);
+        localList = loadAllVersions();
+        setDataVersions(localList);
+      }
       if (activeVersionId === id) {
+        const lids = new Set(localList.map((v) => v.id));
+        const all = [...localList, ...remoteList.filter((v) => !lids.has(v.id))];
         const fallbackId = pickDefaultVersionId(all);
         const fallback = all.find((v) => v.id === fallbackId);
         setActiveVersionId(fallbackId);
@@ -161,7 +212,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [activeVersionId],
+    [activeVersionId, dataVersions, remoteVersions],
   );
 
   const exportPublishedVersions = useCallback(() => {
@@ -262,7 +313,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OrgContextValue>(
     () => ({
       data,
-      dataVersions,
+      dataVersions: allVersions,
       activeVersionId,
       activeVersion,
       selectDataVersion,
@@ -284,7 +335,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     }),
     [
       data,
-      dataVersions,
+      allVersions,
       activeVersionId,
       activeVersion,
       selectDataVersion,

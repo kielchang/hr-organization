@@ -1,9 +1,11 @@
 import {
+  apiVersionToInfo,
   loadDataVersions,
   pickDefaultVersionId,
   publishedVersionToInfo,
   type DataVersionInfo,
 } from './dataVersions';
+import type { ApiVersion } from './apiClient';
 import type { PublishedVersion } from './publishedVersions';
 import { makeOrgData } from '../test/fixtures';
 
@@ -69,6 +71,23 @@ describe('publishedVersionToInfo', () => {
     expect(out.id).toBe('pub-123');
     expect(out.source).toBe('published');
     expect(out.label).toBe('發布 · 我的版本');
+    expect(out.data.schemaVersion).toBeGreaterThanOrEqual(1);
+    expect(out.valid).toBe(true);
+  });
+});
+
+describe('apiVersionToInfo', () => {
+  it('將後端版本轉成下拉資訊（標籤前綴「雲端」、升級 schema）', () => {
+    const v: ApiVersion = {
+      id: 'ver-abc',
+      label: '雲端版本',
+      publishedAt: '2026-04-04T00:00:00.000Z',
+      data: { contentVersion: 3, employees: [], groups: [], assignments: [] } as unknown as ApiVersion['data'],
+    };
+    const out = apiVersionToInfo(v);
+    expect(out.id).toBe('ver-abc');
+    expect(out.label).toBe('雲端 · 雲端版本');
+    expect(out.source).toBe('published');
     expect(out.data.schemaVersion).toBeGreaterThanOrEqual(1);
     expect(out.valid).toBe(true);
   });

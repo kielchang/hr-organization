@@ -1,8 +1,9 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { OrgProvider } from './OrgProvider';
 import { useOrg } from './useOrg';
 import type { Employee, Group } from '../types/org';
+import { makeOrgData } from '../test/fixtures';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <OrgProvider>{children}</OrgProvider>
@@ -72,5 +73,57 @@ describe('OrgProvider', () => {
     expect(newId).toMatch(/^pub-/);
     expect(result.current.activeVersionId).toBe(newId);
     expect(result.current.dataVersions.some((v) => v.id === newId)).toBe(true);
+  });
+});
+
+describe('OrgProvider（啟用後端 API）', () => {
+  const cloudOrg = () => ({ ...makeOrgData(), employees: [] });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  function setupFetch() {
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ method, url, body: init?.body ? JSON.parse(init.body as string) : undefined });
+      if (method === 'GET' && url.endsWith('/api/versions')) {
+        return { ok: true, status: 200, json: async () => [
+          { id: 'ver-cloud1', label: '雲端A', data: cloudOrg(), publishedAt: '2026-05-05T00:00:00.000Z' },
+        ] } as Response;
+      }
+      if (method === 'POST' && url.endsWith('/api/versions')) {
+        return { ok: true, status: 201, json: async () => (
+          { id: 'ver-new', label: '雲端New', data: cloudOrg(), publishedAt: '2026-05-06T00:00:00.000Z' }
+        ) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubEnv('VITE_API_URL', 'http://api.test');
+    vi.stubGlobal('fetch', fetchMock);
+    return { calls };
+  }
+
+  it('啟用時載入雲端版本併入下拉', async () => {
+    setupFetch();
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() =>
+      expect(result.current.dataVersions.some((v) => v.id === 'ver-cloud1')).toBe(true),
+    );
+    expect(result.current.dataVersions.find((v) => v.id === 'ver-cloud1')?.label).toContain('雲端');
+  });
+
+  it('發布時寫穿到後端（POST /api/versions）', async () => {
+    const { calls } = setupFetch();
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+    act(() => {
+      result.current.publishVersion(result.current.data);
+    });
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/api/versions'))).toBe(true),
+    );
   });
 });

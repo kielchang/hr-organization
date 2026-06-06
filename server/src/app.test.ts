@@ -16,4 +16,15 @@ describe('GET /api/health', () => {
     expect(res.statusCode).toBe(404);
     await app.close();
   });
+
+  it('回應帶 CORS 標頭（反射來源）', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/health',
+      headers: { origin: 'http://localhost:5174' },
+    });
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5174');
+    await app.close();
+  });
 });

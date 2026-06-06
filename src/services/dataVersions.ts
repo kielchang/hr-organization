@@ -4,6 +4,7 @@ import { migrateOrgData } from './migrations/orgMigrations';
 import { validateOrgData } from './validators';
 import type { OrgData } from '../types/org';
 import type { PublishedVersion } from './publishedVersions';
+import type { ApiVersion } from './apiClient';
 
 export const SEED_DATA_PATH = 'src/data/org-data.json';
 export const MOCK_DATA_DIR = 'src/data/mock';
@@ -115,6 +116,24 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
     data,
     contentVersion: data.contentVersion,
     exportedAt: pv.publishedAt,
+    isSeed: false,
+    source: 'published',
+  };
+}
+
+/** 將後端 API 回傳的版本轉成下拉選單可用的 DataVersionInfo（標籤前綴「雲端」）。 */
+export function apiVersionToInfo(v: ApiVersion): DataVersionInfo {
+  const data = migrateOrgData(v.data);
+  const errors = validateOrgData(data);
+  return {
+    id: v.id,
+    filename: `${v.id}.json`,
+    label: `雲端 · ${v.label}`,
+    valid: errors.length === 0,
+    errors,
+    data,
+    contentVersion: data.contentVersion,
+    exportedAt: v.publishedAt,
     isSeed: false,
     source: 'published',
   };
