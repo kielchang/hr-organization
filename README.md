@@ -1,52 +1,96 @@
-# HR 組織架構調整工具
+# HR 組織規劃工具
 
-人事用來管理公司人員的**組別歸屬**、**直屬／虛線主管**與**職級**的工具。支援矩陣組織（一人可多組、每組可有不同主管），並以 [React Flow](https://reactflow.dev/) 視覺化組織匯報關係與組別歸屬。
+> **HR 用來規劃組織結構的試算工具**——沿**匯報線（階層部門）× 專案職能（跨部門）**雙維度，建立、試算、健檢、比較多個組織方案後，選一個發布生效。前端優先（localStorage），後端為 opt-in。
 
-> **前端優先**：預設純前端，工作資料自動保存在瀏覽器 `localStorage`，並可匯出／匯入 JSON 做版本保存與共享。
-> **後端為 opt-in**：另提供雲端版本持久化（Fastify + PostgreSQL，以 `VITE_API_URL` 啟用），可用 Docker Compose 一鍵起整套（DB + API + 前端）。
+[![整合分支驗證](https://img.shields.io/badge/integration-pre--push%20verify-brightgreen)](docs/工作流程-integration分支.md) [![測試](https://img.shields.io/badge/tests-375%20passing-brightgreen)](#測試) [![部署](https://img.shields.io/badge/deploy-GitHub%20Pages-blue)](#部署)
 
-## 功能
+---
 
-- **人員與歸屬**：維護員工在各組別的職級與主管（含主主管、主組別）
-- **組別管理**：組織單位階層與啟用狀態
-- **組織圖**（兩種視角）
-  - **匯報組織圖**：以人員為節點，依匯報關係連線（實線＝主匯報、虛線＝其他主管）
-  - **組別歸屬圖**：以每筆「組別歸屬」為節點，同一人跨組會出現多個節點
-- **直接從圖上編輯**：點節點開「人員詳情」浮動卡片，可改個人資料與各筆組別歸屬
-- **調整紀錄**：變更歷程與 diff 檢視
-- **版本與生效日**：發布版本可指定**生效日**（排程生效），版本下拉顯示「排程／已生效」
-- **匯出／匯入**：自動存 `localStorage`；可手動匯出 JSON 或從檔案載入
-- **CSV / Excel 匯入**：以一張「員工 × 組別」CSV 或 `.xlsx` 產生組織 JSON
-- **雲端版本**（opt-in）：設定 `VITE_API_URL` 後，發布／刪除版本會寫穿到後端並併入版本下拉
+## 這個工具給誰、解決什麼
+
+**給誰**：HR / 組織治理人員（組織規劃者）。
+
+**解決什麼**：
+- HR 在做組織調整時，過去常常開 Excel／畫白板來試算，缺一個「能視覺化、能比較、能看影響」的工具。
+- 本工具讓 HR 在**草稿**中安全試算多個方案，量化評估結構（管理幅度、職能缺口、單點風險），並比較版本後再發布。
+- **定位邊界**：這**不是全公司日常營運系統**——不接 SSO、不做正式送簽、不做多租戶。BPMN 流程**只是輔助透鏡**，用來看「組織改了之後動到哪些核准路徑」，不是簽核引擎。
+
+> 詳細定位校準理由見 [系統設計文件 §1](docs/系統設計文件.md#1-專案概述) 與 [待辦清單「定位（最高指導原則）」](docs/待辦清單.md)。
+
+---
+
+## 規劃旅程 walkthrough
+
+從打開應用到發布一份組織方案，標準動線是這 6 步。首頁 `/`（總覽）會根據目前狀態，**自動推薦下一步**——你不需要記住流程。
+
+| # | 步驟 | 在做什麼 | 對應頁面 | 一句話例子 |
+|---|---|---|---|---|
+| 1 | **載入現況** | 取得基礎組織資料（員工、組別、主管關係） | `/csv-import` 或內建範本（首頁工具列） | 「從 HRIS 匯出員工 × 組別 CSV 進來」 |
+| 2 | **編輯人員與組別** | 維護員工歸屬、主管關係、組別結構；可區分階層部門與跨部門職能 | `/people`、`/groups`、`/org-chart` | 「把新 AI 小組標為跨部門職能，加入三位來自不同部門的成員」 |
+| 3 | **規劃健檢** | 量化評估這個結構好不好 | `/health` | 「看哪個主管管理幅度過寬、有沒有單點風險（SPOF）、哪些職能沒人帶」 |
+| 4 | **情境比較** | 並排試算多個方案，比 diff + 指標 | `/compare` | 「A 案扁平化 vs B 案強化矩陣，最多 4 案並排對照」 |
+| 5 | **變更影響** | 看結構調整動到哪些作業／決策流程的核准路徑 | `/bpmn/impact` | 「設定基準後對照——改完之後哪些核准會找不到主管？」 |
+| 6 | **發布版本** | 設定生效日並發布，下拉徽章顯示「排程／已生效」 | `/people` 工具列（DataToolbar） | 「6/30 公告、7/1 生效」 |
+
+> 6 步是**固定順序**，但每步都可獨立回頭使用。首頁 `OverviewPage` 會把每步顯示為 `done`／`ready`，並用智慧 CTA 卡片建議「現在最該做什麼」。
+
+---
+
+## 核心功能
+
+### HR 規劃主線
+
+- **總覽頁（首頁 `/`）**：歡迎標題 + 智慧 CTA 卡（推薦下一步）+ 6 步規劃旅程地圖 + 5 張狀態小卡（在職員工／部門／專案職能／已發布版本／流程定義）。是整套工具的入口與導航器。
+- **雙維度建模（匯報線 × 專案職能）**：`Group.kind` 區分 `department`（階層部門，走 `parentId` 匯報線）與 `function`（跨部門職能，扁平）；表單可選種類、列表以徽章標示。
+- **組織圖雙視角**：
+  - **匯報組織圖**：節點＝人員、連線＝匯報關係（實線主匯報、虛線其他主管）。
+  - **組別歸屬圖**：節點＝每筆組別歸屬，同一人跨組會多個節點；可依「全部／部門／職能」**過濾**，並開啟**職能視角面板**（`FunctionCoveragePanel`：無成員職能、無 lead 職能、跨職能負載前幾名）。
+- **規劃健檢（`/health`）**：管理幅度（span of control，過寬／過窄）、層級深度、職能覆蓋缺口、結構風險（斷鏈／匯報循環／SPOF）的量化指標與可行動警示清單。
+- **情境比較 what-if（`/compare`）**：最多 4 個情境槽並排，以陣列首個有效情境為基準算 `computeOrgDiff`，並對齊規劃指標矩陣（10 指標，down 指標標 warning／success 色，全相同不上色），協助 HR 試算多案後選擇。
+- **變更影響（`/bpmn/impact`）**：HR 視角呈現「組織改了之後動到哪些作業／決策流程的核准人與路徑」。含「變更影響比對」與「流程健檢」兩個 tab，無流程資料時顯示主要 CTA 卡片連 `/bpmn`，避免雙重入口。
+- **版本與生效日**：發布版本可指定**生效日**（排程生效），版本下拉徽章顯示「**排程／已生效**」，支援 `pickEffectiveVersionId` 推導「某時點目前生效版本」。
+
+### 基礎能力
+
+- **編輯模式快照（snapshot）與 diff 著色**：所有變更先進入草稿，可比對前後差異。
+- **變更歷程（changelog）**：時間軸列出所有操作 + 前後 JSON diff 檢視（`/changelog`）。
+- **CSV / Excel 匯入**：以一張「員工 × 組別」CSV 或 `.xlsx` 產生組織 JSON（`/csv-import` 或 CLI）。
+- **資料版本管理**：草稿、內建種子、本機 mock、發布版本、雲端版本統一在版本下拉切換。
+- **opt-in 後端**：設定 `VITE_API_URL` 後，發布／刪除版本會寫穿到 Fastify + PostgreSQL（JSONB 文件持久化），可用 Docker Compose 一鍵起 DB + API + 前端。
+
+---
 
 ## 技術棧
 
 | 範疇 | 採用 |
 |------|------|
-| 框架 / 建置 | React 19、Vite 8、TypeScript |
+| 框架 / 建置 | React 19、Vite 8、TypeScript（strict） |
 | UI 元件 | [shadcn/ui](https://ui.shadcn.com/)（base-nova 風格，底層 [Base UI](https://base-ui.com/) + Radix Slot） |
 | 樣式 | Tailwind CSS v4（`@tailwindcss/vite`）、`tw-animate-css`、`class-variance-authority`、`clsx` + `tailwind-merge` |
 | 圖示 / 字型 | `lucide-react`、Geist（`@fontsource-variable/geist`） |
 | 組織圖 | [`@xyflow/react`](https://reactflow.dev/)（React Flow v12）+ `@dagrejs/dagre`（自動排版） |
 | 動畫 | `@react-spring/web`（觀景窗物理動畫） |
 | 路由 | `react-router-dom` v7 |
+| Excel 解析 | `@e965/xlsx`（懶載入，不進首屏） |
 | 後端（opt-in） | Node + TypeScript + [Fastify](https://fastify.dev/) v5、[Prisma](https://www.prisma.io/) v6、PostgreSQL 16、`zod` 驗證 |
 | 容器 | Docker、docker-compose（DB + API + 前端 nginx） |
 
-> 已自 Fluent UI v9 全面遷移至 shadcn/ui + Tailwind。後端為選用——純前端開發不需要它，詳見 [系統設計文件](docs/系統設計文件.md) 與 [後端規劃](docs/規劃-後端與持久層.md)。
+---
 
-## 開始使用
+## 快速開始
 
 需求：**Node 20.19+ 或 22.12+**（Vite 8 要求）。
 
+### 純前端（localStorage 模式，最快）
+
 ```bash
 npm install
-npm run dev      # 純前端開發（localStorage 模式）
+npm run dev      # 開瀏覽器到終端機顯示的網址（通常 http://localhost:5173）
 ```
 
-瀏覽器開啟終端機顯示的網址（通常為 http://localhost:5173）。此模式不需後端。
+此模式不需後端，所有資料自動存在瀏覽器 `localStorage`。
 
-### 用 Docker Compose 一鍵啟動整套（DB + API + 前端）
+### Docker Compose 一鍵起整套（DB + API + 前端）
 
 ```bash
 docker compose up -d --build   # 首次或改動後加 --build
@@ -55,50 +99,54 @@ docker compose logs -f api     # 看後端日誌
 docker compose down            # 停止（加 -v 連資料庫卷一起清）
 ```
 
-- 前端：http://localhost:8088 （已內建指向後端 API）
+- 前端：http://localhost:8088（已內建指向後端 API）
 - API：http://localhost:3001/api/health
 - PostgreSQL：localhost:55432（對外埠，避免與本機 5432 衝突）
 
-> 後端為 opt-in：純前端 `npm run dev` 不需要後端；要前後端整合（雲端版本持久化）才需起 compose 或設定 `VITE_API_URL`。
-> 只起 DB + API（前端仍用 `npm run dev`）：`docker compose up -d --build db api`，再以 `VITE_API_URL=http://localhost:3001 npm run dev` 啟動前端。
+只起 DB + API（前端仍用 `npm run dev`）：
+
+```bash
+docker compose up -d --build db api
+VITE_API_URL=http://localhost:3001 npm run dev
+```
+
+---
 
 ## 專案結構
 
 ```
 src/                      # 前端（React / Vite）
-├─ pages/                 # 路由頁面：人員、組別、組織圖、調整紀錄、CSV/Excel 匯入、BPMN
+├─ pages/                 # 路由頁面（與 Layout 導覽對應）：
+│  ├─ OverviewPage        #   /            總覽（首頁入口）
+│  ├─ PeoplePage          #   /people      人員與歸屬
+│  ├─ GroupsPage          #   /groups      組別管理
+│  ├─ OrgChartPage        #   /org-chart   組織圖雙視角
+│  ├─ OrgHealthPage       #   /health      規劃健檢
+│  ├─ ScenarioComparePage #   /compare     情境比較 what-if
+│  ├─ BpmnImpactPage      #   /bpmn/impact 變更影響（HR 視角主入口）
+│  ├─ ChangeLogPage       #   /changelog   調整紀錄
+│  ├─ CsvImportPage       #   /csv-import  CSV 匯入
+│  └─ Bpmn{List,Designer,Simulate}Page # /bpmn* BPMN 次層入口
 ├─ components/
-│  ├─ ui/                 # shadcn/ui 基礎元件（button、select、card、dialog…）
-│  ├─ orgFlow/            # 匯報組織圖：畫布、左上工具列、控制列、觀景窗、人員詳情
-│  ├─ groupMembership/    # 組別歸屬圖的節點與畫布
-│  ├─ bpmn/               # BPMN 流程設計畫布與屬性面板
-│  └─ *.tsx               # 各種表單（員工、組別、歸屬）與清單
-├─ context/               # OrgProvider / BpmnProvider（全域資料狀態）
-├─ services/              # 純邏輯：建圖、CSV/xlsx、匯出入、版本、生效日、模擬、API client
+│  ├─ ui/                 # shadcn/ui 基礎元件
+│  ├─ orgFlow/            # 匯報組織圖畫布、工具列、控制列、觀景窗、人員詳情
+│  ├─ groupMembership/    # 組別歸屬圖節點與畫布
+│  └─ bpmn/               # BPMN 流程設計畫布與屬性面板
+├─ context/               # OrgProvider / BpmnProvider（全域狀態）
+├─ services/              # 純函式：overviewStatus、orgHealth、scenarioCompare、
+│                         #          functionCoverage、buildOrgFlowGraph、CSV/xlsx、
+│                         #          publishedVersions、effectiveDate、apiClient…
 │  └─ migrations/         # schemaVersion migration 框架（org / bpmn 共用）
-├─ lib/                   # cn() 與下拉選項、語意色等小工具
-├─ types/                 # 型別定義
-└─ data/                  # 初始資料、CSV 範本、本機 mock
+├─ lib/、types/、data/    # 工具、型別、初始資料 + CSV 範本
 
 server/                   # 後端（opt-in，Fastify + Prisma）
-├─ src/routes/            # REST 路由（/api/versions、/api/draft、/api/health）
+├─ src/routes/            # REST：/api/versions、/api/draft、/api/health
 ├─ src/repositories/      # 持久層抽象 + 記憶體／Prisma 實作
 └─ prisma/schema.prisma   # OrgVersion / OrgDraft（JSONB 文件持久化）
 
 docker-compose.yml        # 一鍵起 DB + API + 前端 web
 Dockerfile                # 前端多階段建置 → nginx
 ```
-
-### 組織圖畫面元件（`components/orgFlow`）
-
-| 元件 | 角色 |
-|------|------|
-| `OrgFlowChart` / `GroupMembershipFlowChart` | 兩種視角的 React Flow 畫布與版面組裝 |
-| `OrgFlowTopBar` | 左上角：檢視組別（底線下拉）＋圖例驚嘆號 popup |
-| `OrgDetailPanel` | 左側浮動人員詳情卡片，內含個人資料與組別歸屬編輯（Modal） |
-| `OrgFlowControlBar` | 右下角水平控制列：導航模式（滑鼠／觸控板）、縮放百分比、放大縮小 |
-| `OrgFlowChartChrome` | 右下角觀景窗（react-spring 圓鈕展開／吸收動畫）與全螢幕鈕 |
-| `useDraggableFlowNodes` / `orgFlowNav` | 節點拖曳狀態、滑鼠／觸控板平移縮放參數 |
 
 ### 狀態與持久化
 
@@ -107,9 +155,13 @@ Dockerfile                # 前端多階段建置 → nginx
 1. 更新 React state
 2. 寫入瀏覽器 `localStorage`（key：`hr-org-draft`）
 
-重新整理會優先載入 `localStorage` 草稿；**匯出**才會下載 JSON 檔。
+重新整理會優先載入 `localStorage` 草稿；**匯出**才會下載 JSON 檔。啟用後端時，發布／刪除版本另會 best-effort 寫穿到雲端（失敗只 `console.warn`，不阻斷本機操作）。
 
-## 資料檔案說明
+---
+
+## 資料與匯入
+
+### 資料檔案
 
 | 路徑 | 是否進版控 | 用途 |
 |------|------------|------|
@@ -118,18 +170,25 @@ Dockerfile                # 前端多階段建置 → nginx
 
 初始 `org-data.json` 內含 12 名員工、6 個組別，以及矩陣組織範例（例如黃建國同時屬於前端組與產品部）。
 
-## 更新共用初始資料
+### 更新共用初始資料
 
-1. 在應用程式中調整組別、主管或職級後按**儲存**（會自動存入 `localStorage`）。
+1. 在應用程式中調整後按**儲存**（會自動存入 `localStorage`）。
 2. 點工具列「**匯出目前資料**」下載 `org-data-*.json`。
 3. 將下載檔案內容**覆蓋** `src/data/org-data.json` 並 commit。
 4. 重新整理或用「從檔案載入」驗證。
 
-## CSV 匯入（成員歸屬 → JSON）
+### 版本生效日徽章
+
+發布版本可指定**生效日**（`effectiveDate`），版本下拉與資訊區會顯示：
+
+- **「排程」徽章**：生效日 > 目前時間（尚未生效，可用於預告）
+- **「已生效」徽章**：生效日 ≤ 目前時間
+
+`pickEffectiveVersionId(versions, at)` 服務可推導「某時點目前生效版本」，供未來排程或審計使用。
+
+### CSV 匯入（成員歸屬 → JSON）
 
 一張 CSV 彙整「員工 × 組別」歸屬，可轉成 `src/data/mock/*.json`（本機、不進版控）並在版本選單切換。
-
-### 欄位（一列一筆 assignment）
 
 | 欄位 | 說明 |
 |------|------|
@@ -143,25 +202,27 @@ Dockerfile                # 前端多階段建置 → nginx
 範本：`src/data/templates/org-members.template.csv`
 完整範例：`npm run generate:csv-sample` 產生 `org-members.sample.csv`
 
-### 指令寫入本機 mock
+CLI：
 
 ```bash
 npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data-imported -v 3
 ```
 
-成功後**重新啟動** `npm run dev`，在頂部「資料版本」選單選擇新檔案。應用內也可開啟 **CSV 匯入** 頁面：上傳預覽、下載 JSON，或複製上述指令。
+成功後**重新啟動** `npm run dev`，在頂部「資料版本」選單選擇新檔案。應用內也可開啟 **CSV 匯入** 頁面上傳預覽。
 
-## 資料格式
-
-單一 JSON 檔案，欄位說明：
+### 資料格式（單一 JSON）
 
 | 欄位 | 說明 |
 |------|------|
+| `schemaVersion` | 結構版本（migration 用） |
+| `version` | 內容版本（發布遞增） |
 | `employees` | 員工（id、工號、姓名、在職狀態） |
-| `groups` | 組別（代碼、名稱、上層 parentId、狀態） |
+| `groups` | 組別（代碼、名稱、上層 parentId、狀態、`kind`＝department/function） |
 | `jobLevels` | 職級表（code、name、rank） |
 | `assignments` | 歸屬：員工 + 組別 + 職級 + 主管清單 + 主主管 + 是否主組別 |
 | `changeLog` | 調整紀錄 |
+
+---
 
 ## 指令
 
@@ -181,37 +242,94 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 | `npm run import:csv` | CSV → 本機 mock JSON |
 | `npm run generate:csv-sample` | 產生 CSV 範例檔 |
 
-## 測試
+### 測試
 
 以 [Vitest](https://vitest.dev/)（jsdom 環境）撰寫，測試檔與來源並列（`*.test.ts`）。
 
-```bash
-npm run test       # 單次執行
-npm run test:cov   # 覆蓋率（services/context 設有門檻，CI 強制）
-```
-
-- 前端約 **255** 個測試（43 檔）：schema migration、核心 services（org 操作、圖形建構、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
+- 前端 **375 個測試（52 檔）**：schema migration、核心 services（org 操作、圖形建構、orgHealth、scenarioCompare、functionCoverage、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client、overviewStatus）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
 - 後端（`server/`）有自己的 Vitest 設定，含路由與 Prisma 整合測試（CI 起真實 Postgres）。
 - CI（`.github/workflows/test.yml`）於 push / PR 跑前端 lint + 型別檢查 + 覆蓋率門檻，以及後端測試。
-- 開發流程採常綠 `integration` 分支 + pre-push 驗證，詳見下方文件連結。
 
-## 後續擴充
+---
 
-本輪已完成：opt-in 後端 API + JSONB 版本持久層（P1–P3）、版本生效日、Excel 匯入。後續方向：
+## 開發協作流程
 
-- 正式送簽流程（接 BPMN 簽核）
-- 後端實體表正規化（P4，目前以 JSONB 文件持久化）、BPMN 持久化（P5）、認證接點（P6）
-- Azure AD / SSO 登入與權限控管、多租戶
+本專案任何開發都走「**10 角色協同、互相把關、禁止單一角色包辦**」的完整管線——架構師（協調者）拆解需求並產出介面契約後，平行分派給後端、前端、資料層、測試、審查、資安、DevOps、文件等角色；實作與驗證必須由**不同角色**。git 流程採常綠 `integration` 分支 + pre-push 驗證，PR 維持單一 `integration → main`。
 
-> 細部進度見 [代辦清單](docs/待辦清單.md) 與 [後端規劃](docs/規劃-後端與持久層.md)。
+- 規則（每 session 自動載入）：[CLAUDE.md](CLAUDE.md)
+- 詳細設計：[開發協作流程-多角色分工](docs/開發協作流程-多角色分工.md)
+- git 流程：[工作流程-integration分支](docs/工作流程-integration分支.md)
 
-## 文件
+---
 
-- [系統設計文件](docs/系統設計文件.md)：整體架構（前端 + opt-in 後端）、資料模型、核心服務、Roadmap
-- [規劃：後端與持久層](docs/規劃-後端與持久層.md)：後端選型、儲存庫結構與 P1–P6 漸進式導入進度
-- [規劃：自動化測試與 schema 版控](docs/規劃-自動化測試與schema版控.md)：測試導入與 schema 版本管理
-- [開發協作流程：多角色分工](docs/開發協作流程-多角色分工.md)：每次開發以 10 角色 agent 協同、互相把關（搭配 [CLAUDE.md](CLAUDE.md) 政策）
-- [工作流程：integration 分支](docs/工作流程-integration分支.md)：以常綠整合分支讓合併回 main 零阻塞
-- [代辦清單](docs/待辦清單.md)：backlog 與完成進度
-- [無障礙稽核報告](docs/無障礙稽核報告.md) ｜ [UI 測試驗收報告](docs/UI測試驗收報告.md)：點時間品質報告（2026-06-06）
-</content>
+## 進度與路線圖
+
+定位校準後，Roadmap 以 **HR 規劃／試算**為主線。
+
+### 已完成
+
+**HR 規劃主線**
+
+| 里程碑 | 內容 | 狀態 |
+|---|---|---|
+| — | 雙維度建模（`Group.kind`、職能視角、組別歸屬圖過濾） | ✅ |
+| — | 規劃健檢 `orgHealth.ts` + `/health` 頁 | ✅ |
+| **M1** | 規劃情境比較 what-if（`scenarioCompare.ts` + `/compare`） | ✅ |
+| **M2** | 變更影響重定位（主導覽改「變更影響」直連 `/bpmn/impact`，BPMN 子頁降次層） | ✅ |
+| **M3** | 整合 UX 收尾（新增 `OverviewPage` + 智慧 CTA + 6 步旅程地圖） | ✅ |
+| **M4** | README + 使用者導引（本文件） | ✅ |
+
+**基礎能力**
+
+- opt-in 後端 API + 持久層 P1–P3（JSONB 版本持久化、前端寫穿、docker compose 一鍵起整套）
+- Excel 匯入（`xlsxToOrgData`，懶載入）
+- 版本生效日（`effectiveDate`，排程／已生效徽章）
+- 自動化測試與覆蓋率門檻（前端 375 測試、後端路由 + Prisma 整合測試）
+- 雙視角組織圖、變更歷程、CSV 匯入、版本管理、localStorage 草稿
+
+### 已降級（非定位核心）
+
+> 以下偏**全公司營運系統**能力，與本工具「HR 規劃／試算」定位不符，已**主動降為非主線**，僅在使用者明確要求時才排。
+
+| 項目 | 降級理由 |
+|---|---|
+| 後端實體表正規化 P4 | JSONB 文件夠用，正規化是低使用者價值的內部優化 |
+| BPMN 持久化 P5 | BPMN 為輔助透鏡，目前 localStorage 已足夠規劃情境使用 |
+| 認證接點 P6 → Azure AD / SSO → 多租戶 | 偏全公司營運系統能力，非規劃工具定位核心 |
+| 正式送簽流程（接 BPMN 簽核） | 同上；本工具發布的是「組織版本」，不是簽核件 |
+
+詳細理由見 [系統設計文件 §10 Roadmap](docs/系統設計文件.md#10-開發方向與-roadmap) 與 [待辦清單「已降級」](docs/待辦清單.md)。
+
+### 部署
+
+GitHub Pages 多分支自動部署（`.github/workflows/deploy-pages.yml`），各分支輸出至 `/hr-organization/{分支名}/` 子目錄。Pages 為純前端靜態部署，不含後端。
+
+---
+
+## 文件導覽
+
+### 活的文件（持續更新）
+
+- [系統設計文件](docs/系統設計文件.md)：整體架構、資料模型、核心服務、Roadmap（以**現況程式碼**為準）
+- [待辦清單](docs/待辦清單.md)：定位、已完成項目、已降級項目
+- [CLAUDE.md](CLAUDE.md)：開發協作政策（每 session 載入）
+- [開發協作流程：多角色分工](docs/開發協作流程-多角色分工.md)：10 角色協同細節
+- [工作流程：integration 分支](docs/工作流程-integration分支.md)：常綠整合分支 + pre-push 驗證
+- [設計：介面規劃 Penpot](docs/設計-介面規劃-penpot.md)：Penpot MCP 介面規劃 spec（目前暫緩）
+
+### 介面契約（M1–M4 開發依據）
+
+- [契約：規劃健檢](docs/契約-規劃健檢.md)
+- [契約：專案職能雙維度](docs/契約-專案職能雙維度.md)
+- [契約：情境比較 what-if](docs/契約-情境比較whatif.md)
+- [契約：變更影響重定位](docs/契約-變更影響重定位.md)
+- [契約：整合 UX 收尾](docs/契約-整合UX收尾.md)
+- [契約：README 重寫](docs/契約-README重寫.md)（本文件依據）
+
+### 歷史報告（落地當下的快照，後續以系統設計文件為準）
+
+- [規劃：後端與持久層](docs/reports/規劃-後端與持久層.md)
+- [規劃：自動化測試與 schema 版控](docs/reports/規劃-自動化測試與schema版控.md)
+- [無障礙稽核報告](docs/reports/無障礙稽核報告.md)
+- [UI 測試驗收報告](docs/reports/UI測試驗收報告.md)
+- [參考：軟體開發 10 角色藍本](docs/reports/參考-軟體開發10角色藍本.md)
