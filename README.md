@@ -210,6 +210,7 @@ npm run test:cov   # 覆蓋率（services/context 設有門檻，CI 強制）
 - [系統設計文件](docs/系統設計文件.md)：整體架構（前端 + opt-in 後端）、資料模型、核心服務、Roadmap
 - [規劃：後端與持久層](docs/規劃-後端與持久層.md)：後端選型、儲存庫結構與 P1–P6 漸進式導入進度
 - [規劃：自動化測試與 schema 版控](docs/規劃-自動化測試與schema版控.md)：測試導入與 schema 版本管理
+- [開發協作流程：多角色分工](docs/開發協作流程-多角色分工.md)：每次開發以 10 角色 agent 協同、互相把關（搭配 [CLAUDE.md](CLAUDE.md) 政策）
 - [工作流程：integration 分支](docs/工作流程-integration分支.md)：以常綠整合分支讓合併回 main 零阻塞
 - [代辦清單](docs/待辦清單.md)：backlog 與完成進度
 - [無障礙稽核報告](docs/無障礙稽核報告.md) ｜ [UI 測試驗收報告](docs/UI測試驗收報告.md)：點時間品質報告（2026-06-06）
