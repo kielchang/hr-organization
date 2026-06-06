@@ -15,8 +15,8 @@ const VALID_CSV = [
 describe('CsvImportPage CSV 轉 JSON', () => {
   it('顯示三個步驟卡片與必要欄位說明', () => {
     renderWithProviders(<CsvImportPage />);
-    expect(screen.getByRole('heading', { name: 'CSV 轉 JSON' })).toBeInTheDocument();
-    expect(screen.getByText('1. 準備 CSV')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'CSV / Excel 轉 JSON' })).toBeInTheDocument();
+    expect(screen.getByText('1. 準備 CSV / Excel')).toBeInTheDocument();
     expect(screen.getByText('2. 預覽與轉換')).toBeInTheDocument();
     expect(screen.getByText(/必要欄位：/)).toBeInTheDocument();
   });

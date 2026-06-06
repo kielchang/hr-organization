@@ -11,7 +11,7 @@ describe('csvMemberRowsToOrgData', () => {
   it('空 CSV 回錯誤', () => {
     const r = csvMemberRowsToOrgData('');
     expect(r.valid).toBe(false);
-    expect(r.parseErrors).toContain('CSV 為空');
+    expect(r.parseErrors).toContain('資料為空');
   });
 
   it('缺少必要欄位回錯誤', () => {

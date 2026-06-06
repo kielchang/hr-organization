@@ -84,15 +84,23 @@ export function csvMemberRowsToOrgData(
   csvText: string,
   options?: { version?: number; exportedAt?: string },
 ): CsvToOrgResult {
+  return matrixToOrgData(parseCsv(csvText), options);
+}
+
+/** 由「員工 × 組別」二維表（來源可為 CSV 或 Excel）建立 OrgData。 */
+export function matrixToOrgData(
+  rawMatrix: string[][],
+  options?: { version?: number; exportedAt?: string },
+): CsvToOrgResult {
   const parseErrors: string[] = [];
-  const matrix = parseCsv(csvText).filter(
+  const matrix = rawMatrix.filter(
     (row) => !row[0]?.startsWith('#') && row.some((c) => c.length > 0),
   );
 
   if (matrix.length === 0) {
     return {
       data: emptyOrgData(options),
-      parseErrors: ['CSV 為空'],
+      parseErrors: ['資料為空'],
       validationErrors: [],
       valid: false,
       rowCount: 0,
