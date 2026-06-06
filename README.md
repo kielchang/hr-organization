@@ -140,8 +140,26 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 | `npm run build` | 型別檢查 + 建置正式版 |
 | `npm run preview` | 預覽建置結果 |
 | `npm run lint` | ESLint 檢查 |
+| `npm run test` | 執行單元測試（Vitest） |
+| `npm run test:watch` | 監看模式測試 |
+| `npm run test:cov` | 測試並產生覆蓋率報告（含門檻） |
+| `npm run verify` | 一鍵驗證：型別 + lint + 測試覆蓋率 + 建置 |
+| `npm run setup:hooks` | 啟用 pre-push 驗證 hook（clone 後執行一次） |
 | `npm run import:csv` | CSV → 本機 mock JSON |
 | `npm run generate:csv-sample` | 產生 CSV 範例檔 |
+
+## 測試
+
+以 [Vitest](https://vitest.dev/)（jsdom 環境）撰寫，測試檔與來源並列（`*.test.ts`）。
+
+```bash
+npm run test       # 單次執行
+npm run test:cov   # 覆蓋率（services/context 設有門檻，CI 強制）
+```
+
+- 重點覆蓋：schema migration、核心 services（org 操作、圖形建構、BPMN 模擬與影響分析、CSV）、Context Provider。
+- CI（`.github/workflows/test.yml`）於 push / PR 跑 lint + 型別檢查 + 覆蓋率門檻。
+- 開發流程採常綠 `integration` 分支 + pre-push 驗證，詳見下方文件連結。
 
 ## 後續擴充（未實作）
 
@@ -153,4 +171,5 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 - [系統設計文件](docs/系統設計文件.md)：整體架構、資料模型、核心服務、開發方向與 Roadmap
 - [規劃：自動化測試與 schema 版控](docs/規劃-自動化測試與schema版控.md)：測試導入與 schema 版本管理的實作規劃
 - [工作流程：integration 分支](docs/工作流程-integration分支.md)：以常綠整合分支讓合併回 main 零阻塞
+- [代辦清單](docs/待辦清單.md)：backlog 與完成進度
 </content>
