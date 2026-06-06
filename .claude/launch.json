@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vite Dev Server",
+      "runtimeExecutable": "/Users/kiel/.nvm/versions/node/v24.16.0/bin/node",
+      "runtimeArgs": ["/Users/kiel/projects/mxs-projects/hr-organization/node_modules/.bin/vite"],
+      "autoPort": true,
+      "port": 5174
+    }
+  ]
+}
