@@ -1,0 +1,215 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BpmnNodes DOM 快照 > 互斥閘道節點結構快照 1`] = `
+<div
+  class="relative flex h-10 w-10 items-center justify-center"
+>
+  <div
+    class="h-9 w-9 rotate-45 rounded border-2 border-amber-500 bg-amber-50"
+  />
+  <span
+    class="absolute text-sm font-bold text-amber-700"
+  >
+    ×
+  </span>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-amber-500 target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-amber-500 source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-amber-500 source connectable connectablestart connectableend connectionindicator"
+    data-handleid="top"
+    data-handlepos="top"
+    data-id="1-null-top-source"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-amber-500 source connectable connectablestart connectableend connectionindicator"
+    data-handleid="bottom"
+    data-handlepos="bottom"
+    data-id="1-null-bottom-source"
+  />
+  <span
+    class="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-muted-foreground"
+  >
+    金額判斷
+  </span>
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 使用者任務（一般任務）節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-36 h-14 rounded-lg border-2 px-2 py-1 flex-col gap-0.5 border-slate-400 bg-slate-50 text-slate-800"
+>
+  <div
+    class="text-[9px] font-semibold uppercase tracking-wide opacity-60"
+  >
+    任務
+  </div>
+  <div
+    class="text-xs font-semibold leading-snug"
+  >
+    填寫申請
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 使用者任務（核准）節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-36 h-14 rounded-lg border-2 px-2 py-1 flex-col gap-0.5 border-blue-400 bg-blue-50 text-blue-800"
+>
+  <div
+    class="text-[9px] font-semibold uppercase tracking-wide opacity-60"
+  >
+    核准
+  </div>
+  <div
+    class="text-xs font-semibold leading-snug"
+  >
+    主管核准
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 平行閘道節點結構快照 1`] = `
+<div
+  class="relative flex h-10 w-10 items-center justify-center"
+>
+  <div
+    class="h-9 w-9 rotate-45 rounded border-2 border-teal-500 bg-teal-50"
+  />
+  <span
+    class="absolute text-sm font-bold text-teal-700"
+  >
+    +
+  </span>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+  <span
+    class="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-muted-foreground"
+  >
+    並行
+  </span>
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 系統服務任務節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-36 h-14 rounded-lg border-2 border-violet-400 bg-violet-50 px-2 py-1 flex-col gap-0.5 text-violet-800"
+>
+  <div
+    class="text-[9px] font-semibold uppercase tracking-wide opacity-60"
+  >
+    系統
+  </div>
+  <div
+    class="text-xs font-semibold leading-snug"
+  >
+    寄送通知
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 結束事件節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-10 h-10 rounded-full border-4 border-rose-500 bg-rose-50 text-rose-700"
+>
+  <span
+    class="text-[9px] leading-tight"
+  >
+    結束
+  </span>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-rose-500 target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 選取狀態的服務任務節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-36 h-14 rounded-lg border-2 border-violet-400 bg-violet-50 px-2 py-1 flex-col gap-0.5 text-violet-800 ring-2 ring-primary ring-offset-1"
+>
+  <div
+    class="text-[9px] font-semibold uppercase tracking-wide opacity-60"
+  >
+    系統
+  </div>
+  <div
+    class="text-xs font-semibold leading-snug"
+  >
+    寄送通知
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-left nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="left"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`BpmnNodes DOM 快照 > 開始事件節點結構快照 1`] = `
+<div
+  class="relative flex items-center justify-center text-center text-xs font-medium transition-all w-10 h-10 rounded-full border-2 border-emerald-500 bg-emerald-50 text-emerald-700"
+>
+  <span
+    class="text-[9px] leading-tight"
+  >
+    開始
+  </span>
+  <div
+    class="react-flow__handle react-flow__handle-right nodrag nopan !size-2 !border-2 !border-background !bg-emerald-500 source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="right"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
