@@ -43,14 +43,20 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['src/services/**', 'src/context/**'],
-      // 回歸防護閾值（設於目前覆蓋率下方數個百分點）：避免新增程式未測時覆蓋率倒退。
-      // 後續補測後可逐步調高。
+      // 涵蓋整個應用程式碼（含 UI 層），讓覆蓋率數字誠實反映現況。
+      include: [
+        'src/services/**',
+        'src/context/**',
+        'src/components/**',
+        'src/pages/**',
+      ],
+      // 回歸防護閾值（設於目前覆蓋率下方數個百分點）：避免新增程式未測時倒退。
+      // services/context 已高（~80-90%），UI 層仍在成長，整體門檻隨補測逐步調高。
       thresholds: {
-        statements: 83,
-        branches: 68,
-        functions: 86,
-        lines: 84,
+        statements: 50,
+        branches: 36,
+        functions: 43,
+        lines: 51,
       },
     },
   },
