@@ -2,6 +2,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
+import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCoveragePanel';
 import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
 import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
@@ -9,11 +10,13 @@ import { computeOrgDiff } from '../services/computeOrgDiff';
 import { useOrg } from '../context/useOrg';
 import { useEditSession } from '../hooks/useEditSession';
 import { cloneOrgData } from '../services/exportImport';
-import type { OrgData } from '../types/org';
+import type { GroupKind, OrgData } from '../types/org';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X } from 'lucide-react';
 
 type ChartMode = 'reporting' | 'membership';
+/** 組別歸屬視角的種類過濾：all=不過濾。 */
+type MembershipKindFilter = 'all' | GroupKind;
 
 function pickDefaultGroupId(groups: { id: string; status: string }[]): string {
   const active = groups.filter((g) => g.status === 'active');
@@ -45,6 +48,8 @@ export function OrgChartPage() {
   const { data, publishVersion } = useOrg();
 
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
+  const [membershipKind, setMembershipKind] =
+    useState<MembershipKindFilter>('all');
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
@@ -182,6 +187,33 @@ export function OrgChartPage() {
         />
       )}
 
+      {/* 組別歸屬視角：種類過濾切換（全部／部門／職能） */}
+      {chartMode === 'membership' && (
+        <Tabs
+          value={membershipKind}
+          onValueChange={(value) => {
+            const nextKind = value as MembershipKindFilter;
+            setMembershipKind(nextKind);
+            setSelectedEmployeeId(null);
+            // 若目前選定的單組種類與新過濾不符，會渲染成空白畫面；自動切回「全部視角」。
+            if (nextKind !== 'all' && resolvedGroupId !== ALL_GROUPS_VIEW_ID) {
+              const selectedGroup = orgData.groups.find(
+                (g) => g.id === resolvedGroupId,
+              );
+              if (selectedGroup && selectedGroup.kind !== nextKind) {
+                setGroupId(ALL_GROUPS_VIEW_ID);
+              }
+            }
+          }}
+        >
+          <TabsList variant="default" className="w-fit">
+            <TabsTrigger value="all">全部</TabsTrigger>
+            <TabsTrigger value="department">部門</TabsTrigger>
+            <TabsTrigger value="function">職能</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
       {/* Chart area + optional snapshot panel */}
       <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
         <div className="relative min-h-[480px] flex-1">
@@ -193,6 +225,7 @@ export function OrgChartPage() {
               onGroupChange: setGroupId,
               selectedEmployeeId,
               onNodeSelect: setSelectedEmployeeId,
+              kindFilter: membershipKind === 'all' ? undefined : membershipKind,
             }} />
           )}
         </div>
@@ -207,6 +240,11 @@ export function OrgChartPage() {
           />
         )}
       </div>
+
+      {/* 職能視角輕量訊號：覆蓋缺口與跨職能負載（全部／職能過濾時顯示） */}
+      {chartMode === 'membership' && membershipKind !== 'department' && (
+        <FunctionCoveragePanel data={orgData} />
+      )}
     </div>
   );
 }

@@ -215,6 +215,8 @@ export function matrixToOrgData(
         name: groupName,
         parentId,
         status: grpStatus,
+        // v1 匯入一律視為部門；職能標記在 App 內後設。
+        kind: 'department',
       });
     }
 

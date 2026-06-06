@@ -63,6 +63,7 @@ export function GroupsPage() {
             <TableRow>
               <TableHead>代碼</TableHead>
               <TableHead>名稱</TableHead>
+              <TableHead>種類</TableHead>
               <TableHead>上層組別</TableHead>
               <TableHead>狀態</TableHead>
               <TableHead className="w-20">操作</TableHead>
@@ -73,7 +74,12 @@ export function GroupsPage() {
               <TableRow key={g.id}>
                 <TableCell>{g.code}</TableCell>
                 <TableCell>{g.name}</TableCell>
-                <TableCell>{parentName(g.parentId)}</TableCell>
+                <TableCell>
+                  <Badge variant={g.kind === 'function' ? 'info' : 'muted'}>
+                    {g.kind === 'function' ? '職能' : '部門'}
+                  </Badge>
+                </TableCell>
+                <TableCell>{g.kind === 'function' ? '—' : parentName(g.parentId)}</TableCell>
                 <TableCell>
                   <Badge variant={groupStatusBadge(g.status)}>
                     {g.status === 'active' ? '啟用' : '停用'}

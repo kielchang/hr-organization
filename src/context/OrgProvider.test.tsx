@@ -56,7 +56,7 @@ describe('OrgProvider', () => {
   it('saveGroup 新增組別', () => {
     const { result } = renderHook(() => useOrg(), { wrapper });
     const before = result.current.data.groups.length;
-    const g: Group = { id: 'g-new', code: 'ZZZ', name: '新組', parentId: null, status: 'active' };
+    const g: Group = { id: 'g-new', code: 'ZZZ', name: '新組', parentId: null, status: 'active', kind: 'department' };
     act(() => {
       const err = result.current.saveGroup(g, true);
       expect(err).toBeNull();

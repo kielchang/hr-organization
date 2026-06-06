@@ -97,6 +97,25 @@ export function validateOrgData(data: OrgData): string[] {
     if (g.parentId) {
       const parent = data.groups.find((x) => x.id === g.parentId);
       if (!parent) errors.push(`組別 ${g.name} 的上層組別不存在`);
+      // department 的上層必須仍是 department（職能不可當階層父節點）。
+      else if (g.kind === 'department' && parent.kind !== 'department') {
+        errors.push(`部門 ${g.name} 的上層組別 ${parent.name} 必須為部門`);
+      }
+    }
+    // v1 職能扁平：function 不應有上層。
+    if (g.kind === 'function' && g.parentId) {
+      errors.push(`職能 ${g.name} 不可設定上層組別（職能於 v1 為扁平結構）`);
+    }
+  }
+  // 主歸屬（home line）應落在部門；指向職能即回報。
+  for (const a of data.assignments) {
+    if (!a.isPrimaryGroup) continue;
+    const group = data.groups.find((g) => g.id === a.groupId);
+    if (group && group.kind !== 'department') {
+      const emp = data.employees.find((e) => e.id === a.employeeId);
+      errors.push(
+        `員工 ${emp?.name ?? a.employeeId} 的主歸屬指向職能 ${group.name}，主歸屬應為部門`,
+      );
     }
   }
   for (const g of data.groups) {

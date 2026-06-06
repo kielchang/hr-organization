@@ -91,6 +91,62 @@ describe('buildGroupMembershipGraph', () => {
   });
 });
 
+describe('buildGroupMembershipGraph（kindFilter 過濾）', () => {
+  function mixedOrg() {
+    return makeOrgData({
+      employees: [emp('d1'), emp('f1')],
+      groups: [
+        group('dept', { code: 'DEPT', kind: 'department' }),
+        group('fn', { code: 'XFN', kind: 'function' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('a-d', { employeeId: 'd1', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('a-f', { employeeId: 'f1', groupId: 'fn', jobLevelId: 'j1' }),
+      ],
+    });
+  }
+
+  function membersOf(r: { nodes: { type?: string }[] }) {
+    return r.nodes
+      .filter((n) => n.type === 'assignmentMember')
+      .map((n) => employeeIdFromMembershipNode(n as never))
+      .sort();
+  }
+
+  it('全公司視角不傳 kindFilter＝原行為（部門＋職能都納入）', () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), ALL_GROUPS_VIEW_ID);
+    expect(membersOf(r)).toEqual(['d1', 'f1']);
+  });
+
+  it("全公司視角 kindFilter='function' 只剩職能成員", () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), ALL_GROUPS_VIEW_ID, 'function');
+    expect(membersOf(r)).toEqual(['f1']);
+  });
+
+  it("全公司視角 kindFilter='department' 只剩部門成員", () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), ALL_GROUPS_VIEW_ID, 'department');
+    expect(membersOf(r)).toEqual(['d1']);
+  });
+
+  it('單組視角種類符合過濾＝照常渲染', () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), 'fn', 'function');
+    expect(membersOf(r)).toEqual(['f1']);
+  });
+
+  it('單組視角種類不符過濾＝回空畫面', () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), 'dept', 'function');
+    expect(r.nodes).toEqual([]);
+    expect(r.edges).toEqual([]);
+    expect(r.error).toBeUndefined();
+  });
+
+  it('單組視角不傳 kindFilter＝原行為（不過濾）', () => {
+    const r = buildGroupMembershipGraph(mixedOrg(), 'fn');
+    expect(membersOf(r)).toEqual(['f1']);
+  });
+});
+
 describe('employeeIdFromMembershipNode', () => {
   it('非成員/主管節點回傳 null', () => {
     expect(

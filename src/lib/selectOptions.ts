@@ -12,6 +12,11 @@ export const GROUP_STATUS_OPTIONS: SelectOption[] = [
   { value: 'inactive', label: '停用' },
 ];
 
+export const GROUP_KIND_OPTIONS: SelectOption[] = [
+  { value: 'department', label: '部門' },
+  { value: 'function', label: '職能' },
+];
+
 export const EMPLOYEE_FILTER_STATUS_OPTIONS: SelectOption[] = [
   { value: 'all', label: '全部' },
   { value: 'active', label: '在職' },

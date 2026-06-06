@@ -39,6 +39,7 @@ export function group(id: string, partial: Partial<Group> = {}): Group {
     name: id,
     parentId: null,
     status: 'active',
+    kind: 'department',
     ...partial,
   };
 }

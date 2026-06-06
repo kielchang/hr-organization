@@ -1,5 +1,8 @@
 export type EntityStatus = 'active' | 'inactive';
 
+/** 組別種類：department=階層部門（匯報線，走 parentId）；function=跨部門專案職能 */
+export type GroupKind = 'department' | 'function';
+
 export interface Employee {
   id: string;
   employeeNo: string;
@@ -13,6 +16,8 @@ export interface Group {
   name: string;
   parentId: string | null;
   status: EntityStatus;
+  /** 組別種類；migration 回填舊資料為 'department'，新表單必填。 */
+  kind: GroupKind;
 }
 
 export interface JobLevel {

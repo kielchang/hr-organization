@@ -67,6 +67,53 @@ describe('migrateOrgData', () => {
     expect(staff?.level).toBe(2);
   });
 
+  it('v1→v2：缺 kind 的舊 group 回填為 department', () => {
+    const out = migrateOrgData({
+      schemaVersion: 1,
+      contentVersion: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      employees: [],
+      groups: [
+        { id: 'g1', code: 'G1', name: '組一', parentId: null, status: 'active' },
+        { id: 'g2', code: 'G2', name: '組二', parentId: 'g1', status: 'active' },
+      ],
+      jobLevels: [],
+      assignments: [],
+      changeLog: [],
+    });
+    expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
+    expect(out.groups.map((g) => g.kind)).toEqual(['department', 'department']);
+  });
+
+  it('v1→v2：已標記 kind 的 group 不被覆寫', () => {
+    const out = migrateOrgData({
+      schemaVersion: 1,
+      contentVersion: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      employees: [],
+      groups: [
+        { id: 'g1', code: 'G1', name: '部門', parentId: null, status: 'active', kind: 'department' },
+        { id: 'g2', code: 'XFN', name: '職能', parentId: null, status: 'active', kind: 'function' },
+      ],
+      jobLevels: [],
+      assignments: [],
+      changeLog: [],
+    });
+    const byId = new Map(out.groups.map((g) => [g.id, g.kind]));
+    expect(byId.get('g1')).toBe('department');
+    expect(byId.get('g2')).toBe('function');
+  });
+
+  it('無 schemaVersion 的舊匯出檔一路升級到 v2 並補 kind', () => {
+    const out = migrateOrgData({
+      employees: [],
+      groups: [{ id: 'g1', code: 'G1', name: '組一', parentId: null, status: 'active' }],
+      assignments: [],
+    });
+    expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
+    expect(out.groups[0].kind).toBe('department');
+  });
+
   it('已是最新版的資料維持不變（冪等）', () => {
     const current = {
       schemaVersion: ORG_SCHEMA_VERSION,

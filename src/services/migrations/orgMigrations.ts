@@ -1,9 +1,9 @@
-import type { OrgData } from '../../types/org';
+import type { Group, OrgData } from '../../types/org';
 import { backfillAssignmentLevels } from '../assignmentLevels';
 import { runMigrations, type Migration } from './runMigrations';
 
 /** OrgData 目前的 schema 版本。新增結構性變更時 +1 並補一個 migration step。 */
-export const ORG_SCHEMA_VERSION = 1;
+export const ORG_SCHEMA_VERSION = 2;
 
 function asRecord(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
@@ -41,7 +41,23 @@ const toV1: Migration = {
   },
 };
 
-export const orgMigrations: Migration[] = [toV1];
+/**
+ * v1 → v2：為 `Group` 補上 `kind` 判別子。
+ * - 缺 `kind` 的舊資料一律視為 'department'（階層部門）；專案職能由使用者在 App 內後設標記。
+ */
+const toV2: Migration = {
+  to: 2,
+  migrate: (raw) => {
+    const data = raw as OrgData;
+    const groups: Group[] = asArray<Group>(data.groups).map((g) => ({
+      ...g,
+      kind: g.kind ?? 'department',
+    }));
+    return { ...data, schemaVersion: 2, groups };
+  },
+};
+
+export const orgMigrations: Migration[] = [toV1, toV2];
 
 /** 將任意版本的組織資料升級到目前 schema 版本。 */
 export function migrateOrgData(raw: unknown): OrgData {
