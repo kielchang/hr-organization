@@ -123,8 +123,13 @@ export function BpmnListPage() {
                       <Button variant="outline" size="sm" onClick={() => setConfirmId(null)}>取消</Button>
                     </div>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmId(p.id)}>
-                      <Trash2 className="size-4 text-destructive" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="刪除流程"
+                      onClick={() => setConfirmId(p.id)}
+                    >
+                      <Trash2 className="size-4 text-destructive" aria-hidden="true" />
                     </Button>
                   )}
                 </div>

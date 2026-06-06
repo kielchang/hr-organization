@@ -32,18 +32,14 @@ describe('頁面無障礙基準', () => {
     await assertNoA11yViolations(container);
   });
 
-  // 已知問題（待修：button-name）：本頁透過 EmployeeList 渲染狀態篩選 <Select>，
-  // 其 <SelectTrigger>（role=combobox 按鈕）未與 Label 關聯，無可及名稱。
-  // 詳見 docs/無障礙稽核報告.md。
-  it.skip('PeoplePage（人員與歸屬）無違規（已知問題，待修：button-name）', async () => {
+  // EmployeeList 狀態篩選 <SelectTrigger> 已補 aria-label。
+  it('PeoplePage（人員與歸屬）無違規', async () => {
     const { container } = renderWithProviders(<PeoplePage />, { route: '/' });
     await assertNoA11yViolations(container);
   });
 
-  // 已知問題（待修：button-name）：流程列的刪除鈕為純圖示（Trash2），
-  // 無文字也無 aria-label，screen reader 只會讀到「按鈕」。
-  // 詳見 docs/無障礙稽核報告.md。
-  it.skip('BpmnListPage（BPMN 流程清單）無違規（已知問題，待修：button-name）', async () => {
+  // 流程列刪除鈕已補 aria-label="刪除流程"、圖示 aria-hidden。
+  it('BpmnListPage（BPMN 流程清單）無違規', async () => {
     const { container } = renderWithProviders(<BpmnListPage />, { route: '/bpmn' });
     await assertNoA11yViolations(container);
   });

@@ -62,10 +62,8 @@ describe('表單與對話框無障礙', () => {
     expect(violations).toEqual([]);
   });
 
-  // 已知問題（待修：button-name）：AssignmentEditor 內的 Select（組別／職級／
-  // 主主管）使用 <Label> 但未以 htmlFor 關聯到 <SelectTrigger id>，
-  // 導致 combobox 按鈕無可及名稱。詳見 docs/無障礙稽核報告.md。
-  it.skip('AssignmentEditor 無違規（已知問題，待修：button-name）', async () => {
+  // AssignmentEditor 的 Select（組別／職級／主主管）已以 Label htmlFor + SelectTrigger id 關聯。
+  it('AssignmentEditor 無違規', async () => {
     const { container } = renderWithProviders(
       <AssignmentEditor
         assignment={assignment('a1')}

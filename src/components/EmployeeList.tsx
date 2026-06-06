@@ -74,7 +74,7 @@ export function EmployeeList({
             if (value) setStatusFilter(value as typeof statusFilter);
           }}
         >
-          <SelectTrigger className="w-full bg-background">
+          <SelectTrigger aria-label="依在職狀態篩選" className="w-full bg-background">
             <SelectValue>
               {selectOptionLabel(statusOptions, statusFilter)}
             </SelectValue>
