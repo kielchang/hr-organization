@@ -2,54 +2,32 @@ import { createContext, useCallback, useContext, useEffect, useReducer } from 'r
 import type { BpmnProcess, BpmnStore, ImpactBaseline, SimulationSession } from '../types/bpmn';
 import type { OrgData } from '../types/org';
 import { defaultExpenseProcess } from '../data/bpmn-defaults';
+import { BPMN_SCHEMA_VERSION, migrateBpmnStore } from '../services/migrations/bpmnMigrations';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'bpmn-store-v2';
+// 穩定的 key（與 schemaVersion 脫鉤）；保留讀取舊版 key 以平滑遷移。
+const STORAGE_KEY = 'bpmn-store';
+const LEGACY_KEYS = ['bpmn-store-v2', 'bpmn-store-v1'];
 
-/** v1→v2 migration：補 schemaVersion / simulationHistory / process.status / version */
-function migrateV1(raw: Record<string, unknown>): BpmnStore {
-  const processes = ((raw.processes as BpmnProcess[] | undefined) ?? []).map((p) => ({
-    ...p,
-    status: p.status ?? ('active' as const),
-    version: p.version ?? 1,
-  }));
+function defaultStore(): BpmnStore {
   return {
-    schemaVersion: 3,
-    processes,
-    activeSession: null,
-    simulationHistory: [],
-    impactBaseline: null,
-  };
-}
-
-/** v2→v3 migration：補 impactBaseline */
-function migrateV2(raw: BpmnStore): BpmnStore {
-  return { ...raw, schemaVersion: 3, impactBaseline: null };
-}
-
-function loadStore(): BpmnStore {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as BpmnStore;
-      if (parsed.schemaVersion === 3) return parsed;
-      if (parsed.schemaVersion === 2) return migrateV2(parsed);
-    }
-    // Attempt to read old v1 format
-    const oldRaw = localStorage.getItem('bpmn-store-v1');
-    if (oldRaw) {
-      const oldParsed = JSON.parse(oldRaw) as Record<string, unknown>;
-      return migrateV1(oldParsed);
-    }
-  } catch { /* ignore */ }
-  return {
-    schemaVersion: 3,
+    schemaVersion: BPMN_SCHEMA_VERSION,
     processes: [defaultExpenseProcess],
     activeSession: null,
     simulationHistory: [],
     impactBaseline: null,
   };
+}
+
+function loadStore(): BpmnStore {
+  try {
+    const raw =
+      localStorage.getItem(STORAGE_KEY) ??
+      LEGACY_KEYS.map((k) => localStorage.getItem(k)).find((v) => v != null);
+    if (raw) return migrateBpmnStore(JSON.parse(raw));
+  } catch { /* ignore */ }
+  return defaultStore();
 }
 
 function saveStore(store: BpmnStore) {

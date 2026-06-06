@@ -147,4 +147,9 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 
 - 後端 API、生效日排程、送審流程
 - Excel 匯入、Azure AD 登入
+
+## 文件
+
+- [系統設計文件](docs/系統設計文件.md)：整體架構、資料模型、核心服務、開發方向與 Roadmap
+- [規劃：自動化測試與 schema 版控](docs/規劃-自動化測試與schema版控.md)：測試導入與 schema 版本管理的實作規劃
 </content>

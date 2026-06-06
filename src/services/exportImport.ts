@@ -1,4 +1,5 @@
 import type { OrgData } from '../types/org';
+import { ORG_SCHEMA_VERSION, migrateOrgData } from './migrations/orgMigrations';
 
 export function cloneOrgData(data: OrgData): OrgData {
   return JSON.parse(JSON.stringify(data)) as OrgData;
@@ -7,6 +8,7 @@ export function cloneOrgData(data: OrgData): OrgData {
 export function prepareExport(data: OrgData): OrgData {
   return {
     ...cloneOrgData(data),
+    schemaVersion: ORG_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -71,18 +73,8 @@ export function parseOrgDataRaw(raw: unknown): OrgData {
   if (!Array.isArray(parsed.assignments)) {
     throw new Error('缺少 assignments');
   }
-  return {
-    version: typeof parsed.version === 'number' ? parsed.version : 1,
-    exportedAt:
-      typeof parsed.exportedAt === 'string'
-        ? parsed.exportedAt
-        : new Date().toISOString(),
-    employees: parsed.employees,
-    groups: parsed.groups,
-    jobLevels: Array.isArray(parsed.jobLevels) ? parsed.jobLevels : [],
-    assignments: parsed.assignments,
-    changeLog: Array.isArray(parsed.changeLog) ? parsed.changeLog : [],
-  };
+  // 通過最小結構驗證後，交由 migration 框架補欄位並升級到目前 schema。
+  return migrateOrgData(raw);
 }
 
 export async function parseOrgDataFile(file: File): Promise<OrgData> {
