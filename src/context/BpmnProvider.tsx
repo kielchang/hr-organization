@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import type { BpmnProcess, BpmnStore, ImpactBaseline, SimulationSession } from '../types/bpmn';
 import type { OrgData } from '../types/org';
 import { defaultExpenseProcess } from '../data/bpmn-defaults';
 import { BPMN_SCHEMA_VERSION, migrateBpmnStore } from '../services/migrations/bpmnMigrations';
+import { BpmnContext } from './bpmnContextState';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -77,20 +78,7 @@ function reducer(state: BpmnStore, action: Action): BpmnStore {
   }
 }
 
-// ─── Context ─────────────────────────────────────────────────────────────────
-
-interface BpmnContextValue {
-  store: BpmnStore;
-  upsertProcess: (p: BpmnProcess) => void;
-  deleteProcess: (id: string) => void;
-  setSession: (s: SimulationSession | null) => void;
-  updateSession: (s: SimulationSession) => void;
-  addToHistory: (s: SimulationSession) => void;
-  captureBaseline: (orgData: OrgData, label?: string) => void;
-  clearBaseline: () => void;
-}
-
-const BpmnContext = createContext<BpmnContextValue | null>(null);
+// ─── Provider ────────────────────────────────────────────────────────────────
 
 export function BpmnProvider({ children }: { children: React.ReactNode }) {
   const [store, dispatch] = useReducer(reducer, undefined, loadStore);
@@ -150,10 +138,4 @@ export function BpmnProvider({ children }: { children: React.ReactNode }) {
       {children}
     </BpmnContext.Provider>
   );
-}
-
-export function useBpmn() {
-  const ctx = useContext(BpmnContext);
-  if (!ctx) throw new Error('useBpmn must be used inside BpmnProvider');
-  return ctx;
 }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Play, Pencil, Trash2, FileText, BarChart2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useBpmn } from '../context/BpmnProvider';
+import { useBpmn } from '../context/useBpmn';
 import { useOrg } from '../context/useOrg';
 import { analyzeProcessHealth } from '../services/processImpact';
 import type { BpmnProcess } from '../types/bpmn';

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { BpmnProvider, useBpmn } from './BpmnProvider';
+import { BpmnProvider } from './BpmnProvider';
+import { useBpmn } from './useBpmn';
 import type { BpmnProcess } from '../types/bpmn';
 
 const wrapper = ({ children }: { children: ReactNode }) => (

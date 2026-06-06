@@ -11,7 +11,7 @@ import {
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { bpmnNodeTypes } from './nodes/BpmnNodes';
+import { bpmnNodeTypes } from './nodes/bpmnNodeTypes';
 import type { BpmnFlowEdge, BpmnFlowNode } from '../../types/bpmn';
 
 interface BpmnCanvasProps {

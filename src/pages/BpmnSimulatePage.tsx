@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useBpmn } from '../context/BpmnProvider';
+import { useBpmn } from '../context/useBpmn';
 import { useOrg } from '../context/useOrg';
 import { BpmnCanvas } from '../components/bpmn/BpmnCanvas';
 import { SimulationExpenseForm } from '../components/bpmn/simulation/SimulationExpenseForm';

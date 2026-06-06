@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { useBpmn } from '../context/BpmnProvider';
+import { useBpmn } from '../context/useBpmn';
 import { useOrg } from '../context/useOrg';
 import { BpmnCanvas } from '../components/bpmn/BpmnCanvas';
 import { BpmnPropertiesPanel } from '../components/bpmn/BpmnPropertiesPanel';
@@ -50,7 +50,7 @@ export function BpmnDesignerPage() {
     if (id) setRightTab('properties');
   }, []);
 
-  function addNode(type: BpmnNodeType, label: string) {
+  const addNode = useCallback((type: BpmnNodeType, label: string) => {
     const id = `n-${Date.now()}`;
     const newNode: BpmnFlowNode = {
       id,
@@ -60,7 +60,7 @@ export function BpmnDesignerPage() {
     };
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeId(id);
-  }
+  }, []);
 
   function handleNodeChange(updated: BpmnFlowNode) {
     setNodes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
