@@ -1,8 +1,16 @@
 # 規劃：自動化測試導入 ＋ Schema 版本管理
 
 > 對應 [系統設計文件](系統設計文件.md) 第 10 章短期目標與第 11 章風險。
-> 本文件為**規劃**，尚未實作；提供選型、架構、檔案落點、實作順序與驗收標準。
+> 本文件為**規劃**；提供選型、架構、檔案落點、實作順序與驗收標準。
 > 建立日期：2026-06-06。
+>
+> **實作進度（2026-06-06）**：核心已完成 ✅
+> - Vitest 設定、`src/test/setup.ts`、`test`/`test:watch`/`test:cov` scripts
+> - 通用 migration 框架 `src/services/migrations/`（`runMigrations` + `orgMigrations` + `bpmnMigrations`）
+> - OrgData 導入 `schemaVersion`；BPMN 統一 key `bpmn-store` 並集中 migration
+> - Phase A 核心 services 與 migration 測試（共 43 個測試）、CI `test.yml`
+>
+> **未完成（後續）**：Phase C 圖形建構測試、Phase D 元件/Provider 測試、覆蓋率門檻、`version`→`contentVersion` 更名、清理既有 lint 債。
 
 ---
 
