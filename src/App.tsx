@@ -7,6 +7,7 @@ import { Layout } from './components/Layout';
 
 // 以路由為單位做 code-splitting：React Flow / dagre 等較重的相依只在
 // 進入組織圖／BPMN 等頁面時才載入，縮小首屏 bundle。
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })));
 const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })));
 const GroupsPage = lazy(() => import('./pages/GroupsPage').then((m) => ({ default: m.GroupsPage })));
 const OrgChartPage = lazy(() => import('./pages/OrgChartPage').then((m) => ({ default: m.OrgChartPage })));
@@ -35,7 +36,8 @@ function App() {
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route element={<Layout />}>
-                <Route index element={<PeoplePage />} />
+                <Route index element={<OverviewPage />} />
+                <Route path="people" element={<PeoplePage />} />
                 <Route path="groups" element={<GroupsPage />} />
                 <Route path="org-chart" element={<OrgChartPage />} />
                 <Route path="health" element={<OrgHealthPage />} />

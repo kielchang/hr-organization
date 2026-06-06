@@ -7,6 +7,7 @@ import {
   GitBranch,
   GitCompare,
   History,
+  LayoutDashboard,
   TriangleAlert,
   Users,
   X,
@@ -16,7 +17,8 @@ import { DeployInfo } from './DeployInfo';
 import { onStorageError } from '../services/storage';
 
 const navItems = [
-  { to: '/', label: '人員與歸屬', icon: Users },
+  { to: '/', label: '總覽', icon: LayoutDashboard },
+  { to: '/people', label: '人員與歸屬', icon: Users },
   { to: '/groups', label: '組別管理', icon: Building2 },
   { to: '/org-chart', label: '組織圖', icon: GitBranch },
   { to: '/health', label: '規劃健檢', icon: Activity },
