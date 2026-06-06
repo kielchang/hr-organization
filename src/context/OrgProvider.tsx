@@ -30,7 +30,7 @@ import { OrgContext, type OrgContextValue } from './orgContextState';
 
 const emptyOrgData: OrgData = {
   schemaVersion: ORG_SCHEMA_VERSION,
-  version: 1,
+  contentVersion: 1,
   exportedAt: new Date().toISOString(),
   employees: [],
   groups: [],

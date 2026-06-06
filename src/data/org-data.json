@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 1,
+  "contentVersion": 1,
   "exportedAt": "2026-06-04T09:00:00+08:00",
   "employees": [
     { "id": "e1", "employeeNo": "E001", "name": "王大明", "status": "active" },

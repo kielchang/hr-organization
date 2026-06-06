@@ -11,7 +11,7 @@ import type {
 export function makeOrgData(partial: Partial<OrgData> = {}): OrgData {
   return {
     schemaVersion: ORG_SCHEMA_VERSION,
-    version: 1,
+    contentVersion: 1,
     exportedAt: '2026-01-01T00:00:00.000Z',
     employees: [],
     groups: [],

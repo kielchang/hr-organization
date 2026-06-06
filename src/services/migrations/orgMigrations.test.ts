@@ -21,7 +21,7 @@ describe('migrateOrgData', () => {
     };
     const out = migrateOrgData(legacy);
     expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
-    expect(out.version).toBe(2); // 內容版本保留
+    expect(out.contentVersion).toBe(2); // 舊欄位 version 相容映射到 contentVersion
     expect(out.exportedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 
@@ -33,7 +33,7 @@ describe('migrateOrgData', () => {
     });
     expect(out.jobLevels).toEqual([]);
     expect(out.changeLog).toEqual([]);
-    expect(out.version).toBe(1); // 預設內容版本
+    expect(out.contentVersion).toBe(1); // 預設內容版本
   });
 
   it('以組內匯報深度回填缺漏的 assignment.level', () => {
@@ -70,7 +70,7 @@ describe('migrateOrgData', () => {
   it('已是最新版的資料維持不變（冪等）', () => {
     const current = {
       schemaVersion: ORG_SCHEMA_VERSION,
-      version: 5,
+      contentVersion: 5,
       exportedAt: '2026-02-02T00:00:00.000Z',
       employees: [],
       groups: [],
@@ -78,6 +78,9 @@ describe('migrateOrgData', () => {
       assignments: [],
       changeLog: [],
     };
-    expect(migrateOrgData(current)).toMatchObject({ schemaVersion: ORG_SCHEMA_VERSION, version: 5 });
+    expect(migrateOrgData(current)).toMatchObject({
+      schemaVersion: ORG_SCHEMA_VERSION,
+      contentVersion: 5,
+    });
   });
 });

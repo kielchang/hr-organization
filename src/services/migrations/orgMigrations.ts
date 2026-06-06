@@ -16,16 +16,19 @@ function asArray<T>(value: unknown): T[] {
 /**
  * v0 → v1：把「無 schemaVersion 的舊匯出檔／草稿」正規化為 v1。
  * - 補齊 jobLevels / changeLog 等可選陣列
- * - 補上 schemaVersion，保留既有 version（內容版本）與 exportedAt
+ * - 補上 schemaVersion，保留內容版本（相容舊欄位名 `version`）與 exportedAt
  * - 以組內匯報深度回填缺漏的 assignment.level
  */
 const toV1: Migration = {
   to: 1,
   migrate: (raw) => {
     const r = asRecord(raw);
+    // 內容版本：優先讀新欄位 contentVersion，相容舊匯出檔的 version。
+    const legacyVersion = typeof r.version === 'number' ? r.version : 1;
     const data: OrgData = {
       schemaVersion: 1,
-      version: typeof r.version === 'number' ? r.version : 1,
+      contentVersion:
+        typeof r.contentVersion === 'number' ? r.contentVersion : legacyVersion,
       exportedAt:
         typeof r.exportedAt === 'string' ? r.exportedAt : new Date().toISOString(),
       employees: asArray(r.employees),

@@ -18,7 +18,7 @@ export interface DataVersionInfo {
   valid: boolean;
   errors: string[];
   data: OrgData;
-  version: number;
+  contentVersion: number;
   exportedAt: string;
   isSeed: boolean;
   source: DataVersionSource;
@@ -26,7 +26,7 @@ export interface DataVersionInfo {
 
 const emptyOrgData: OrgData = {
   schemaVersion: 0,
-  version: 0,
+  contentVersion: 0,
   exportedAt: '',
   employees: [],
   groups: [],
@@ -57,7 +57,9 @@ function buildLabel(
         timeStyle: 'short',
       })
     : '';
-  return date ? `${prefix}（v${data.version} · ${date}）` : `${prefix}（v${data.version}）`;
+  return date
+    ? `${prefix}（v${data.contentVersion} · ${date}）`
+    : `${prefix}（v${data.contentVersion}）`;
 }
 
 function parseVersionEntry(
@@ -77,7 +79,7 @@ function parseVersionEntry(
       valid: errors.length === 0,
       errors,
       data,
-      version: data.version,
+      contentVersion: data.contentVersion,
       exportedAt: data.exportedAt,
       isSeed,
       source,
@@ -91,7 +93,7 @@ function parseVersionEntry(
       valid: false,
       errors: [message],
       data: emptyOrgData,
-      version: 0,
+      contentVersion: 0,
       exportedAt: '',
       isSeed,
       source,
@@ -111,7 +113,7 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
     valid: errors.length === 0,
     errors,
     data,
-    version: data.version,
+    contentVersion: data.contentVersion,
     exportedAt: pv.publishedAt,
     isSeed: false,
     source: 'published',

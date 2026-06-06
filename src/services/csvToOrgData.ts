@@ -286,7 +286,7 @@ export function csvMemberRowsToOrgData(
 
   const data: OrgData = {
     schemaVersion: ORG_SCHEMA_VERSION,
-    version: options?.version ?? 1,
+    contentVersion: options?.version ?? 1,
     exportedAt: options?.exportedAt ?? new Date().toISOString(),
     employees: [...employees.values()],
     groups: [...groups.values()],
@@ -310,7 +310,7 @@ export function csvMemberRowsToOrgData(
 function emptyOrgData(options?: { version?: number; exportedAt?: string }): OrgData {
   return {
     schemaVersion: ORG_SCHEMA_VERSION,
-    version: options?.version ?? 1,
+    contentVersion: options?.version ?? 1,
     exportedAt: options?.exportedAt ?? new Date().toISOString(),
     employees: [],
     groups: [],

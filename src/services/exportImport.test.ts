@@ -22,13 +22,13 @@ describe('parseOrgDataRaw', () => {
 
   it('合法但缺 schemaVersion 的舊檔會被升級', () => {
     const out = parseOrgDataRaw({
-      version: 3,
+      version: 3, // 舊欄位
       employees: [],
       groups: [],
       assignments: [],
     });
     expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
-    expect(out.version).toBe(3);
+    expect(out.contentVersion).toBe(3); // 相容映射到 contentVersion
     expect(out.jobLevels).toEqual([]);
     expect(out.changeLog).toEqual([]);
   });
