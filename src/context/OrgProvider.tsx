@@ -12,6 +12,7 @@ import {
 import { cloneOrgData } from '../services/exportImport';
 import { backfillAssignmentLevels } from '../services/assignmentLevels';
 import { ORG_SCHEMA_VERSION, migrateOrgData } from '../services/migrations/orgMigrations';
+import { safeSetItem } from '../services/storage';
 import {
   loadDataVersions,
   pickDefaultVersionId,
@@ -43,11 +44,7 @@ const DRAFT_STORAGE_KEY = 'hr-org-draft';
 const ACTIVE_VERSION_KEY = 'hr-org-active-version';
 
 function saveDraft(data: OrgData) {
-  try {
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // storage full or unavailable — silently ignore
-  }
+  safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
 }
 
 function loadDraft(): OrgData | null {
@@ -62,11 +59,7 @@ function loadDraft(): OrgData | null {
 }
 
 function saveActiveVersionId(id: string) {
-  try {
-    localStorage.setItem(ACTIVE_VERSION_KEY, id);
-  } catch {
-    // ignore
-  }
+  safeSetItem(ACTIVE_VERSION_KEY, id);
 }
 
 function loadActiveVersionId(): string | null {

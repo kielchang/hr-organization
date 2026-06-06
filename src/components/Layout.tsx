@@ -1,14 +1,18 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   Building2,
   FileSpreadsheet,
   GitBranch,
   History,
+  TriangleAlert,
   Users,
   Workflow,
+  X,
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
 import { DeployInfo } from './DeployInfo';
+import { onStorageError } from '../services/storage';
 
 const navItems = [
   { to: '/', label: '人員與歸屬', icon: Users },
@@ -20,6 +24,10 @@ const navItems = [
 ] as const;
 
 export function Layout() {
+  const [storageFailed, setStorageFailed] = useState(false);
+
+  useEffect(() => onStorageError(() => setStorageFailed(true)), []);
+
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="flex w-56 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground">
@@ -51,6 +59,27 @@ export function Layout() {
             <DeployInfo />
           </div>
         </header>
+        {storageFailed && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800"
+          >
+            <TriangleAlert className="size-4 shrink-0" />
+            <span className="flex-1">
+              無法寫入瀏覽器儲存空間（可能已達容量上限）。變更已套用於畫面，但
+              <strong className="font-semibold">未自動保存</strong>
+              ，請盡快「匯出目前資料」備份。
+            </span>
+            <button
+              type="button"
+              onClick={() => setStorageFailed(false)}
+              className="shrink-0 rounded p-1 hover:bg-amber-100"
+              aria-label="關閉提示"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
         <main className="flex-1 overflow-auto p-6">
           <Outlet />
         </main>

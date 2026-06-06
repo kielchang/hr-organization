@@ -1,5 +1,6 @@
 import type { OrgData } from '../types/org';
 import { cloneOrgData } from './exportImport';
+import { safeSetItem } from './storage';
 
 const STORAGE_KEY = 'hr-org-published-versions';
 /** 匯出/匯入發布版本整包時的識別標記 */
@@ -46,11 +47,7 @@ export function loadPublishedVersions(): PublishedVersion[] {
 }
 
 function persist(list: PublishedVersion[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // storage full or unavailable — silently ignore
-  }
+  safeSetItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 /** 新增一筆發布版本（最新置頂），回傳更新後清單與新版本。 */

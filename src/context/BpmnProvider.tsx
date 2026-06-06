@@ -3,6 +3,7 @@ import type { BpmnProcess, BpmnStore, ImpactBaseline, SimulationSession } from '
 import type { OrgData } from '../types/org';
 import { defaultExpenseProcess } from '../data/bpmn-defaults';
 import { BPMN_SCHEMA_VERSION, migrateBpmnStore } from '../services/migrations/bpmnMigrations';
+import { safeSetItem } from '../services/storage';
 import { BpmnContext } from './bpmnContextState';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ function loadStore(): BpmnStore {
 }
 
 function saveStore(store: BpmnStore) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  safeSetItem(STORAGE_KEY, JSON.stringify(store));
 }
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
