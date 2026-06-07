@@ -3,6 +3,7 @@ import {
   buildOrgHealth,
   buildReadiness,
   compareOrgHealth,
+  filterFindingsForEmployee,
   type OrgHealth,
   type OrgHealthFinding,
 } from './orgHealth';
@@ -1526,5 +1527,98 @@ describe('buildHealthDelta（已算好的 OrgHealth → 4 指標 delta，純函�
     expect(m.readiness.delta).toBe(
       buildReadiness(draftHealth).total - buildReadiness(baseHealth).total,
     );
+  });
+});
+
+describe('filterFindingsForEmployee（工作台選中節點 → 該人提醒，純函式）', () => {
+  /** 造一筆 finding，預設指向某員工；可覆寫任意欄位（含改 employeeId 為 undefined）。 */
+  function finding(
+    id: string,
+    partial: Partial<OrgHealthFinding> = {},
+  ): OrgHealthFinding {
+    return {
+      id,
+      severity: 'warning',
+      category: 'span',
+      message: id,
+      employeeId: 'e1',
+      ...partial,
+    };
+  }
+
+  it('選中某人時只回傳該人的 findings（多筆 employeeId 混合）', () => {
+    const findings = [
+      finding('a1', { employeeId: 'alice' }),
+      finding('b1', { employeeId: 'bob' }),
+      finding('a2', { employeeId: 'alice', severity: 'info', category: 'function' }),
+      finding('c1', { employeeId: 'carol' }),
+    ];
+
+    const result = filterFindingsForEmployee(findings, 'alice');
+
+    expect(result.map((f) => f.id)).toEqual(['a1', 'a2']);
+    expect(result.every((f) => f.employeeId === 'alice')).toBe(true);
+  });
+
+  it('employeeId 為 null（未選中）時回傳空陣列', () => {
+    const findings = [finding('a1', { employeeId: 'alice' })];
+    expect(filterFindingsForEmployee(findings, null)).toEqual([]);
+  });
+
+  it('傳入不存在的 employeeId 回傳空陣列', () => {
+    const findings = [
+      finding('a1', { employeeId: 'alice' }),
+      finding('b1', { employeeId: 'bob' }),
+    ];
+    expect(filterFindingsForEmployee(findings, 'nobody')).toEqual([]);
+  });
+
+  it('忽略沒有 employeeId 的 findings（如 cycle/depth 類）', () => {
+    const findings = [
+      finding('cycle:0', { category: 'cycle', employeeId: undefined }),
+      finding('depth-deep', { category: 'depth', severity: 'info', employeeId: undefined }),
+      finding('a1', { employeeId: 'alice' }),
+    ];
+
+    const result = filterFindingsForEmployee(findings, 'alice');
+    expect(result.map((f) => f.id)).toEqual(['a1']);
+  });
+
+  it('不修改輸入陣列（不 mutate、不改長度、不換參考）', () => {
+    const findings = [
+      finding('a1', { employeeId: 'alice' }),
+      finding('b1', { employeeId: 'bob' }),
+    ];
+    const snapshotIds = findings.map((f) => f.id);
+    const snapshotItems = [...findings];
+
+    const result = filterFindingsForEmployee(findings, 'alice');
+
+    // 輸入未被改動：長度、順序與每個元素參考皆不變。
+    expect(findings.map((f) => f.id)).toEqual(snapshotIds);
+    expect(findings).toEqual(snapshotItems);
+    // 回傳的元素是輸入中的同一個物件參考（純過濾、未複製）。
+    expect(result[0]).toBe(snapshotItems[0]);
+  });
+
+  it('保持原順序（過濾後相對順序與輸入一致）', () => {
+    const findings = [
+      finding('a3', { employeeId: 'alice' }),
+      finding('x', { employeeId: 'bob' }),
+      finding('a1', { employeeId: 'alice' }),
+      finding('y', { employeeId: 'carol' }),
+      finding('a2', { employeeId: 'alice' }),
+    ];
+
+    // 結果順序＝輸入中 alice 各筆出現的先後（a3, a1, a2），不重排。
+    expect(filterFindingsForEmployee(findings, 'alice').map((f) => f.id)).toEqual([
+      'a3',
+      'a1',
+      'a2',
+    ]);
+  });
+
+  it('空 findings 陣列回傳空陣列', () => {
+    expect(filterFindingsForEmployee([], 'alice')).toEqual([]);
   });
 });

@@ -1,40 +1,20 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMemo, useState } from 'react';
-import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
 import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCoveragePanel';
-import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
-import { EditImpactBar } from '../components/orgFlow/EditImpactBar';
-import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
+import { ReportingEditCanvas } from '../components/orgFlow/ReportingEditCanvas';
+import {
+  pickDefaultGroupId,
+  resolveGroupId,
+} from '../components/orgFlow/orgFlowGroupSelection';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
 import { useOrg } from '../context/useOrg';
 import { useOrgFlowEditing } from '../hooks/useOrgFlowEditing';
 import type { GroupKind } from '../types/org';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { X } from 'lucide-react';
 
 type ChartMode = 'reporting' | 'membership';
 /** 組別歸屬視角的種類過濾：all=不過濾。 */
 type MembershipKindFilter = 'all' | GroupKind;
-
-function pickDefaultGroupId(groups: { id: string; status: string }[]): string {
-  const active = groups.filter((g) => g.status === 'active');
-  return (
-    active.find((g) => g.id === 'g4')?.id ??
-    active[0]?.id ??
-    ALL_GROUPS_VIEW_ID
-  );
-}
-
-function resolveGroupId(
-  groupId: string,
-  groups: { id: string; status: string }[],
-): string {
-  if (groupId === ALL_GROUPS_VIEW_ID) return ALL_GROUPS_VIEW_ID;
-  const active = groups.filter((g) => g.status === 'active');
-  if (active.some((g) => g.id === groupId)) return groupId;
-  return pickDefaultGroupId(groups);
-}
 
 const chartDescriptions: Record<ChartMode, string> = {
   reporting:
@@ -51,56 +31,14 @@ export function OrgChartPage() {
     useState<MembershipKindFilter>('all');
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
 
   const editing = useOrgFlowEditing();
-  const {
-    isEditMode,
-    session,
-    orgData,
-    impactDelta,
-    diffResult,
-    staleDataWarning,
-  } = editing;
+  const { orgData } = editing;
 
   const resolvedGroupId = useMemo(
     () => resolveGroupId(groupId, orgData.groups),
     [groupId, orgData],
   );
-
-  const handleEnterEditMode = () => {
-    editing.enterEditMode();
-  };
-
-  const handleExitEditMode = () => {
-    editing.exitEditMode();
-    setShowSnapshotPanel(false);
-  };
-
-  const handleSaveCheckpoint = (description: string) => {
-    editing.saveCheckpoint(description);
-    setShowSnapshotPanel(true);
-  };
-
-  const handlePublish = (opts: {
-    label?: string;
-    note?: string;
-    effectiveDate?: string;
-  }) => {
-    editing.publish(opts);
-    setShowSnapshotPanel(false);
-  };
-
-  const chartProps = {
-    selectedGroupId: resolvedGroupId,
-    onGroupChange: setGroupId,
-    selectedEmployeeId,
-    onNodeSelect: setSelectedEmployeeId,
-    isEditMode,
-    orgData,
-    diffResult,
-    onDraftChange: editing.onDraftChange,
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -110,21 +48,6 @@ export function OrgChartPage() {
           {chartDescriptions[chartMode]}
         </p>
       </header>
-
-      {staleDataWarning && (
-        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>底層資料已在外部變更。建議捨棄目前草稿後重新進入編輯模式。</span>
-            <button
-              type="button"
-              onClick={editing.dismissStaleWarning}
-              className="shrink-0 text-amber-600 hover:text-amber-900"
-            >
-              <X className="size-4" />
-            </button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       <Tabs
         value={chartMode}
@@ -138,25 +61,6 @@ export function OrgChartPage() {
           <TabsTrigger value="membership">組別歸屬圖</TabsTrigger>
         </TabsList>
       </Tabs>
-
-      {/* Edit mode toolbar — only for reporting chart */}
-      {chartMode === 'reporting' && (
-        <EditModeToolbar
-          isEditMode={isEditMode}
-          session={session}
-          showSnapshotPanel={showSnapshotPanel}
-          onEnterEditMode={handleEnterEditMode}
-          onExitEditMode={handleExitEditMode}
-          onSaveCheckpoint={handleSaveCheckpoint}
-          onPublish={handlePublish}
-          onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
-        />
-      )}
-
-      {/* 編輯態 before→after 指標浮層（R5.2）：僅匯報組織圖編輯模式顯示 */}
-      {chartMode === 'reporting' &&
-        isEditMode &&
-        impactDelta && <EditImpactBar delta={impactDelta} />}
 
       {/* 組別歸屬視角：種類過濾切換（全部／部門／職能） */}
       {chartMode === 'membership' && (
@@ -185,32 +89,28 @@ export function OrgChartPage() {
         </Tabs>
       )}
 
-      {/* Chart area + optional snapshot panel */}
-      <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
-        <div className="relative min-h-[480px] flex-1">
-          {chartMode === 'reporting' ? (
-            <OrgFlowChart variant="reporting" {...chartProps} />
-          ) : (
-            <GroupMembershipFlowChart variant="membership" {...{
-              selectedGroupId: resolvedGroupId,
-              onGroupChange: setGroupId,
-              selectedEmployeeId,
-              onNodeSelect: setSelectedEmployeeId,
-              kindFilter: membershipKind === 'all' ? undefined : membershipKind,
-            }} />
-          )}
+      {chartMode === 'reporting' ? (
+        <ReportingEditCanvas
+          editing={editing}
+          resolvedGroupId={resolvedGroupId}
+          onGroupChange={setGroupId}
+          selectedEmployeeId={selectedEmployeeId}
+          onNodeSelect={setSelectedEmployeeId}
+        />
+      ) : (
+        <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
+          <div className="relative min-h-[480px] flex-1">
+            <GroupMembershipFlowChart
+              variant="membership"
+              selectedGroupId={resolvedGroupId}
+              onGroupChange={setGroupId}
+              selectedEmployeeId={selectedEmployeeId}
+              onNodeSelect={setSelectedEmployeeId}
+              kindFilter={membershipKind === 'all' ? undefined : membershipKind}
+            />
+          </div>
         </div>
-
-        {chartMode === 'reporting' && isEditMode && showSnapshotPanel && session && (
-          <SnapshotPanel
-            snapshots={session.snapshots}
-            previewingSnapshotId={session.previewingSnapshotId}
-            onPreview={editing.previewSnapshot}
-            onRollback={editing.rollbackToSnapshot}
-            onClose={() => setShowSnapshotPanel(false)}
-          />
-        )}
-      </div>
+      )}
 
       {/* 職能視角輕量訊號：覆蓋缺口與跨職能負載（全部／職能過濾時顯示） */}
       {chartMode === 'membership' && membershipKind !== 'department' && (

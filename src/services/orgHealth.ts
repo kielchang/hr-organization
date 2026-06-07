@@ -59,6 +59,21 @@ export interface OrgHealthFinding {
   groupId?: string;
 }
 
+/**
+ * 過濾「指向某員工」的 findings（純函式，供工作台選中節點看該人提醒）。
+ *
+ * - 比對 `finding.employeeId === employeeId`。
+ * - employeeId 為 null（未選中）時回傳空陣列，由呼叫端決定改顯示全域 findings。
+ * - 不改變輸入順序（穩定）；不修改輸入陣列。
+ */
+export function filterFindingsForEmployee(
+  findings: OrgHealthFinding[],
+  employeeId: string | null,
+): OrgHealthFinding[] {
+  if (employeeId == null) return [];
+  return findings.filter((f) => f.employeeId === employeeId);
+}
+
 /** 摘要卡片列所需的高層指標。 */
 export interface OrgHealthSummary {
   activeEmployees: number;

@@ -67,4 +67,30 @@ describe('WorkbenchPage 組織圖工作台 render smoke', () => {
     // 進入編輯後不應產生 React 錯誤/警告。
     expect(errorSpy).not.toHaveBeenCalled();
   });
+
+  it('右側即時整合面板與底部引導連結區出現（階段 2 版面）', () => {
+    renderWithProviders(<WorkbenchPage />, { route: '/workbench' });
+
+    // 右側可摺疊即時整合面板（landmark + 規劃就緒度徽章）。
+    expect(
+      screen.getByRole('complementary', { name: '即時整合面板' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('規劃就緒度')).toBeInTheDocument();
+
+    // 底部「需要細節？」引導區與 5 條引導連結。
+    expect(
+      screen.getByRole('region', { name: '需要細節？' }),
+    ).toBeInTheDocument();
+    for (const label of [
+      '人員管理',
+      '組別管理',
+      '情境比較',
+      '流程衝擊分析',
+      'CSV 匯入',
+    ]) {
+      expect(screen.getByRole('link', { name: new RegExp(label) })).toBeInTheDocument();
+    }
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
 });
