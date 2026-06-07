@@ -8,7 +8,7 @@ import {
 } from './dataVersions';
 import type { ApiVersion } from './apiClient';
 import type { PublishedVersion } from './publishedVersions';
-import { makeOrgData } from '../test/fixtures';
+import { assignment, emp, group, jobLevel, makeOrgData } from '../test/fixtures';
 
 function info(partial: Partial<DataVersionInfo>): DataVersionInfo {
   return {
@@ -112,6 +112,41 @@ describe('apiVersionToInfo', () => {
     expect(out.source).toBe('published');
     expect(out.data.schemaVersion).toBeGreaterThanOrEqual(1);
     expect(out.valid).toBe(true);
+  });
+
+  it('回傳的 data 與輸入不共用參照（深拷貝，防污染後端版本物件）', () => {
+    const v: ApiVersion = {
+      id: 'ver-clone',
+      label: '深拷貝版',
+      publishedAt: '2026-04-04T00:00:00.000Z',
+      // 已是當前 schemaVersion=3 的資料，帶實際內容（含 assignment）。
+      data: makeOrgData({
+        employees: [emp('e1')],
+        groups: [group('g1')],
+        jobLevels: [jobLevel('j1', 1)],
+        assignments: [assignment('a1')],
+      }),
+    };
+
+    const out = apiVersionToInfo(v);
+
+    // 1) 頂層與巢狀陣列都不共用參照。
+    expect(out.data).not.toBe(v.data);
+    expect(out.data.assignments).not.toBe(v.data.assignments);
+    expect(out.data.assignments[0]).not.toBe(v.data.assignments[0]);
+    expect(out.data.employees).not.toBe(v.data.employees);
+    expect(out.data.groups).not.toBe(v.data.groups);
+
+    // 2) 內容相等（clone+migrate 未改變語意；資料已是 v3 故與輸入一致）。
+    expect(out.data).toEqual(v.data);
+    expect(out.data.employees).toEqual(v.data.employees);
+    expect(out.data.assignments).toEqual(v.data.assignments);
+
+    // 3) mutate 回傳的 data 不會回頭污染輸入的 ApiVersion.data。
+    out.data.assignments[0].groupId = 'mutated';
+    out.data.employees.push(emp('e2'));
+    expect(v.data.assignments[0].groupId).toBe('g1');
+    expect(v.data.employees).toHaveLength(1);
   });
 });
 

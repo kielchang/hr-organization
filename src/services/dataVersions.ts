@@ -129,7 +129,7 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
 
 /** 將後端 API 回傳的版本轉成下拉選單可用的 DataVersionInfo（標籤前綴「雲端」）。 */
 export function apiVersionToInfo(v: ApiVersion): DataVersionInfo {
-  const data = migrateOrgData(v.data);
+  const data = migrateOrgData(cloneOrgData(v.data));
   const errors = validateOrgData(data);
   return {
     id: v.id,
