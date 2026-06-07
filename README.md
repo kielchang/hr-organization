@@ -190,14 +190,18 @@ Dockerfile                # 前端多階段建置 → nginx
 
 一張 CSV 彙整「員工 × 組別」歸屬，可轉成 `src/data/mock/*.json`（本機、不進版控）並在版本選單切換。
 
-| 欄位 | 說明 |
-|------|------|
-| `employeeNo` / `employeeName` / `employeeStatus` | 員工工號、姓名、在職狀態（active / inactive） |
-| `groupCode` / `groupName` / `parentGroupCode` / `groupStatus` | 組別代碼、名稱、上層組別代碼（根節點留空）、狀態 |
-| `jobLevelCode` / `jobLevelName` / `jobLevelRank` | 職級 |
-| `supervisorEmployeeNos` | 主管工號，多筆以 `\|` 分隔 |
-| `primarySupervisorEmployeeNo` | 主主管工號 |
-| `isPrimaryGroup` | 是否主組別（1 / 0） |
+欄名以**中文為主**（13 欄，順序如下）；**舊版英文欄名仍向後相容**，既有英文 CSV 可直接匯入，匯出 header 則一律輸出中文。
+
+| 中文欄名（主） | 英文欄名（相容） | 說明 |
+|------|------|------|
+| `員工工號` / `員工姓名` / `在職狀態` | `employeeNo` / `employeeName` / `employeeStatus` | 員工工號、姓名、在職狀態（active / inactive，亦接受 在職／停用） |
+| `組別代碼` / `組別名稱` / `上層組別代碼` / `組別狀態` | `groupCode` / `groupName` / `parentGroupCode` / `groupStatus` | 組別代碼、名稱、上層組別代碼（根節點留空）、狀態 |
+| `職級代碼` / `職級名稱` / `職級層級` | `jobLevelCode` / `jobLevelName` / `jobLevelRank` | 職級代碼、名稱、層級（數字，越大越高） |
+| `主管工號` | `supervisorEmployeeNos` | 主管工號，多筆以 `\|` 分隔 |
+| `直屬主管工號` | `primarySupervisorEmployeeNo` | 主主管工號 |
+| `是否主要組別` | `isPrimaryGroup` | 是否主組別（1 / 0，亦接受 是） |
+
+> header 解析中英相容：每欄依「中文主名 → 英文欄名 → 別名」順序比對命中（英文比對不分大小寫）。缺少必要欄位時，錯誤訊息以中文欄名提示。
 
 範本：`src/data/templates/org-members.template.csv`
 完整範例：`npm run generate:csv-sample` 產生 `org-members.sample.csv`

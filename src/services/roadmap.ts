@@ -421,8 +421,11 @@ const ITEMS: RoadmapItem[] = [
   {
     id: 'R5.3',
     title: 'CSV 欄位中文化',
-    description: '匯入範本欄位名稱改中文，降低試算門檻。',
-    status: 'planned',
+    description:
+      'CSV 匯入/匯出欄名改中文為主（英文向後相容），降低試算門檻；匯入錯誤訊息與範本同步中文化。',
+    status: 'done',
+    commitHash: '086e4b3',
+    completedAt: '2026-06-07',
     sources: ['uxr'],
     size: 'small',
     phaseId: 'phase-5',
