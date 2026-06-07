@@ -3,6 +3,7 @@ import {
   deleteAssignment,
   deleteEmployee,
   importOrgData,
+  reassignSupervisor,
   upsertAssignment,
   upsertEmployee,
   upsertGroup,
@@ -123,6 +124,214 @@ describe('deleteAssignment', () => {
     expect(data.assignments).toEqual([]);
     expect(data.changeLog[0].changeType).toBe('assignment_delete');
     expect(data.changeLog[0].before).toBeTruthy();
+  });
+});
+
+describe('reassignSupervisor（拖人改匯報線）', () => {
+  /**
+   * 共用底圖：員工 oldBoss / newBoss / dotted / staff，皆 active；
+   * 部門 g1、職級 j1。各案再覆寫 staff 的歸屬。
+   */
+  function reassignBase(staffAssignment: ReturnType<typeof assignment>) {
+    return makeOrgData({
+      employees: [emp('oldBoss'), emp('newBoss'), emp('dotted'), emp('staff')],
+      groups: [group('g1', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAssignment],
+    });
+  }
+
+  it('成功改主管：拖 staff 到 newBoss → primarySupervisorId=newBoss、supervisorIds 含 newBoss、error null', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.primarySupervisorId).toBe('newBoss');
+    expect(updated.supervisorIds).toContain('newBoss');
+    // 舊主主管被換掉
+    expect(updated.supervisorIds).not.toContain('oldBoss');
+    // 走 upsertAssignment → 寫入 assignment_update changelog
+    expect(data.changeLog[0].changeType).toBe('assignment_update');
+  });
+
+  it('保留 dotted：原 [oldBoss(primary), dotted] → reassign newBoss → 去 oldBoss、含 newBoss、保留 dotted、primary=newBoss', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss', 'dotted'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.primarySupervisorId).toBe('newBoss');
+    expect(updated.supervisorIds).not.toContain('oldBoss');
+    expect(updated.supervisorIds).toContain('newBoss');
+    // dotted（虛線）主管保留
+    expect(updated.supervisorIds).toContain('dotted');
+    expect(updated.supervisorIds).toHaveLength(2);
+  });
+
+  it('newSupervisorId 原本是 dotted：提升為 primary 且不重複出現', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss', 'dotted'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    // 把原本的 dotted 提升為新主主管
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'dotted', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.primarySupervisorId).toBe('dotted');
+    // 去掉舊 primary（oldBoss）
+    expect(updated.supervisorIds).not.toContain('oldBoss');
+    // dotted 不重複（只出現一次）
+    expect(updated.supervisorIds.filter((s) => s === 'dotted')).toHaveLength(1);
+    expect(updated.supervisorIds).toEqual(['dotted']);
+  });
+
+  it('循環擋：newBoss 已匯報給 staff（B→A），reassign A→B 會成 A↔B 循環 → error 非 null、data 為原 data（未套用）', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    // newBoss 的歸屬：主管是 staff（newBoss → staff），形成下屬鏈
+    const newBossAss = assignment('a-newBoss', {
+      employeeId: 'newBoss',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['staff'],
+      primarySupervisorId: 'staff',
+    });
+    const base = makeOrgData({
+      employees: [emp('oldBoss'), emp('newBoss'), emp('staff')],
+      groups: [group('g1', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss, newBossAss],
+    });
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/循環/);
+    // 整筆不套用：回原 data（reference 相等，未產生新物件、未寫 changelog）
+    expect(data).toBe(base);
+  });
+
+  it('自我指派：newSupervisorId === 被拖者 employeeId → error', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'staff', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/本人/);
+    expect(data).toBe(base);
+  });
+
+  it('inactive 主管：reassign 到停用員工 → error（validateAssignment 擋）、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = makeOrgData({
+      employees: [
+        emp('oldBoss'),
+        emp('newBoss', { status: 'inactive' }),
+        emp('staff'),
+      ],
+      groups: [group('g1', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/在職/);
+    expect(data).toBe(base);
+  });
+
+  it('不存在的主管：reassign 到不存在員工 → error（validateAssignment 擋）、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'ghost', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/找不到主管/);
+    expect(data).toBe(base);
+  });
+
+  it('找不到 assignmentId → error、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'no-such-id', 'newBoss', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/找不到/);
+    expect(data).toBe(base);
+  });
+
+  it('原本無主管（primarySupervisorId=null）：reassign 仍正確設定且不殘留 null', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: [],
+      primarySupervisorId: null,
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.primarySupervisorId).toBe('newBoss');
+    expect(updated.supervisorIds).toEqual(['newBoss']);
   });
 });
 

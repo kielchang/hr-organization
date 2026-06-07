@@ -18,13 +18,21 @@ export interface EmployeeNodeData extends Record<string, unknown> {
   levelTopY?: number;
   /** 差異狀態（用於 diff 預覽著色） */
   diffStatus?: NodeDiffStatus;
+  /** drag-to-reassign 拖曳懸停目標時高亮（放開＝把被拖者掛到此人下） */
+  isDropTarget?: boolean;
 }
 
 export function EmployeeNode({ data, selected }: NodeProps) {
   const d = data as EmployeeNodeData;
   const isRemoved = d.diffStatus === 'removed';
   return (
-    <div className={orgFlowNodeClass(!!selected, d.diffStatus)}>
+    <div
+      className={orgFlowNodeClass(
+        !!selected,
+        d.diffStatus,
+        d.isDropTarget ? 'border-primary ring-2 ring-primary/60 shadow-md' : undefined,
+      )}
+    >
       <Handle
         type="target"
         position={Position.Top}

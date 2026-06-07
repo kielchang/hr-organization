@@ -31,7 +31,12 @@ import type { OrgFlowChartVariant } from './OrgFlowControls';
 import { useDraggableFlowNodes } from './useDraggableFlowNodes';
 import type { OrgData, Assignment, Employee } from '../../types/org';
 import type { OrgDiffResult } from '../../types/editSession';
-import { upsertAssignment, upsertEmployee, createEmptyAssignment } from '../../services/orgOperations';
+import {
+  upsertAssignment,
+  upsertEmployee,
+  createEmptyAssignment,
+  reassignSupervisor,
+} from '../../services/orgOperations';
 import { useOrg } from '../../context/useOrg';
 
 const nodeTypes = { employee: EmployeeNode } as const;
@@ -60,7 +65,11 @@ function FlowInner({
   onDraftChange,
 }: OrgFlowChartProps) {
   const { operator } = useOrg();
-  const { fitView } = useReactFlow();
+  const { fitView, getIntersectingNodes } = useReactFlow();
+  /** drag-to-reassign 失敗時的短暫提示（循環/inactive/自我）；成功則清空。 */
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  /** 拖曳過程中懸停可放置的目標員工節點 id（用於高亮），未懸停為 null。 */
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   const activeGroups = useMemo(
     () => orgData.groups.filter((g) => g.status === 'active'),
@@ -124,10 +133,82 @@ function FlowInner({
     isEditMode,
   );
 
-  const onNodeDragStop = useCallback(
+  // 把 drag-to-reassign 懸停高亮注入節點 data（不改動拖曳位置狀態）。
+  const renderedNodes = useMemo(() => {
+    if (!dropTargetId) return nodes;
+    return nodes.map((n) =>
+      n.id === dropTargetId
+        ? { ...n, data: { ...n.data, isDropTarget: true } }
+        : n,
+    );
+  }, [nodes, dropTargetId]);
+
+  /**
+   * 取被拖節點重疊的「最上層員工節點」當 drop target。
+   * 過濾自己與 ghost（已移除預覽）節點；reporting 視角下 node.id === employeeId。
+   */
+  const findDropTarget = useCallback(
+    (node: Node): Node | null => {
+      const hits = getIntersectingNodes(node, false).filter(
+        (n) => n.id !== node.id && !n.id.startsWith('ghost-'),
+      );
+      if (hits.length === 0) return null;
+      // 「最上層」＝畫面 z 序最後者（後繪在上）；getIntersectingNodes 依現有節點順序回傳，取末筆。
+      return hits[hits.length - 1];
+    },
+    [getIntersectingNodes],
+  );
+
+  /** 把某節點視覺位置回滾到 computed 佈局（避免拖拉失敗後停在亂位）。 */
+  const resetNodePosition = useCallback(
+    (nodeId: string) => {
+      const computed = allComputedNodes.find((n) => n.id === nodeId);
+      if (!computed) return;
+      onNodesChange([
+        { id: nodeId, type: 'position', position: { ...computed.position } },
+      ]);
+    },
+    [allComputedNodes, onNodesChange],
+  );
+
+  const onNodeDrag = useCallback(
     (_: MouseEvent | TouchEvent | React.MouseEvent, node: Node) => {
       if (!isEditMode) return;
+      const target = findDropTarget(node);
+      setDropTargetId((prev) => (prev === (target?.id ?? null) ? prev : target?.id ?? null));
+    },
+    [isEditMode, findDropTarget],
+  );
+
+  const onNodeDragStop = useCallback(
+    (_: MouseEvent | TouchEvent | React.MouseEvent, node: Node) => {
+      if (!isEditMode) {
+        setDropTargetId(null);
+        return;
+      }
       const d = node.data as EmployeeNodeData;
+
+      // drag-to-reassign：所見即所得 —— drop 命中優先採用 onNodeDrag 高亮時已算好的
+      // dropTargetId（employeeId / reporting node.id），避免 z 序變動造成「高亮的」與
+      // 「實際掛上的」不一致。dropTargetId 為 null 時 fallback 重算（語意等價）。
+      const targetId = dropTargetId ?? findDropTarget(node)?.id ?? null;
+      if (targetId) {
+        // reporting 視角：drop target 的 node.id 即新主管的 employeeId。
+        const result = reassignSupervisor(orgData, d.assignmentId, targetId, operator);
+        if (result.error) {
+          // 失敗（循環/inactive/自我）：不提交、回滾被拖節點視覺位置、顯示原因。
+          setReassignError(result.error);
+          resetNodePosition(node.id);
+        } else {
+          setReassignError(null);
+          onDraftChange(result.data);
+        }
+        setDropTargetId(null);
+        return;
+      }
+
+      // 未命中（dropTargetId 為 null 且重算亦無命中）：維持既有「拖層級」邏輯（完全等價）。
+      setDropTargetId(null);
       if (d.levelTopY == null) return;
       const newLevel = levelFromTopY(node.position.y);
       const assignment = orgData.assignments.find((a) => a.id === d.assignmentId);
@@ -152,7 +233,16 @@ function FlowInner({
         if (!result.error) onDraftChange(result.data);
       }
     },
-    [isEditMode, orgData, selectedGroupId, operator, onDraftChange],
+    [
+      isEditMode,
+      orgData,
+      selectedGroupId,
+      operator,
+      onDraftChange,
+      findDropTarget,
+      resetNodePosition,
+      dropTargetId,
+    ],
   );
 
   const onConnect = useCallback(
@@ -209,6 +299,13 @@ function FlowInner({
       return () => clearTimeout(t);
     }
   }, [computedNodes, edges, fitView, selectedGroupId]);
+
+  // drag-to-reassign 失敗提示：數秒後自動消失。
+  useEffect(() => {
+    if (!reassignError) return;
+    const t = setTimeout(() => setReassignError(null), 4000);
+    return () => clearTimeout(t);
+  }, [reassignError]);
 
   const hasDetail = !!selectedEmployeeId;
   const [showMiniMap, setShowMiniMap] = useState(true);
@@ -284,11 +381,12 @@ function FlowInner({
     >
       <ReactFlow
         colorMode="light"
-        nodes={nodes as import('@xyflow/react').Node[]}
+        nodes={renderedNodes as import('@xyflow/react').Node[]}
         edges={edges}
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
         onNodesChange={onNodesChange as import('@xyflow/react').OnNodesChange}
         onNodeClick={onNodeClick}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
         onConnect={onConnect}
@@ -349,6 +447,16 @@ function FlowInner({
           </div>
         </Panel>
       </ReactFlow>
+
+      {reassignError && (
+        <Alert
+          variant="destructive"
+          role="alert"
+          className="absolute left-3 right-3 top-3 z-10 border-destructive/30 bg-card/95 shadow-md backdrop-blur-sm"
+        >
+          <AlertDescription>{reassignError}</AlertDescription>
+        </Alert>
+      )}
 
       {error && (
         <Alert
