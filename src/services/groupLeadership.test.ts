@@ -2,6 +2,7 @@ import {
   deriveAllGroupLeadership,
   deriveGroupLeadership,
   deriveInGroupRoot,
+  isLeadLevel,
 } from './groupLeadership';
 import { assignment, emp, group, makeOrgData } from '../test/fixtures';
 
@@ -10,8 +11,145 @@ import { assignment, emp, group, makeOrgData } from '../test/fixtures';
  *
  * - `deriveInGroupRoot`：以「組內匯報根」回退組長（leaderId 未設時用）。
  * - `deriveGroupLeadership`：leaderId 優先取 group.leaderId、否則回退；
- *   co-leader = 組內成員的主管落在組外者（去重、排除 leaderId、employeeId 升冪）。
+ *   co-leader = 組內成員的「組外」primary 主管，**且該主管「夠格（lead-level）」**：
+ *   其主歸屬無上級主管（primarySupervisorId null）或其為某組 leaderId。
+ *   不夠格者（有上級且非任何組長）屬「掛錯組」，不列入 co-lead（去重、排除 leaderId、升冪）。
+ * - `isLeadLevel`：co-lead 守門斷言——(b) 某組 leaderId 或 (a) 主歸屬無上級即夠格。
  */
+
+describe('isLeadLevel', () => {
+  it('(a) 主歸屬無上級主管（primarySupervisorId null）→ true', () => {
+    // top 主歸屬 g1、無上級 → 夠格。
+    const data = makeOrgData({
+      employees: [emp('top')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('x-top', { employeeId: 'top', groupId: 'g1' }), // primarySupervisorId 預設 null
+      ],
+    });
+    expect(isLeadLevel(data, 'top')).toBe(true);
+  });
+
+  it('(b) 是某組 leaderId（即使主歸屬有上級主管）→ true', () => {
+    // mgr 主歸屬掛 boss 為上級（path a 不成立），但 mgr 是 g2 的 leaderId → path b 成立。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mgr')],
+      groups: [group('g1'), group('g2', { leaderId: 'mgr' })],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-mgr', {
+          employeeId: 'mgr',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    // 健全性：path a 不成立（主歸屬有上級），純靠 path b。
+    expect(isLeadLevel(data, 'mgr')).toBe(true);
+  });
+
+  it('有上級主管且非任何組長 → false（不夠格、屬掛錯組）', () => {
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mid')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    expect(isLeadLevel(data, 'mid')).toBe(false);
+  });
+
+  it('完全無 assignment（且非任何組長）→ false', () => {
+    // ghost 不在任何 assignment、也非任何組 leaderId → path a/b 皆不成立。
+    const data = makeOrgData({
+      employees: [emp('ghost')],
+      groups: [group('g1')],
+      assignments: [],
+    });
+    expect(isLeadLevel(data, 'ghost')).toBe(false);
+  });
+
+  it('多筆 assignment 時優先取 isPrimaryGroup 那筆判定（主歸屬無上級 → true，即使次要歸屬有上級）', () => {
+    // who 有兩筆：主歸屬 g1（無上級）、次要歸屬 g2（掛 boss 為上級）。
+    // path a 須取「主歸屬」那筆 → 主歸屬無上級 → true（不被次要歸屬的上級污染）。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('who')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g2' }),
+        assignment('x-who-secondary', {
+          employeeId: 'who',
+          groupId: 'g2',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+          isPrimaryGroup: false,
+        }),
+        assignment('x-who-primary', {
+          employeeId: 'who',
+          groupId: 'g1',
+          isPrimaryGroup: true, // 主歸屬無上級
+        }),
+      ],
+    });
+    expect(isLeadLevel(data, 'who')).toBe(true);
+  });
+
+  it('主歸屬有上級、次要歸屬無上級 → false（仍以主歸屬那筆為準、不被次要救回）', () => {
+    // who 主歸屬 g1 掛 boss（有上級）、次要歸屬 g2 無上級。
+    // 取主歸屬那筆 → 有上級 → false（對稱守護上一案：優先序確實取 isPrimaryGroup）。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('who')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-who-primary', {
+          employeeId: 'who',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+          isPrimaryGroup: true,
+        }),
+        assignment('x-who-secondary', {
+          employeeId: 'who',
+          groupId: 'g2',
+          isPrimaryGroup: false, // 無上級，但非主歸屬 → 不採用
+        }),
+      ],
+    });
+    expect(isLeadLevel(data, 'who')).toBe(false);
+  });
+
+  it('無 isPrimaryGroup 標記時回退第一筆 assignment 判定', () => {
+    // who 兩筆皆 isPrimaryGroup=false → primary = own[0]（第一筆 = g1，有上級）→ false。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('who')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-who-1', {
+          employeeId: 'who',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+          isPrimaryGroup: false,
+        }),
+        assignment('x-who-2', {
+          employeeId: 'who',
+          groupId: 'g2',
+          isPrimaryGroup: false, // 無上級，但排在第二筆 → 不被取用
+        }),
+      ],
+    });
+    expect(isLeadLevel(data, 'who')).toBe(false);
+  });
+});
 
 describe('deriveInGroupRoot', () => {
   it('空組（無成員）→ null', () => {
@@ -223,8 +361,10 @@ describe('deriveGroupLeadership', () => {
     expect(deriveGroupLeadership(data, g).leaderId).toBe('boss');
   });
 
-  it('CEO/COO 共管：業務部 leaderId=CEO、部分成員主管=COO（COO 不在業務部）→ coLeaderIds=[COO]', () => {
+  it('CEO/COO 共管：業務部 leaderId=CEO、部分成員主管=COO（COO 不在業務部且夠格）→ coLeaderIds=[COO]', () => {
     // 業務部成員 s1/s2 主管 CEO（組長，不算 co-lead）；s3/s4 主管 COO（組外）→ COO co-lead。
+    // co-lead 收緊後：COO 須「夠格」才列入。此處 COO 是 exec 組 leaderId（path b）→ 夠格。
+    //（COO 主歸屬仍掛 CEO 為上級，刻意不走 path a，獨立驗證 path b 也能讓組外主管夠格。）
     const sales = group('sales', { leaderId: 'CEO' });
     const data = makeOrgData({
       employees: [
@@ -235,7 +375,7 @@ describe('deriveGroupLeadership', () => {
         emp('s3'),
         emp('s4'),
       ],
-      groups: [sales, group('exec')],
+      groups: [sales, group('exec', { leaderId: 'COO' })],
       assignments: [
         // CEO/COO 本人歸屬高管組 exec（不在 sales）。
         assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
@@ -277,6 +417,39 @@ describe('deriveGroupLeadership', () => {
     expect(r.leaderId).toBe('CEO');
     // COO 出現兩次（s3/s4）→ 去重後僅一個。
     expect(r.coLeaderIds).toEqual(['COO']);
+  });
+
+  it('組外主管「有上級且非任何組長」（不夠格）→ 不列入 coLeaderIds（co-lead 收緊）', () => {
+    // teamA：leaderId=lead（組內）。成員 m 的 primary 主管 midMgr 在組外（teamB）。
+    // midMgr 主歸屬掛 topBoss 為上級（primarySupervisorId 非 null），且 midMgr 非任何組 leaderId
+    // → isLeadLevel(midMgr)=false（不夠格、屬「掛錯組」）→ 不列入 co-lead。
+    const teamA = group('teamA', { leaderId: 'lead' });
+    const data = makeOrgData({
+      employees: [emp('lead'), emp('topBoss'), emp('midMgr'), emp('m')],
+      groups: [teamA, group('teamB')],
+      assignments: [
+        assignment('x-lead', { employeeId: 'lead', groupId: 'teamA' }),
+        assignment('x-top', { employeeId: 'topBoss', groupId: 'teamB' }),
+        // midMgr 在 teamB、其主歸屬掛 topBoss（有上級）→ 不夠格。
+        assignment('x-mid', {
+          employeeId: 'midMgr',
+          groupId: 'teamB',
+          supervisorIds: ['topBoss'],
+          primarySupervisorId: 'topBoss',
+        }),
+        // teamA 成員 m 的組外 primary 主管 = midMgr（不夠格）。
+        assignment('x-m', {
+          employeeId: 'm',
+          groupId: 'teamA',
+          supervisorIds: ['midMgr'],
+          primarySupervisorId: 'midMgr',
+        }),
+      ],
+    });
+    const r = deriveGroupLeadership(data, teamA);
+    expect(r.leaderId).toBe('lead');
+    // midMgr 不夠格 → 不列入（先前未收緊時會誤列入）。
+    expect(r.coLeaderIds).toEqual([]);
   });
 
   it('co-lead 排除 leaderId：主管恰為組長者不重複列入 co-lead', () => {

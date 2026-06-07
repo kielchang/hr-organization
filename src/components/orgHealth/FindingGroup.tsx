@@ -21,6 +21,8 @@ const categoryLabel: Record<OrgHealthFinding['category'], string> = {
   chain: '懸空匯報',
   cycle: '匯報循環',
   spof: '無備援主管',
+  'group-mismatch': '組別歸屬',
+  'parallel-colead': '平行共管',
 };
 
 /** R0.3 單一 category 的可摺疊群（原生 details/summary，鍵盤可及）。 */

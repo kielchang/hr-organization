@@ -38,9 +38,11 @@ const CATEGORY_ORDER: ReadonlyArray<OrgHealthFinding['category']> = [
   'chain',
   'cycle',
   'spof',
+  'group-mismatch',
   'span',
   'function',
   'depth',
+  'parallel-colead',
 ];
 
 /** R0.5 就緒度等級 → Badge variant 與中文標籤。 */

@@ -692,6 +692,815 @@ describe('buildOrgHealth — spof findings（單點風險）', () => {
   });
 });
 
+describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
+  /**
+   * Phase F 三規則（皆刻意排除合法 co-lead 平行共管，避免誤報）：
+   *  1. parallel-colead（info）：每組每位推導 co-leader 一筆「與組長平行共管」，不扣 readiness。
+   *  2. group-mismatch（warning, id=group-mismatch:…）：assignment 的 primarySupervisor
+   *     不在該組、且非該組推導 co-leader、非 leader → 「主管不屬於該組」。
+   *  3. 層級異常（warning, category=group-mismatch, id=level-anomaly:…）：組內主管但
+   *     effectiveLevel(成員) <= effectiveLevel(主管) → 「層級異常」；排除 co-lead 平行。
+   *
+   * 領導推導（leaderId/coLeaderIds）重用 deriveAllGroupLeadership（見 groupLeadership.test）。
+   * 此處聚焦「finding 是否正確產出/抑制」與「掛在哪個 readiness 維度」。
+   */
+
+  /** 由 findings 取出 category 集合，便於斷言「有/無某類」。 */
+  function categoriesOf(findings: OrgHealthFinding[]): string[] {
+    return findings.map((f) => f.category);
+  }
+
+  describe('規則 1：parallel-colead（info、合法平行共管、不扣 readiness）', () => {
+    it('組長在組內 + 組外主管帶部分成員（夠格）→ 該組外主管出 parallel-colead(info)，readiness 不下降', () => {
+      // sales 組：leaderId=ceo（組外高管，但設為組長）；s1/s2 主管 ceo（=leaderId，不算 co-lead）；
+      // s3 主管 coo（組外、非 leaderId、夠格）→ coo 為推導 co-leader → 出一筆 parallel-colead(info)。
+      // co-lead 收緊後：coo 須「夠格」。此處 coo 是 exec 組 leaderId（path b）→ 夠格。
+      const data = makeOrgData({
+        employees: [
+          emp('ceo', { name: '執行長' }),
+          emp('coo', { name: '營運長' }),
+          emp('s1'),
+          emp('s2'),
+          emp('s3'),
+        ],
+        groups: [
+          group('sales', { kind: 'department', name: '業務部', leaderId: 'ceo' }),
+          group('exec', { kind: 'department', name: '高管組', leaderId: 'coo' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          // ceo/coo 本人歸屬 exec（不在 sales 成員集合內）。
+          assignment('as-ceo', { employeeId: 'ceo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-coo', {
+            employeeId: 'coo',
+            groupId: 'exec',
+            jobLevelId: 'j1',
+            supervisorIds: ['ceo'],
+            primarySupervisorId: 'ceo',
+          }),
+          // sales 成員：s1/s2 主管 ceo（=leaderId）。
+          assignment('as-s1', {
+            employeeId: 's1',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['ceo'],
+            primarySupervisorId: 'ceo',
+          }),
+          assignment('as-s2', {
+            employeeId: 's2',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['ceo'],
+            primarySupervisorId: 'ceo',
+          }),
+          // s3 主管 coo（組外、非 leaderId）→ coo 為 co-leader。
+          assignment('as-s3', {
+            employeeId: 's3',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['coo'],
+            primarySupervisorId: 'coo',
+          }),
+        ],
+      });
+      const health = buildOrgHealth(data);
+
+      // coo 出一筆 parallel-colead(info)，指向 coo 與 sales 組。
+      const parallel = health.findings.find(
+        (f) => f.id === 'parallel-colead:sales:coo',
+      );
+      expect(parallel?.severity).toBe('info');
+      expect(parallel?.category).toBe('parallel-colead');
+      expect(parallel?.employeeId).toBe('coo');
+      expect(parallel?.groupId).toBe('sales');
+      expect(parallel?.message).toContain('平行共管');
+      expect(parallel?.message).toContain('業務部');
+
+      // 關鍵：co-lead 平行不得被誤報為 group-mismatch（s3 主管 coo 是 sales 推導 co-leader）。
+      expect(
+        health.findings.some((f) => f.id === 'group-mismatch:sales:s3'),
+      ).toBe(false);
+
+      // readiness 關鍵不變式：parallel-colead 不屬任何維度 → structure 維完全不受影響。
+      // （此 fixture 另有 span-narrow(info)/spof(warning) 等與 Phase F 無關的 finding，
+      //  會影響 span/keyPerson 維與 total；故只精準斷言「parallel-colead 不扣分」的結構維。）
+      const r = buildReadiness(health);
+      const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+      expect(byKey.structure.score).toBe(100); // 未被 parallel-colead 扣分
+      expect(byKey.structure.findingCount).toBe(0); // parallel-colead 不計入 structure
+
+      // 直接守門：parallel-colead 這筆 finding 不存在於任何 readiness 維度的計分集合內。
+      const PARALLEL = health.findings.find(
+        (f) => f.category === 'parallel-colead',
+      );
+      expect(PARALLEL).toBeDefined();
+      // 移除 parallel-colead 後重算 readiness → total 完全不變（證明它對就緒度零影響）。
+      const withoutParallel: OrgHealth = {
+        ...health,
+        findings: health.findings.filter((f) => f.category !== 'parallel-colead'),
+      };
+      expect(buildReadiness(withoutParallel).total).toBe(r.total);
+    });
+
+    it('parallel-colead 不計入 warningCount（severity=info）', () => {
+      // 同上最小化：只要有一筆 co-leader 即可。確認 info 不污染 warningCount。
+      const data = makeOrgData({
+        employees: [emp('ceo'), emp('coo'), emp('s1')],
+        groups: [
+          group('sales', { name: '業務部', leaderId: 'ceo' }),
+          group('exec', { name: '高管組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-ceo', { employeeId: 'ceo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-coo', { employeeId: 'coo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-s1', {
+            employeeId: 's1',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['coo'],
+            primarySupervisorId: 'coo',
+          }),
+          // 補一名 ceo 帶的 sales 成員，讓 leaderId=ceo 有意義（否則組內匯報根推導不影響本斷言）。
+          assignment('as-s0', {
+            employeeId: 'ceo',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            isPrimaryGroup: false,
+          }),
+        ],
+      });
+      const { findings, summary } = buildOrgHealth(data);
+      expect(findings.some((f) => f.category === 'parallel-colead')).toBe(true);
+      // parallel-colead 全為 info → 不進 warningCount。
+      const warnings = findings.filter((f) => f.severity === 'warning');
+      expect(summary.warningCount).toBe(warnings.length);
+      expect(findings.some((f) => f.category === 'parallel-colead' && f.severity !== 'info')).toBe(false);
+    });
+  });
+
+  describe('規則 2：group-mismatch（warning、主管完全在組外）', () => {
+    /**
+     * 重要實作觀察（co-lead 收緊後更新）：規則 2 的可達性取決於組外主管 s 是否「夠格」。
+     *
+     * 規則 2 對每筆 assignment 看其 primarySupervisorId=s 是否「在組外」。co-leader 收緊後，
+     * s 只有「夠格（isLeadLevel）」才被推成 co-leader：
+     *   - s 在組外、≠ leaderId、**且夠格**（主歸屬無上級／s 是某組 leaderId）
+     *     → s 被推成 co-leader → sIsCoLeader=true → 規則 2 跳過（改報 parallel-colead/info）。
+     *   - s 在組外、≠ leaderId、**但不夠格**（有上級且非任何組長＝掛錯組）
+     *     → s **不**是 co-leader → 規則 2 命中 → group-mismatch(warning)。【收緊後新可達】
+     *   - s === leaderId → sIsLeader=true → 規則 2 跳過。
+     *
+     * 即：「夠格」跨組主管視為合法平行共管（parallel-colead/info、不扣分）；
+     * 「不夠格」跨組主管視為掛錯組（group-mismatch/warning、扣 structure 維）。
+     * 以下測試同時守護兩半：夠格 → 豁免改報 parallel-colead；不夠格 → 命中 group-mismatch。
+     */
+
+    it('成員主管在組外、≠ leaderId、且「不夠格」（有上級且非任何組長）→ group-mismatch(warning)、扣 structure 維【收緊後可達正案例】', () => {
+      // teamA：leaderId=lead（組內）。成員 m 的 primary 主管 midMgr 在 teamB。
+      // midMgr 主歸屬掛 topBoss 為上級、且非任何組 leaderId → isLeadLevel=false（不夠格）。
+      // → midMgr 不被推成 teamA co-leader → 規則 2 命中 → group-mismatch:teamA:m(warning)。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('topBoss'), emp('midMgr', { name: '中階' }), emp('m', { name: '小明' })],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-top', { employeeId: 'topBoss', groupId: 'teamB', jobLevelId: 'j1' }),
+          // midMgr 在 teamB、主歸屬掛 topBoss（有上級）→ 不夠格。
+          assignment('as-mid', {
+            employeeId: 'midMgr',
+            groupId: 'teamB',
+            jobLevelId: 'j1',
+            supervisorIds: ['topBoss'],
+            primarySupervisorId: 'topBoss',
+          }),
+          // teamA 成員 m 的組外 primary 主管 = midMgr（不夠格）。
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['midMgr'],
+            primarySupervisorId: 'midMgr',
+          }),
+        ],
+      });
+      const health = buildOrgHealth(data);
+      // 命中 group-mismatch(warning)，訊息指出主管不屬本組。
+      const mismatch = health.findings.find((f) => f.id === 'group-mismatch:teamA:m');
+      expect(mismatch?.severity).toBe('warning');
+      expect(mismatch?.category).toBe('group-mismatch');
+      expect(mismatch?.employeeId).toBe('m');
+      expect(mismatch?.groupId).toBe('teamA');
+      expect(mismatch?.message).toContain('不屬於');
+      expect(mismatch?.message).toContain('A組');
+      // 不夠格 → 不被當 co-lead → 不報 parallel-colead 指向 midMgr。
+      expect(health.findings.some((f) => f.id === 'parallel-colead:teamA:midMgr')).toBe(false);
+      // 掛 structure 維（group-mismatch category）→ structure 自 100 扣 15。
+      const r = buildReadiness(health);
+      const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+      expect(byKey.structure.findingCount).toBeGreaterThanOrEqual(1);
+      expect(byKey.structure.score).toBeLessThanOrEqual(100 - 15);
+    });
+
+    it('成員主管在組外且 ≠ leaderId、但「夠格」（主歸屬無上級）→ 推成 co-leader → 豁免 group-mismatch、改報 parallel-colead(info)', () => {
+      // teamA：leaderId=lead（組內）；m 的主管 outsider 在 teamB。
+      // outsider 主歸屬無上級（primarySupervisorId 預設 null）→ isLeadLevel=true（夠格 path a）。
+      // outsider 是 teamA 成員 m 的組外 primary 主管、≠ lead、夠格 → 推成 co-leader → 規則 2 跳過。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('outsider'), emp('m')],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-outsider', { employeeId: 'outsider', groupId: 'teamB', jobLevelId: 'j1' }),
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['outsider'],
+            primarySupervisorId: 'outsider',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // 改報 parallel-colead(info)，不報 group-mismatch(warning)。
+      expect(findings.some((f) => f.id === 'parallel-colead:teamA:outsider')).toBe(true);
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:m')).toBe(false);
+    });
+
+    it('成員主管在組外且 = 該組 leaderId → 視為 leader，不報 group-mismatch、亦不報 parallel-colead', () => {
+      // leaderId=ceo（組外）；成員 m 主管 ceo → sIsLeader=true → 規則 2 跳過；
+      // ceo 為 leaderId → co-leader 推導排除 → 無 parallel-colead 指向 ceo。
+      const data = makeOrgData({
+        employees: [emp('ceo'), emp('m')],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'ceo' }),
+          group('exec', { name: '高管組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-ceo', { employeeId: 'ceo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['ceo'],
+            primarySupervisorId: 'ceo',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:m')).toBe(false);
+      expect(findings.some((f) => f.id === 'parallel-colead:teamA:ceo')).toBe(false);
+    });
+
+    it('多名成員掛同一組外主管 → 一律豁免 group-mismatch（co-lead 守門）', () => {
+      // a、b 皆掛組外 extBoss → extBoss 成 teamA co-leader（≠ leaderId）→ 兩人皆豁免。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('extBoss'), emp('a'), emp('b')],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('other', { name: '其他組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-ext', { employeeId: 'extBoss', groupId: 'other', jobLevelId: 'j1' }),
+          assignment('as-a', {
+            employeeId: 'a',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['extBoss'],
+            primarySupervisorId: 'extBoss',
+          }),
+          assignment('as-b', {
+            employeeId: 'b',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['extBoss'],
+            primarySupervisorId: 'extBoss',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'parallel-colead:teamA:extBoss')).toBe(true);
+      expect(findings.some((f) => f.id.startsWith('group-mismatch:teamA'))).toBe(false);
+    });
+  });
+
+  describe('規則 3：層級異常（warning、category=group-mismatch、組內主管但部屬未低於主管）', () => {
+    it('level 覆寫造成部屬 level <= 主管 level → level-anomaly(warning)、掛 structure 維', () => {
+      // boss、staff 同組；staff 主管 boss（組內）。
+      // 顯式覆寫：boss level=2、staff level=2 → memberLevel(2) <= supLevel(2) → 層級異常。
+      const data = makeOrgData({
+        employees: [emp('boss', { name: '主管' }), emp('staff', { name: '部屬' })],
+        groups: [group('dept', { kind: 'department', name: '部門' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', {
+            employeeId: 'boss',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            level: 2,
+          }),
+          assignment('as-staff', {
+            employeeId: 'staff',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+            level: 2, // 與主管同層 → 異常
+          }),
+        ],
+      });
+      const health = buildOrgHealth(data);
+      const anomaly = health.findings.find(
+        (f) => f.id === 'level-anomaly:dept:staff',
+      );
+      expect(anomaly?.severity).toBe('warning');
+      expect(anomaly?.category).toBe('group-mismatch');
+      expect(anomaly?.employeeId).toBe('staff');
+      expect(anomaly?.groupId).toBe('dept');
+      expect(anomaly?.message).toContain('層級異常');
+
+      // 掛 structure 維（group-mismatch category）→ structure 扣 15。
+      const r = buildReadiness(health);
+      const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+      expect(byKey.structure.findingCount).toBeGreaterThanOrEqual(1);
+      expect(byKey.structure.score).toBeLessThanOrEqual(100 - 15);
+    });
+
+    it('部屬 level 嚴格高於主管（正常）→ 不報層級異常', () => {
+      // boss level=1、staff level=2（嚴格高於）→ memberLevel(2) > supLevel(1) → 正常。
+      const data = makeOrgData({
+        employees: [emp('boss'), emp('staff')],
+        groups: [group('dept', { kind: 'department' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', {
+            employeeId: 'boss',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            level: 1,
+          }),
+          assignment('as-staff', {
+            employeeId: 'staff',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+            level: 2,
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'level-anomaly:dept:staff')).toBe(false);
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+
+    it('未覆寫 level、純主匯報深度（boss 第1層 / staff 第2層）→ 正常不報', () => {
+      // 不給 level → effectiveLevel 退回 computePrimaryDepth：boss=1、staff=2 → 正常。
+      const data = makeOrgData({
+        employees: [emp('boss'), emp('staff')],
+        groups: [group('dept', { kind: 'department' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', { employeeId: 'boss', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-staff', {
+            employeeId: 'staff',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+
+    it('co-lead 平行同層不報層級異常（負案例）：co-leader 與成員同層屬合法平行共管', () => {
+      // teamA：leaderId=lead（組內，level 1）。成員 peer 的主管 coLead 在組外、帶 peer →
+      // coLead 為 teamA co-leader。peer 與 coLead 同層（皆 level 1）。
+      // 規則 3 排除：a.employeeId 屬 co-lead 平行情境（sIsCoLeader 或成員為 co-leader）→ 不報。
+      // 此案例 peer 的主管 coLead 在組外（規則 3 只處理「s 在組內」）→ 走規則 2 路徑，
+      // 而 coLead 是 co-leader → 規則 2 也豁免。雙重確認同層平行不被任何規則報 warning。
+      const data = makeOrgData({
+        employees: [
+          emp('lead'),
+          emp('coLead'),
+          emp('peer'),
+        ],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('exec', { name: '高管組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', {
+            employeeId: 'lead',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            level: 1,
+          }),
+          assignment('as-coLead', {
+            employeeId: 'coLead',
+            groupId: 'exec',
+            jobLevelId: 'j1',
+            level: 1,
+          }),
+          assignment('as-peer', {
+            employeeId: 'peer',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['coLead'],
+            primarySupervisorId: 'coLead',
+            level: 1, // 與 coLead 同層
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // coLead 為 co-leader → parallel-colead(info)。
+      expect(findings.some((f) => f.id === 'parallel-colead:teamA:coLead')).toBe(true);
+      // 同層平行 → 不報任何 group-mismatch（含 level-anomaly）warning。
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+
+    it('成員本身是 co-leader 時，其與組內主管的層級比較被排除（規則 3 的 coLeaderIds.includes(a.employeeId) 分支）', () => {
+      // 構造一名「同時是 teamA 成員、又是 teamA co-leader」的人：
+      //   peerCo 在 teamA 有一筆歸屬，其 primary 主管 inBoss 在組內（→ 走規則 3「s 在組內」路徑）；
+      //   同時 peerCo 是另一成員 sub 的組外主管？不——需 peerCo 對某成員為「組外」主管才會被推 co-leader。
+      // 改以最直接方式觸發該排除分支：讓 peerCo 對組外某成員無關，而是讓 teamB 的成員掛 peerCo……
+      // 然而 co-leader 嚴格定義為「本組成員的組外 primary 主管」。要讓 peerCo 是 teamA co-leader，
+      // 必須有 teamA 成員的 primary 主管 = peerCo 且 peerCo ∉ teamA 成員集合——但我們又要 peerCo ∈ teamA。矛盾。
+      //
+      // 結論：在現行推導下「a.employeeId 同時為本組 co-leader」這條排除分支也不可自然到達
+      //（co-leader 必為組外）。此分支屬防禦性程式碼。本測試以「組內主管、部屬嚴格更深」的
+      // 正常結構守護規則 3 不誤報，並記錄上述不可達性（見回報的實作觀察）。
+      const data = makeOrgData({
+        employees: [emp('boss'), emp('mid'), emp('low')],
+        groups: [group('dept', { kind: 'department' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', { employeeId: 'boss', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'mid',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+          }),
+          assignment('as-low', {
+            employeeId: 'low',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['mid'],
+            primarySupervisorId: 'mid',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+  });
+
+  describe('Phase F active／組別 status 過濾（三規則皆跳過非 active 對象）', () => {
+    /**
+     * co-lead 收緊同批落地的補強：Phase F 三規則皆須過濾非 active 對象——
+     *  - 規則 1 parallel-colead：leader 或 co-leader 任一非 active → 不產生 finding。
+     *  - 規則 2/3：assignment 成員或其主管 s 任一非 active → 跳過；組別 status!=='active' → 跳過。
+     * 以下每案皆「若無過濾則本會產出 finding」，加過濾後應被抑制。
+     */
+
+    it('規則 1：co-leader 非 active → 不產生 parallel-colead', () => {
+      // coo 為 sales 推導 co-leader（exec leaderId、夠格），但 coo 設為 inactive →
+      // 規則 1 的 !isActive(coLeaderId) 守門 → 不產生 parallel-colead:sales:coo。
+      const data = makeOrgData({
+        employees: [
+          emp('ceo'),
+          emp('coo', { status: 'inactive' }),
+          emp('s1'),
+        ],
+        groups: [
+          group('sales', { name: '業務部', leaderId: 'ceo' }),
+          group('exec', { name: '高管組', leaderId: 'coo' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-ceo', { employeeId: 'ceo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-coo', { employeeId: 'coo', groupId: 'exec', jobLevelId: 'j1' }),
+          // ceo 在 sales 也有一筆（讓 sales leaderId=ceo 落在 active）。
+          assignment('as-ceo-sales', {
+            employeeId: 'ceo',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            isPrimaryGroup: false,
+          }),
+          // s1 主管 coo（組外、夠格 co-leader），但 coo inactive。
+          assignment('as-s1', {
+            employeeId: 's1',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['coo'],
+            primarySupervisorId: 'coo',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'parallel-colead:sales:coo')).toBe(false);
+      // s1 的主管 coo inactive → 規則 2/3 亦因 !isActive(s) 跳過 → 不誤報 group-mismatch。
+      expect(findings.some((f) => f.id === 'group-mismatch:sales:s1')).toBe(false);
+    });
+
+    it('規則 1：組長（leader）非 active → 不產生 parallel-colead', () => {
+      // sales leaderId=ceo 但 ceo inactive → 規則 1 的 !isActive(leaderId) 守門 → 整組不產 parallel-colead。
+      const data = makeOrgData({
+        employees: [
+          emp('ceo', { status: 'inactive' }),
+          emp('coo'),
+          emp('s1'),
+        ],
+        groups: [
+          group('sales', { name: '業務部', leaderId: 'ceo' }),
+          group('exec', { name: '高管組', leaderId: 'coo' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-ceo', { employeeId: 'ceo', groupId: 'exec', jobLevelId: 'j1' }),
+          assignment('as-coo', { employeeId: 'coo', groupId: 'exec', jobLevelId: 'j1' }),
+          // s1 主管 coo（夠格 co-leader）→ 正常本會出 parallel-colead，但 leader=ceo inactive 全組抑制。
+          assignment('as-s1', {
+            employeeId: 's1',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['coo'],
+            primarySupervisorId: 'coo',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.category === 'parallel-colead')).toBe(false);
+    });
+
+    it('規則 2/3：成員（assignment.employeeId）非 active → 跳過 group-mismatch', () => {
+      // 不夠格組外主管 midMgr 帶成員 m，但 m 設為 inactive → !isActive(a.employeeId) 跳過。
+      const data = makeOrgData({
+        employees: [
+          emp('lead'),
+          emp('topBoss'),
+          emp('midMgr'),
+          emp('m', { status: 'inactive' }),
+        ],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-top', { employeeId: 'topBoss', groupId: 'teamB', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'midMgr',
+            groupId: 'teamB',
+            jobLevelId: 'j1',
+            supervisorIds: ['topBoss'],
+            primarySupervisorId: 'topBoss',
+          }),
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['midMgr'],
+            primarySupervisorId: 'midMgr',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // m inactive → 規則 2 跳過（對照「成員 active」版本本會命中 group-mismatch:teamA:m）。
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:m')).toBe(false);
+    });
+
+    it('規則 2/3：主管 s 非 active → 跳過 group-mismatch（改由 chain-dangling 涵蓋）', () => {
+      // 不夠格組外主管 midMgr 設為 inactive → !isActive(s) 跳過規則 2。
+      const data = makeOrgData({
+        employees: [
+          emp('lead'),
+          emp('topBoss'),
+          emp('midMgr', { status: 'inactive' }),
+          emp('m'),
+        ],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-top', { employeeId: 'topBoss', groupId: 'teamB', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'midMgr',
+            groupId: 'teamB',
+            jobLevelId: 'j1',
+            supervisorIds: ['topBoss'],
+            primarySupervisorId: 'topBoss',
+          }),
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['midMgr'],
+            primarySupervisorId: 'midMgr',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:m')).toBe(false);
+      // 主管非 active → 改由 chain-dangling 表達（守護「不是靜默吞掉」）。
+      expect(findings.some((f) => f.id === 'chain-dangling:m')).toBe(true);
+    });
+
+    it('規則 2/3：組別 status!==active → 整組跳過（不報 group-mismatch / level-anomaly）', () => {
+      // 同「不夠格組外主管」結構，但把成員所屬組 teamA 設為 inactive → group.status 守門跳過。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('topBoss'), emp('midMgr'), emp('m')],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'lead', status: 'inactive' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'teamA', jobLevelId: 'j1' }),
+          assignment('as-top', { employeeId: 'topBoss', groupId: 'teamB', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'midMgr',
+            groupId: 'teamB',
+            jobLevelId: 'j1',
+            supervisorIds: ['topBoss'],
+            primarySupervisorId: 'topBoss',
+          }),
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['midMgr'],
+            primarySupervisorId: 'midMgr',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id.startsWith('group-mismatch:teamA'))).toBe(false);
+    });
+
+    it('規則 3：組別 status!==active → 即使組內層級異常也跳過', () => {
+      // 組內主管 boss / 部屬 staff 同層（level 2）本會報 level-anomaly，但組 inactive → 跳過。
+      const data = makeOrgData({
+        employees: [emp('boss'), emp('staff')],
+        groups: [group('dept', { kind: 'department', status: 'inactive' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', {
+            employeeId: 'boss',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            level: 2,
+          }),
+          assignment('as-staff', {
+            employeeId: 'staff',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+            level: 2,
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'level-anomaly:dept:staff')).toBe(false);
+    });
+  });
+
+  describe('規則 3 對稱化：成員側改用主歸屬 assignment（與主管側對稱）', () => {
+    it('成員在「被檢查組」那筆為次要歸屬且 level 看似異常，但其主歸屬層級正常 → 不誤報 level-anomaly', () => {
+      // 此 fixture 精準區分「用當前 a」vs「用成員主歸屬」兩種實作：
+      //   dept：boss level=1。staff 在 dept 的這筆是「次要」歸屬、掛 boss、level=1（與主管同層→看似異常）。
+      //   staff 的「主歸屬」在 home、level=5（正常很深）。
+      // - 舊（誤用當前 a＝dept 次要那筆）：memberLevel=1 <= supLevel(boss)=1 → 誤報 level-anomaly。
+      // - 修補後（成員側取主歸屬 home、level=5）：5 > 1 → 不報。對稱於主管側亦取其主歸屬。
+      const data = makeOrgData({
+        employees: [emp('boss'), emp('staff')],
+        groups: [
+          group('dept', { kind: 'department', name: '部門' }),
+          group('home', { kind: 'department', name: '本部' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-boss', {
+            employeeId: 'boss',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            level: 1,
+          }),
+          // staff 在 dept 的「次要」歸屬：掛 boss、level=1（看似與主管同層）。
+          assignment('as-staff-dept', {
+            employeeId: 'staff',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+            level: 1,
+            isPrimaryGroup: false,
+          }),
+          // staff 的「主歸屬」在 home：level=5（正常很深）→ 成員側對稱應採此筆。
+          assignment('as-staff-home', {
+            employeeId: 'staff',
+            groupId: 'home',
+            jobLevelId: 'j1',
+            level: 5,
+            isPrimaryGroup: true,
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // 成員側採主歸屬（home、level 5）對比主管 boss（level 1）→ 嚴格更深 → 不報層級異常。
+      // 若實作仍誤用「當前 a（dept 次要、level 1）」，memberLevel=1<=1 會誤報 → 本斷言守護修補。
+      expect(findings.some((f) => f.id === 'level-anomaly:dept:staff')).toBe(false);
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+  });
+
+  describe('不回歸：無跨組主管的單組資料，Phase F 不新增任何 finding', () => {
+    it('既有單組正常匯報結構（root→mid→leaf）→ 無 group-mismatch、無 parallel-colead', () => {
+      // 對齊既有 depth 測試的 fixture：全在 dept、主匯報遞減層級、無跨組主管。
+      const data = makeOrgData({
+        ...baseGroupsAndLevels(),
+        employees: [emp('root'), emp('mid'), emp('leaf')],
+        assignments: [
+          assignment('as-root', { employeeId: 'root', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'mid',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['root'],
+            primarySupervisorId: 'root',
+          }),
+          assignment('as-leaf', {
+            employeeId: 'leaf',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['mid'],
+            primarySupervisorId: 'mid',
+          }),
+        ],
+      });
+      const health = buildOrgHealth(data);
+      // Phase F 兩類別皆 0 筆（無跨組主管、層級正常遞減）。
+      expect(categoriesOf(health.findings)).not.toContain('group-mismatch');
+      expect(categoriesOf(health.findings)).not.toContain('parallel-colead');
+      // structure 維（Phase F 掛載點）完全未受影響 → 100、0 筆。
+      // （此 fixture 的 mid/root 各帶 1 名 → 另有 span-narrow(info) 影響 span 維與 total，
+      //  與 Phase F 無關；故只精準斷言 structure 維不被 Phase F 觸動。）
+      const r = buildReadiness(health);
+      const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+      expect(byKey.structure.score).toBe(100);
+      expect(byKey.structure.findingCount).toBe(0);
+    });
+
+    it('warningCount 不被 Phase F 影響：純 span-wide 場景的 warningCount 仍只計 span', () => {
+      // 9 名部屬同組 → span-wide(warning) + spof(warning)；無跨組主管 → Phase F 0 筆。
+      const reports = Array.from({ length: 9 }, (_, i) => `r${i}`);
+      const data = makeOrgData({
+        ...baseGroupsAndLevels(),
+        employees: [emp('sup'), ...reports.map((id) => emp(id))],
+        assignments: [
+          assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+          ...reports.map((id) =>
+            assignment(`as-${id}`, {
+              employeeId: id,
+              groupId: 'dept',
+              jobLevelId: 'j1',
+              supervisorIds: ['sup'],
+              primarySupervisorId: 'sup',
+            }),
+          ),
+        ],
+      });
+      const { findings, summary } = buildOrgHealth(data);
+      // Phase F 不新增任何 finding。
+      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+      expect(findings.some((f) => f.category === 'parallel-colead')).toBe(false);
+      // warningCount = span-wide(1) + spof(1) = 2，與 Phase F 前一致。
+      expect(summary.warningCount).toBe(2);
+    });
+  });
+});
+
 describe('buildOrgHealth — summary 與不變式', () => {
   it('summary 統計（active 人數、部門/職能數、warningCount）', () => {
     const data = makeOrgData({
@@ -787,11 +1596,12 @@ describe('buildReadiness（規劃就緒度 — 結構面）', () => {
    * 以最小 OrgHealth-like 物件造各類別 finding，精準控制每維度扣分，
    * 比真造一整份 OrgData 更穩定、邊界更好湊。
    *
-   * 維度 → category 對應（對齊契約 R0.5）：
+   * 維度 → category 對應（對齊契約 R0.5、Phase F 後）：
    *   span      ← ['span']
-   *   structure ← ['chain','cycle']
+   *   structure ← ['chain','cycle','group-mismatch']  // Phase F 新增 group-mismatch
    *   function  ← ['function']
    *   keyPerson ← ['spof']
+   * 註：'parallel-colead'（info）刻意不納入任何維度 → 不扣就緒度（合法資訊性標示）。
    * 計分：每維度自 100 起扣（warning −15、info −5），Math.max(0,…)；
    * total＝四維等權平均（Math.round）；level：≥80 high／60–79 medium／<60 low。
    */

@@ -26,6 +26,7 @@ import type { Group, GroupKind } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
 const NO_PARENT = '__none__';
+const NO_LEADER = '__none__';
 
 interface GroupFormProps {
   open: boolean;
@@ -74,6 +75,23 @@ export function GroupForm({
     () => toSelectOptions(GROUP_KIND_OPTIONS, group.kind, (o) => o.value, (o) => o.label),
     [group.kind],
   );
+
+  const leaderSelectValue = group.leaderId ?? NO_LEADER;
+
+  // 該組現有成員＝對應到此 groupId 的 assignment 所指向的員工（依姓名顯示）。
+  const memberEmployees = useMemo(() => {
+    const memberIds = new Set(
+      data.assignments.filter((a) => a.groupId === group.id).map((a) => a.employeeId),
+    );
+    return data.employees.filter((e) => memberIds.has(e.id));
+  }, [data.assignments, data.employees, group.id]);
+
+  const hasMembers = memberEmployees.length > 0;
+
+  const leaderOptions = useMemo(() => {
+    const items = [{ id: NO_LEADER, name: '未指定' }, ...memberEmployees];
+    return toSelectOptions(items, leaderSelectValue, (e) => e.id, (e) => e.name);
+  }, [memberEmployees, leaderSelectValue]);
 
   const isFunction = group.kind === 'function';
 
@@ -176,6 +194,42 @@ export function GroupForm({
             {isFunction && (
               <p className="text-xs text-muted-foreground">
                 職能為跨部門扁平結構，無上層組別。
+              </p>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="group-leader">組長</Label>
+            <Select
+              value={leaderSelectValue}
+              disabled={!hasMembers}
+              onValueChange={(value) => {
+                if (!value) return;
+                setGroup((g) => ({
+                  ...g,
+                  leaderId: value === NO_LEADER ? null : value,
+                }));
+              }}
+            >
+              <SelectTrigger
+                id="group-leader"
+                className="w-full bg-background"
+                aria-disabled={!hasMembers}
+              >
+                <SelectValue placeholder="未指定">
+                  {selectOptionLabel(leaderOptions, leaderSelectValue)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {leaderOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!hasMembers && (
+              <p className="text-xs text-muted-foreground">
+                此組尚無成員，存檔後再設組長。
               </p>
             )}
           </div>

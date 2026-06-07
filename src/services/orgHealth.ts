@@ -3,6 +3,7 @@ import {
   buildFunctionCoverage,
   type FunctionCoverage,
 } from './functionCoverage';
+import { deriveAllGroupLeadership } from './groupLeadership';
 import { computePrimaryDepth, effectiveLevel } from './reportingDepth';
 import { detectReportingCycleFromAssignments } from './validators';
 
@@ -50,7 +51,15 @@ export interface OrgHealthFinding {
   /** 穩定可預期字串（如 `span-wide:<empId>`），供測試斷言與 UI key。 */
   id: string;
   severity: 'warning' | 'info';
-  category: 'span' | 'depth' | 'function' | 'chain' | 'cycle' | 'spof';
+  category:
+    | 'span'
+    | 'depth'
+    | 'function'
+    | 'chain'
+    | 'cycle'
+    | 'spof'
+    | 'group-mismatch'
+    | 'parallel-colead';
   /** 繁中、可讀、可行動。 */
   message: string;
   /** 供 UI 連結（指向員工）。 */
@@ -131,7 +140,13 @@ const READINESS_DIMENSIONS: ReadonlyArray<{
   categories: ReadonlyArray<OrgHealthFinding['category']>;
 }> = [
   { key: 'span', label: '管理幅度健康', categories: ['span'] },
-  { key: 'structure', label: '結構完整性', categories: ['chain', 'cycle'] },
+  {
+    key: 'structure',
+    label: '結構完整性',
+    // group-mismatch（主管不屬本組／層級異常）與 chain/cycle 同屬結構面。
+    // parallel-colead 為合法的資訊性標示，刻意不納入任何維度（不扣就緒度）。
+    categories: ['chain', 'cycle', 'group-mismatch'],
+  },
   { key: 'function', label: '職能覆蓋', categories: ['function'] },
   { key: 'keyPerson', label: '關鍵人風險', categories: ['spof'] },
 ];
@@ -531,6 +546,93 @@ export function buildOrgHealth(
       message: `主管「${supName}」是 ${dependents.length} 名部屬的唯一主管，無備援；其不可用會讓多名部屬失去主管。`,
       employeeId: supId,
     });
+  }
+
+  // ---- 組別 ↔ 主管一致性（Phase F）----
+  // 重用 deriveAllGroupLeadership（leader + 推導式 co-leader）與既有 depthMap，
+  // 不重造深度/領導推導。三規則皆刻意排除「合法 co-lead 平行共管」情形，避免誤報。
+  const leadershipByGroup = deriveAllGroupLeadership(normalized);
+  const groupById = new Map(normalized.groups.map((g) => [g.id, g]));
+  const nameOf = (id: string): string => employeeById.get(id)?.name ?? id;
+
+  // 每組成員集合（該組所有 assignment 的 employeeId），供「主管是否在組內」判定。
+  const membersByGroup = new Map<string, Set<string>>();
+  for (const a of normalized.assignments) {
+    const set = membersByGroup.get(a.groupId) ?? new Set<string>();
+    set.add(a.employeeId);
+    membersByGroup.set(a.groupId, set);
+  }
+
+  // 規則 1：parallel-colead（info，合法但標示）——每組每位 co-leader 一筆，不扣分。
+  for (const [groupId, leadership] of leadershipByGroup) {
+    if (leadership.leaderId == null) continue;
+    if (!isActive(leadership.leaderId)) continue;
+    const group = groupById.get(groupId);
+    if (!group) continue;
+    for (const coLeaderId of leadership.coLeaderIds) {
+      if (!isActive(coLeaderId)) continue;
+      findings.push({
+        id: `parallel-colead:${groupId}:${coLeaderId}`,
+        severity: 'info',
+        category: 'parallel-colead',
+        message: `「${nameOf(coLeaderId)}」與組長「${nameOf(leadership.leaderId)}」平行共管「${group.name}」（同層）。`,
+        employeeId: coLeaderId,
+        groupId,
+      });
+    }
+  }
+
+  // 規則 2 & 3：對每筆 assignment（其 primarySupervisorId = s，非 null）檢查。
+  // 規則 2：group-mismatch（warning）——主管 s 不在該組（非成員、非 co-leader、非 leader）。
+  // 規則 3：層級異常（warning，併入 group-mismatch category）——s 在組內但部屬層級未低於 s。
+  for (const a of normalized.assignments) {
+    const s = a.primarySupervisorId;
+    if (s == null) continue;
+    if (!isActive(a.employeeId) || !isActive(s)) continue;
+    const group = groupById.get(a.groupId);
+    if (!group || group.status !== 'active') continue;
+    const leadership = leadershipByGroup.get(a.groupId);
+    const members = membersByGroup.get(a.groupId);
+    const sInGroup = members?.has(s) ?? false;
+    const sIsLeader = leadership?.leaderId === s;
+    const sIsCoLeader = leadership?.coLeaderIds.includes(s) ?? false;
+
+    if (!sInGroup) {
+      // 規則 2：主管在組外。排除合法 co-lead（s 為本組推導 co-leader）與 leader。
+      if (sIsCoLeader || sIsLeader) continue;
+      findings.push({
+        id: `group-mismatch:${a.groupId}:${a.employeeId}`,
+        severity: 'warning',
+        category: 'group-mismatch',
+        message: `「${nameOf(a.employeeId)}」的主管「${nameOf(s)}」不屬於「${group.name}」組。`,
+        employeeId: a.employeeId,
+        groupId: a.groupId,
+      });
+      continue;
+    }
+
+    // 規則 3：s 在組內。排除合法 co-lead 平行同層情形（成員或 s 為本組 co-leader）。
+    if (sIsCoLeader || leadership?.coLeaderIds.includes(a.employeeId)) continue;
+    // 成員與主管皆用 effectiveLevel（覆寫優先、否則主匯報深度）求層級，對稱比較。
+    // 兩側皆以其主歸屬 assignment 求 effectiveLevel；缺主歸屬則回退全公司 depthMap。
+    const memberPrimary = primaryByEmployee.get(a.employeeId);
+    const memberLevel = memberPrimary
+      ? effectiveLevel(memberPrimary, depthMap)
+      : depthMap.get(a.employeeId);
+    const supPrimary = primaryByEmployee.get(s);
+    const supLevel = supPrimary
+      ? effectiveLevel(supPrimary, depthMap)
+      : depthMap.get(s);
+    if (supLevel != null && memberLevel != null && memberLevel <= supLevel) {
+      findings.push({
+        id: `level-anomaly:${a.groupId}:${a.employeeId}`,
+        severity: 'warning',
+        category: 'group-mismatch',
+        message: `「${nameOf(a.employeeId)}」與主管「${nameOf(s)}」層級異常（部屬未低於主管）。`,
+        employeeId: a.employeeId,
+        groupId: a.groupId,
+      });
+    }
   }
 
   // ---- summary ----

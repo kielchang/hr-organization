@@ -13,6 +13,24 @@ export interface GroupLeadership {
   coLeaderIds: string[];
 }
 
+/**
+ * 判定某員工是否「夠格（lead-level）」當組外共管。
+ *
+ * 成立任一即夠格：
+ * - (a) 其**主歸屬 assignment**（isPrimaryGroup 優先、否則第一筆）的
+ *   `primarySupervisorId` 為 null（無上級主管）；或
+ * - (b) 其為**某 group 的 `leaderId`**。
+ *
+ * 不夠格者（有上級主管且非任何組長）視為「掛錯組」，不列入 co-leader。
+ */
+export function isLeadLevel(data: OrgData, employeeId: string): boolean {
+  if (data.groups.some((g) => g.leaderId === employeeId)) return true; // (b)
+  const own = data.assignments.filter((a) => a.employeeId === employeeId);
+  if (own.length === 0) return false;
+  const primary = own.find((a) => a.isPrimaryGroup) ?? own[0];
+  return primary.primarySupervisorId == null; // (a)
+}
+
 /** 取得某組的成員集合（該組所有 assignment 的 employeeId）。 */
 function groupMemberIds(data: OrgData, groupId: string): Set<string> {
   return new Set(
@@ -80,7 +98,8 @@ export function deriveInGroupRoot(data: OrgData, groupId: string): string | null
  *
  * - `leaderId`：優先取 `group.leaderId`；未設（null/undefined）時即時回退推「組內匯報根」。
  * - `coLeaderIds`：對每位成員看其「在本組那筆 assignment」的 `primarySupervisorId = s`，
- *   若 `s != null && s != leaderId && s ∉ M`（主管在組外）→ s 為 co-leader 候選；
+ *   若 `s != null && s != leaderId && s ∉ M`（主管在組外）**且 `isLeadLevel(s)`（夠格）**
+ *   → s 為 co-leader 候選；不夠格者屬「掛錯組」（由 Phase F 報警示），不列入。
  *   去重、排除 leaderId、回 employeeId 升冪的穩定排序陣列。
  * - 空組（無成員）→ `{ groupId, leaderId: null, coLeaderIds: [] }`。
  */
@@ -100,7 +119,12 @@ export function deriveGroupLeadership(
   for (const a of data.assignments) {
     if (a.groupId !== group.id) continue;
     const sup = a.primarySupervisorId;
-    if (sup != null && sup !== leaderId && !memberIds.has(sup)) {
+    if (
+      sup != null &&
+      sup !== leaderId &&
+      !memberIds.has(sup) &&
+      isLeadLevel(data, sup)
+    ) {
       coLeaderSet.add(sup);
     }
   }
