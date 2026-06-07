@@ -134,9 +134,9 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
       screen.getByRole('button', { name: '進入編輯' }),
     ).toBeInTheDocument();
 
-    // 組別視圖 panel 未掛載（Base UI Tabs 預設卸載非 active panel）→ 無 groupBox 框。
+    // 組別視圖 panel 未掛載（Base UI Tabs 預設卸載非 active panel）→ 無 groupZone 分區。
     expect(
-      document.querySelectorAll('.react-flow__node-groupBox'),
+      document.querySelectorAll('.react-flow__node-groupZone'),
     ).toHaveLength(0);
 
     expect(errorSpy).not.toHaveBeenCalled();
@@ -148,10 +148,10 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
 
     await user.click(screen.getByRole('tab', { name: /組別組織圖/ }));
 
-    // 組別框出現（seed 有多個 active 組 → 多框）。
+    // 組別背景分區出現（seed 有多個 active 組 → 多分區）。
     await waitFor(() =>
       expect(
-        document.querySelectorAll('.react-flow__node-groupBox').length,
+        document.querySelectorAll('.react-flow__node-groupZone').length,
       ).toBeGreaterThan(0),
     );
 
@@ -183,7 +183,7 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
     await user.click(screen.getByRole('tab', { name: /組別組織圖/ }));
     await waitFor(() =>
       expect(
-        document.querySelectorAll('.react-flow__node-groupBox').length,
+        document.querySelectorAll('.react-flow__node-groupZone').length,
       ).toBeGreaterThan(0),
     );
 

@@ -2,47 +2,49 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_GROUPS_VIEW_ID,
   buildGroupOrgGraph,
-  type GroupBoxNodeData,
+  snapXToGrid,
+  type GroupZoneNodeData,
 } from './buildGroupOrgGraph';
 import {
-  ORG_FLOW_LEVEL_GAP,
   ORG_FLOW_NODE_HEIGHT,
+  ORG_FLOW_NODE_SEP,
   ORG_FLOW_NODE_WIDTH,
 } from './buildOrgFlowGraph';
 import { assignment, emp, group, jobLevel, makeOrgData } from '../test/fixtures';
 import type { Node } from '@xyflow/react';
 
 /**
- * buildGroupOrgGraph（D1）：組別為主佈局。每個顯示的 active 組 → 一個 `groupBox`
- * 父節點 + 成員（含推導 co-leader）`employee` 子節點（parentId/extent='parent'）。
+ * buildGroupOrgGraph（D1，重設計）：一張連貫的組織圖 + 同組背景分區。
  *
- * 斷言聚焦「結構性不變式」而非絕對座標：
- * - 組別框集合（per active 顯示組、停用排除、ALL vs 單組）。
- * - 成員 parentId/extent、節點數含 co-leader 納入。
- * - 成員節點 id 作用域化 `${groupId}::${employeeId}`（裸 employeeId 仍在
- *   node.data.employee.id）；ALL 視角同員工跨多組 → 節點 id 全圖唯一、無重撞。
- * - co-lead 與 leader 同層（同 Y）；co-leader 部屬落在 co-leader 下一層。
- * - 組內匯報邊併入頂層 edges（type='reporting'、端點為作用域化 id、data.isPrimary）。
- * - 組間 parentId 邊（department 父子框；function 無；type='default'）。
- * - 所有 edge id 全域唯一。
- * - 父先排序（groupBox 在其子節點之前；RF v12 要求）。
- * - 框尺寸/相對座標合理；防呆（未知組/空組/循環）。
+ * 與舊版（groupBox 容器框 + parentId/extent 子節點 + 框內 levelLines + go-link 框邊）
+ * 的差異：
+ * - 成員為**攤平的頂層 `employee` 節點**：無 `parentId`、無 `extent`，position 為
+ *   **絕對座標**。節點 id 仍作用域化 `${groupId}::${employeeId}`、`data.employee.id`
+ *   保留裸 employeeId。
+ * - 每組一個 **`groupZone` 背景分區節點**（取代 groupBox）：`zIndex:0`、不可選/拖/連/刪、
+ *   data 帶 hue、**無 levelLines**；成員 `zIndex:1`；輸出順序 zone 先、member 後。
+ * - **X 欄位網格吸附**：所有成員 `position.x` 量化到 `COLUMN_WIDTH(260)` 格點
+ *   （`snapXToGrid`）；同層（同 Y）去重疊 → 同 Y 節點 X 間距 ≥ COLUMN_WIDTH。
+ * - 跨組匯報邊 `go-cross-*`（端點分屬不同 cluster）取代框錨點 `go-link-*`；組內邊
+ *   `go-${groupId}-e-*`、type='reporting'。
+ *
+ * 斷言聚焦「結構性不變式」而非絕對像素：分區集合、攤平節點屬性、X 吸附、zIndex/順序、
+ * 跨組邊端點、co-lead 同層、防呆。
  */
 
-const BOX_TYPE = 'groupBox';
+const ZONE_TYPE = 'groupZone';
 
-/** 取得某組的 groupBox 節點（type='groupBox'、id=`group:${groupId}`）。 */
-function boxOf(nodes: Node[], groupId: string): Node<GroupBoxNodeData> | undefined {
+/** 與實作同源的欄寬：NODE_WIDTH(200) + NODE_SEP(60) = 260。 */
+const COLUMN_WIDTH = ORG_FLOW_NODE_WIDTH + ORG_FLOW_NODE_SEP;
+
+/** 取得某組的 groupZone 背景節點（type='groupZone'、id=`group:${groupId}`）。 */
+function zoneOf(
+  nodes: Node[],
+  groupId: string,
+): Node<GroupZoneNodeData> | undefined {
   return nodes.find(
-    (n) => n.type === BOX_TYPE && n.id === `group:${groupId}`,
-  ) as Node<GroupBoxNodeData> | undefined;
-}
-
-/** 取得某組所有成員子節點（type='employee' 且 parentId 指向該框）。 */
-function membersOf(nodes: Node[], groupId: string): Node[] {
-  return nodes.filter(
-    (n) => n.type === 'employee' && n.parentId === `group:${groupId}`,
-  );
+    (n) => n.type === ZONE_TYPE && n.id === `group:${groupId}`,
+  ) as Node<GroupZoneNodeData> | undefined;
 }
 
 /** 取得作用域化成員節點 id（`${groupId}::${employeeId}`，與實作一致）。 */
@@ -50,10 +52,82 @@ function scopedId(groupId: string, employeeId: string): string {
   return `${groupId}::${employeeId}`;
 }
 
+/** 所有攤平 employee 節點。 */
+function allMembers(nodes: Node[]): Node[] {
+  return nodes.filter((n) => n.type === 'employee');
+}
+
 /**
- * 取得單一員工子節點。成員節點 id 已作用域化（`${groupId}::${employeeId}`），
+ * 某組的成員節點。成員已攤平（無 parentId）→ 以作用域化 id 前綴 `${groupId}::` 篩選。
+ */
+function membersOf(nodes: Node[], groupId: string): Node[] {
+  return nodes.filter(
+    (n) => n.type === 'employee' && n.id.startsWith(`${groupId}::`),
+  );
+}
+
+/**
+ * 某分區（groupZone）的絕對矩形 `[left, right] × [top, bottom]`。
+ * 取 `style.width/height`（與 `data.width/height` 同源，另有測試守護其一致）。
+ */
+function zoneRect(zone: Node<GroupZoneNodeData>): {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+} {
+  const width = zone.style?.width as number;
+  const height = zone.style?.height as number;
+  return {
+    left: zone.position.x,
+    right: zone.position.x + width,
+    top: zone.position.y,
+    bottom: zone.position.y + height,
+  };
+}
+
+/**
+ * 某成員節點的絕對矩形 `[x, x+NODE_WIDTH] × [y, y+NODE_HEIGHT]`（攤平後絕對座標）。
+ */
+function memberRect(member: Node): {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+} {
+  return {
+    left: member.position.x,
+    right: member.position.x + ORG_FLOW_NODE_WIDTH,
+    top: member.position.y,
+    bottom: member.position.y + ORG_FLOW_NODE_HEIGHT,
+  };
+}
+
+/**
+ * 斷言：某分區的每位成員矩形「完全落在」該分區矩形內（四邊皆不溢出）。
+ * 這是 zone 修正（依吸附+去重疊後成員實際 bounding box 回推）的核心回歸守護。
+ */
+function expectZoneContainsMembers(nodes: Node[], groupId: string): void {
+  const zone = zoneOf(nodes, groupId);
+  expect(zone, `groupZone for ${groupId}`).toBeDefined();
+  const z = zoneRect(zone!);
+  const members = membersOf(nodes, groupId);
+  for (const m of members) {
+    const r = memberRect(m);
+    // 四邊皆需包住（含等號：貼齊 padding 邊界視為包住）。
+    expect(r.left, `${m.id} left ≥ zone.left`).toBeGreaterThanOrEqual(z.left);
+    expect(r.right, `${m.id} right ≤ zone.right`).toBeLessThanOrEqual(z.right);
+    expect(r.top, `${m.id} top ≥ zone.top`).toBeGreaterThanOrEqual(z.top);
+    expect(r.bottom, `${m.id} bottom ≤ zone.bottom`).toBeLessThanOrEqual(
+      z.bottom,
+    );
+  }
+}
+
+/**
+ * 取得單一員工節點。成員節點 id 已作用域化（`${groupId}::${employeeId}`），
  * 裸 employeeId 仍保留在 `node.data.employee.id` → 以此還原查找。
- * 同員工跨多組時可指定 groupId 精確定位某框內節點。
+ * 同員工跨多組時可指定 groupId 精確定位某分區內節點。
  */
 function memberNode(
   nodes: Node[],
@@ -64,9 +138,44 @@ function memberNode(
     (n) =>
       n.type === 'employee' &&
       (n.data as { employee: { id: string } }).employee.id === employeeId &&
-      (groupId == null || n.parentId === `group:${groupId}`),
+      (groupId == null || n.id === scopedId(groupId, employeeId)),
   );
 }
+
+describe('snapXToGrid 純函式', () => {
+  it('把 X 吸附到最近的 COLUMN_WIDTH(260) 倍數', () => {
+    // 各輸入 → 最近 260 倍數（四捨五入）。
+    expect(snapXToGrid(0)).toBe(0);
+    expect(snapXToGrid(129)).toBe(0); // 129 < 130 → 取 0
+    expect(snapXToGrid(130)).toBe(260); // 130 = 半格 → 進位
+    expect(snapXToGrid(131)).toBe(260);
+    expect(snapXToGrid(260)).toBe(260);
+    expect(snapXToGrid(389)).toBe(260); // 389 < 390 → 取 260
+    expect(snapXToGrid(390)).toBe(520);
+    expect(snapXToGrid(521)).toBe(520);
+  });
+
+  it('負值吸附（Math.round 半數朝 +∞ → -0.5 進位到 0）', () => {
+    // Math.round(-0.5) === -0（朝 +∞），故 -130 吸附到 0、-131 才到 -260。
+    expect(snapXToGrid(-130)).toBe(-0);
+    expect(snapXToGrid(-131)).toBe(-260);
+    expect(snapXToGrid(-129)).toBe(-0);
+    expect(snapXToGrid(-260)).toBe(-260);
+    expect(snapXToGrid(-391)).toBe(-520);
+  });
+
+  it('輸出恆為 COLUMN_WIDTH 的整數倍', () => {
+    for (const x of [0, 17, 123, 260, 333, 517, 781, 1040, 1299]) {
+      expect(snapXToGrid(x) % COLUMN_WIDTH).toBe(0);
+    }
+  });
+
+  it('為純函式：不修改輸入、同輸入同輸出', () => {
+    const x = 333;
+    expect(snapXToGrid(x)).toBe(snapXToGrid(x));
+    expect(x).toBe(333);
+  });
+});
 
 describe('buildGroupOrgGraph 防呆', () => {
   it('未知組別 → error「找不到組別」、空 nodes/edges', () => {
@@ -89,14 +198,14 @@ describe('buildGroupOrgGraph 防呆', () => {
     expect(r.edges).toEqual([]);
   });
 
-  it('空組（無成員）→ 仍有一個空框、無成員子節點', () => {
+  it('空組（無成員）→ 仍有一個空分區、無成員節點', () => {
     const data = makeOrgData({
       groups: [group('g1')],
       assignments: [],
     });
     const r = buildGroupOrgGraph(data, 'g1');
     expect(r.error).toBeUndefined();
-    expect(boxOf(r.nodes, 'g1')).toBeDefined();
+    expect(zoneOf(r.nodes, 'g1')).toBeDefined();
     expect(membersOf(r.nodes, 'g1')).toHaveLength(0);
   });
 
@@ -134,7 +243,7 @@ describe('buildGroupOrgGraph 防呆', () => {
   });
 });
 
-describe('buildGroupOrgGraph 組別框集合', () => {
+describe('buildGroupOrgGraph 背景分區集合（groupZone）', () => {
   /** boss(g1) ← mid(g1) ← low(g1)；g2 停用、g3 active 空組。 */
   function org() {
     return makeOrgData({
@@ -166,21 +275,21 @@ describe('buildGroupOrgGraph 組別框集合', () => {
     });
   }
 
-  it('ALL 視角：每個 active 組一個框（停用組不顯示）', () => {
+  it('ALL 視角：每個 active 組一個分區（停用組不顯示）', () => {
     const r = buildGroupOrgGraph(org(), ALL_GROUPS_VIEW_ID);
-    const boxIds = r.nodes
-      .filter((n) => n.type === BOX_TYPE)
+    const zoneIds = r.nodes
+      .filter((n) => n.type === ZONE_TYPE)
       .map((n) => n.id)
       .sort();
-    // g1/g3 active → 兩框；g2 停用 → 不顯示。
-    expect(boxIds).toEqual(['group:g1', 'group:g3']);
+    // g1/g3 active → 兩分區；g2 停用 → 不顯示。
+    expect(zoneIds).toEqual(['group:g1', 'group:g3']);
   });
 
-  it('單組視角：只有該組一個框', () => {
+  it('單組視角：只有該組一個分區', () => {
     const r = buildGroupOrgGraph(org(), 'g1');
-    const boxes = r.nodes.filter((n) => n.type === BOX_TYPE);
-    expect(boxes).toHaveLength(1);
-    expect(boxes[0].id).toBe('group:g1');
+    const zones = r.nodes.filter((n) => n.type === ZONE_TYPE);
+    expect(zones).toHaveLength(1);
+    expect(zones[0].id).toBe('group:g1');
   });
 
   it('停用組的成員不出現在 ALL 視角', () => {
@@ -188,21 +297,53 @@ describe('buildGroupOrgGraph 組別框集合', () => {
     expect(memberNode(r.nodes, 'out')).toBeUndefined();
   });
 
-  it('groupBox 節點帶 data（groupId/groupName/kind/leaderId/coLeaderIds/尺寸）', () => {
+  it('groupZone 節點帶 data（groupId/groupName/kind/leaderId/coLeaderIds/尺寸/hue）', () => {
     const r = buildGroupOrgGraph(org(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(box.data.groupId).toBe('g1');
-    expect(box.data.groupName).toBe('g1');
-    expect(box.data.kind).toBe('department');
+    const zone = zoneOf(r.nodes, 'g1')!;
+    expect(zone.data.groupId).toBe('g1');
+    expect(zone.data.groupName).toBe('g1');
+    expect(zone.data.kind).toBe('department');
     // 無顯式 leaderId → 回退組內匯報根 boss。
-    expect(box.data.leaderId).toBe('boss');
-    expect(box.data.coLeaderIds).toEqual([]);
-    expect(box.data.width).toBeGreaterThan(0);
-    expect(box.data.height).toBeGreaterThan(0);
+    expect(zone.data.leaderId).toBe('boss');
+    expect(zone.data.coLeaderIds).toEqual([]);
+    expect(zone.data.width).toBeGreaterThan(0);
+    expect(zone.data.height).toBeGreaterThan(0);
+    // 分區淡色色相（0–360）。
+    expect(typeof zone.data.hue).toBe('number');
+    expect(zone.data.hue).toBeGreaterThanOrEqual(0);
+    expect(zone.data.hue).toBeLessThanOrEqual(360);
+  });
+
+  it('groupZone 為背景、低層、不互動（zIndex:0、不可選/拖/連/刪）、無 levelLines', () => {
+    const r = buildGroupOrgGraph(org(), 'g1');
+    const zone = zoneOf(r.nodes, 'g1')!;
+    expect(zone.zIndex).toBe(0);
+    expect(zone.selectable).toBe(false);
+    expect(zone.draggable).toBe(false);
+    expect(zone.connectable).toBe(false);
+    expect(zone.deletable).toBe(false);
+    // 重設計移除框內層級輔助線。
+    expect('levelLines' in (zone.data as Record<string, unknown>)).toBe(false);
+  });
+
+  it('groupZone style.width/height 與 data.width/height 一致', () => {
+    const r = buildGroupOrgGraph(org(), 'g1');
+    const zone = zoneOf(r.nodes, 'g1')!;
+    expect(zone.style?.width).toBe(zone.data.width);
+    expect(zone.style?.height).toBe(zone.data.height);
+  });
+
+  it('ALL 視角各分區 hue 不同（相鄰組以不同色相區隔）', () => {
+    const r = buildGroupOrgGraph(org(), ALL_GROUPS_VIEW_ID);
+    const hues = r.nodes
+      .filter((n) => n.type === ZONE_TYPE)
+      .map((n) => (n.data as GroupZoneNodeData).hue);
+    // g1/g3 兩分區 → 兩個相異 hue。
+    expect(new Set(hues).size).toBe(hues.length);
   });
 });
 
-describe('buildGroupOrgGraph 成員子節點', () => {
+describe('buildGroupOrgGraph 成員為攤平頂層節點', () => {
   function org() {
     return makeOrgData({
       employees: [emp('boss'), emp('mid'), emp('low')],
@@ -225,13 +366,14 @@ describe('buildGroupOrgGraph 成員子節點', () => {
     });
   }
 
-  it('成員 parentId===group:${g.id}、extent===parent', () => {
+  it('成員為頂層節點：無 parentId、無 extent、type==="employee"', () => {
     const r = buildGroupOrgGraph(org(), 'g1');
     const members = membersOf(r.nodes, 'g1');
     expect(members).toHaveLength(3);
     for (const m of members) {
-      expect(m.parentId).toBe('group:g1');
-      expect(m.extent).toBe('parent');
+      expect(m.parentId).toBeUndefined();
+      expect(m.extent).toBeUndefined();
+      expect(m.type).toBe('employee');
     }
   });
 
@@ -269,6 +411,13 @@ describe('buildGroupOrgGraph 成員子節點', () => {
     expect(typeof (boss.data as { level?: number }).level).toBe('number');
   });
 
+  it('成員節點 zIndex:1（疊在分區之上）', () => {
+    const r = buildGroupOrgGraph(org(), 'g1');
+    for (const m of membersOf(r.nodes, 'g1')) {
+      expect(m.zIndex).toBe(1);
+    }
+  });
+
   it('成員節點帶該員 assignmentId（非空）；diffMap 帶入 diffStatus', () => {
     const diffMap = new Map([['boss', 'modified' as const]]);
     const r = buildGroupOrgGraph(org(), 'g1', diffMap);
@@ -278,18 +427,200 @@ describe('buildGroupOrgGraph 成員子節點', () => {
   });
 });
 
+describe('buildGroupOrgGraph X 欄位網格吸附', () => {
+  /** boss ← {mid1, mid2, mid3}：第二層三人 → 同層多節點檢驗去重疊。 */
+  function wideOrg() {
+    return makeOrgData({
+      employees: [emp('boss'), emp('mid1'), emp('mid2'), emp('mid3')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('a-mid1', {
+          employeeId: 'mid1',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-mid2', {
+          employeeId: 'mid2',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-mid3', {
+          employeeId: 'mid3',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+  }
+
+  /** 跨多組（ALL 視角）：驗證全圖共用刻度、跨組成員 X 皆在格點。 */
+  function multiGroupOrg() {
+    return makeOrgData({
+      employees: [
+        emp('p'),
+        emp('pc'),
+        emp('c'),
+        emp('cc'),
+        emp('a'),
+        emp('b'),
+      ],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+        group('fn', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-pc', {
+          employeeId: 'pc',
+          groupId: 'parent',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+        }),
+        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
+        assignment('a-cc', {
+          employeeId: 'cc',
+          groupId: 'child',
+          supervisorIds: ['c'],
+          primarySupervisorId: 'c',
+        }),
+        assignment('a-a', { employeeId: 'a', groupId: 'fn' }),
+        assignment('a-b', {
+          employeeId: 'b',
+          groupId: 'fn',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+  }
+
+  it('單組：所有成員 position.x 為 COLUMN_WIDTH(260) 倍數', () => {
+    const r = buildGroupOrgGraph(wideOrg(), 'g1');
+    for (const m of membersOf(r.nodes, 'g1')) {
+      expect(m.position.x % COLUMN_WIDTH).toBe(0);
+    }
+  });
+
+  it('ALL 視角（跨組）：全圖所有成員 position.x 皆為 COLUMN_WIDTH(260) 倍數', () => {
+    const r = buildGroupOrgGraph(multiGroupOrg(), ALL_GROUPS_VIEW_ID);
+    const members = allMembers(r.nodes);
+    expect(members.length).toBeGreaterThan(0);
+    for (const m of members) {
+      expect(m.position.x % COLUMN_WIDTH).toBe(0);
+    }
+  });
+
+  it('同層（同 Y）不重疊：同 Y 節點相鄰 X 間距 ≥ COLUMN_WIDTH', () => {
+    const r = buildGroupOrgGraph(wideOrg(), 'g1');
+    const byY = new Map<number, number[]>();
+    for (const m of allMembers(r.nodes)) {
+      const arr = byY.get(m.position.y) ?? [];
+      arr.push(m.position.x);
+      byY.set(m.position.y, arr);
+    }
+    for (const xs of byY.values()) {
+      xs.sort((a, b) => a - b);
+      for (let i = 1; i < xs.length; i++) {
+        // 去重疊後相鄰 X 間距至少一格欄寬（且仍在格點上）。
+        expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(COLUMN_WIDTH);
+      }
+    }
+  });
+
+  it('同層 X 皆相異（去重疊後同 Y 無兩節點重合）', () => {
+    const r = buildGroupOrgGraph(wideOrg(), 'g1');
+    const byY = new Map<number, number[]>();
+    for (const m of allMembers(r.nodes)) {
+      const arr = byY.get(m.position.y) ?? [];
+      arr.push(m.position.x);
+      byY.set(m.position.y, arr);
+    }
+    for (const xs of byY.values()) {
+      expect(new Set(xs).size).toBe(xs.length);
+    }
+  });
+
+  it('ALL 視角同層去重疊：每個層帶內 X 兩兩間距 ≥ COLUMN_WIDTH 且皆在格點', () => {
+    const r = buildGroupOrgGraph(multiGroupOrg(), ALL_GROUPS_VIEW_ID);
+    const byY = new Map<number, number[]>();
+    for (const m of allMembers(r.nodes)) {
+      const arr = byY.get(m.position.y) ?? [];
+      arr.push(m.position.x);
+      byY.set(m.position.y, arr);
+    }
+    for (const xs of byY.values()) {
+      xs.sort((a, b) => a - b);
+      for (const x of xs) expect(x % COLUMN_WIDTH).toBe(0);
+      for (let i = 1; i < xs.length; i++) {
+        expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(COLUMN_WIDTH);
+      }
+    }
+  });
+});
+
+describe('buildGroupOrgGraph 輸出順序（zone 先、member 後）', () => {
+  it('所有 groupZone 節點排在所有 employee 節點之前', () => {
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mid'), emp('a'), emp('b')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('a-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-a', { employeeId: 'a', groupId: 'g2' }),
+        assignment('a-b', {
+          employeeId: 'b',
+          groupId: 'g2',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    const lastZoneIdx = r.nodes.reduce(
+      (acc, n, i) => (n.type === ZONE_TYPE ? i : acc),
+      -1,
+    );
+    const firstMemberIdx = r.nodes.findIndex((n) => n.type === 'employee');
+    expect(lastZoneIdx).toBeGreaterThanOrEqual(0);
+    expect(firstMemberIdx).toBeGreaterThanOrEqual(0);
+    // 最後一個 zone 仍在第一個 member 之前。
+    expect(lastZoneIdx).toBeLessThan(firstMemberIdx);
+  });
+
+  it('zone zIndex(0) < member zIndex(1)：成員視覺疊於分區之上', () => {
+    const data = makeOrgData({
+      employees: [emp('boss')],
+      groups: [group('g1')],
+      assignments: [assignment('a-boss', { employeeId: 'boss', groupId: 'g1' })],
+    });
+    const r = buildGroupOrgGraph(data, 'g1');
+    const zone = zoneOf(r.nodes, 'g1')!;
+    const boss = memberNode(r.nodes, 'boss')!;
+    expect(zone.zIndex).toBeLessThan(boss.zIndex as number);
+  });
+});
+
 describe('buildGroupOrgGraph ALL 視角節點 id 唯一（作用域化）', () => {
   /**
-   * 同一員工跨多組（含 co-leader 被納入多框）→ 全圖成員節點 id 必須唯一。
+   * 同一員工跨多組（含 co-leader 被納入多分區）→ 全圖成員節點 id 必須唯一。
    *
    * 佈局：
    * - dual 同時隸屬 g1 與 g2（兩組各一筆 assignment）→ 跨組同員工。
    * - boss 任職 hq、為 hq 組長（isLeadLevel 夠格），且是 g1、g2 兩組成員的**組外
    *   primary 主管**；g1/g2 的 leaderId 各為本組成員（a0/b0，非 boss）→ boss 對
-   *   g1、g2 皆符合 co-leader 條件（sup ∉ M、sup ≠ leaderId、isLeadLevel）→ boss
-   *   同時被納入 g1、g2 兩框（同員工出現在多框）。
+   *   g1、g2 皆符合 co-leader 條件 → boss 同時被納入 g1、g2 兩分區。
    *
-   * 期望：用裸 employeeId 會在多框產生相同 id；實作以 `${groupId}::${employeeId}`
+   * 期望：用裸 employeeId 會在多分區產生相同 id；實作以 `${groupId}::${employeeId}`
    * 作用域化 → 全圖成員節點 id 集合大小 == 成員節點數（無重撞）。
    */
   function crossGroupOrg() {
@@ -308,16 +639,13 @@ describe('buildGroupOrgGraph ALL 視角節點 id 唯一（作用域化）', () =
         group('g2', { leaderId: 'b0' }),
       ],
       assignments: [
-        // boss 任職 hq、為 hq 組長 → isLeadLevel 夠格當組外共管。
         assignment('h-boss', { employeeId: 'boss', groupId: 'hq' }),
-        // dual 同時隸屬 g1 與 g2（跨組同員工）。
         assignment('d-g1', { employeeId: 'dual', groupId: 'g1' }),
         assignment('d-g2', {
           employeeId: 'dual',
           groupId: 'g2',
           isPrimaryGroup: false,
         }),
-        // g1：本組組長 a0；a1 的組外 primary 主管為 boss → boss 為 g1 co-leader。
         assignment('a0-g1', { employeeId: 'a0', groupId: 'g1' }),
         assignment('a1-g1', {
           employeeId: 'a1',
@@ -325,7 +653,6 @@ describe('buildGroupOrgGraph ALL 視角節點 id 唯一（作用域化）', () =
           supervisorIds: ['boss'],
           primarySupervisorId: 'boss',
         }),
-        // g2：本組組長 b0；b1 的組外 primary 主管為 boss → boss 為 g2 co-leader。
         assignment('b0-g2', { employeeId: 'b0', groupId: 'g2' }),
         assignment('b1-g2', {
           employeeId: 'b1',
@@ -339,33 +666,30 @@ describe('buildGroupOrgGraph ALL 視角節點 id 唯一（作用域化）', () =
 
   it('全圖成員節點 id 為作用域化格式 `${groupId}::${employeeId}`', () => {
     const r = buildGroupOrgGraph(crossGroupOrg(), ALL_GROUPS_VIEW_ID);
-    const memberNodes = r.nodes.filter((n) => n.type === 'employee');
-    for (const n of memberNodes) {
+    for (const n of allMembers(r.nodes)) {
       const empId = (n.data as { employee: { id: string } }).employee.id;
-      const gid = (n.parentId as string).replace(/^group:/, '');
+      // id 末段為裸 employeeId、前綴為 `${groupId}::`。
+      expect(n.id.endsWith(`::${empId}`)).toBe(true);
+      const gid = n.id.slice(0, n.id.length - `::${empId}`.length);
       expect(n.id).toBe(scopedId(gid, empId));
     }
   });
 
-  it('同員工跨多組（含 co-leader 納入多框）→ 節點 id 集合大小 == 成員節點數（無重撞）', () => {
+  it('同員工跨多組（含 co-leader 納入多分區）→ 節點 id 集合大小 == 成員節點數（無重撞）', () => {
     const r = buildGroupOrgGraph(crossGroupOrg(), ALL_GROUPS_VIEW_ID);
-    const memberNodes = r.nodes.filter((n) => n.type === 'employee');
-    const ids = memberNodes.map((n) => n.id);
-    // 全圖唯一：若用裸 employeeId，dual（跨 g1/g2）與 lead（co-lead 入 g1/g2）
-    // 會在多框重撞；作用域化後集合大小 == 節點數。
-    expect(new Set(ids).size).toBe(memberNodes.length);
+    const members = allMembers(r.nodes);
+    const ids = members.map((n) => n.id);
+    expect(new Set(ids).size).toBe(members.length);
 
-    // 實證確有「同一裸 employeeId 出現在多框」（否則此測試無鑑別力）。
-    const dualNodes = memberNodes.filter(
+    // 實證確有「同一裸 employeeId 出現在多分區」（否則此測試無鑑別力）。
+    const dualNodes = members.filter(
       (n) => (n.data as { employee: { id: string } }).employee.id === 'dual',
     );
-    const bossNodes = memberNodes.filter(
+    const bossNodes = members.filter(
       (n) => (n.data as { employee: { id: string } }).employee.id === 'boss',
     );
-    // dual 跨 g1/g2；boss 以 co-leader 身分被納入 g1、g2 兩框 → 各自 ≥2 節點。
     expect(dualNodes.length).toBeGreaterThanOrEqual(2);
     expect(bossNodes.length).toBeGreaterThanOrEqual(2);
-    // 跨框同員工的節點 id 仍互異（作用域不同）。
     expect(new Set(dualNodes.map((n) => n.id)).size).toBe(dualNodes.length);
     expect(new Set(bossNodes.map((n) => n.id)).size).toBe(bossNodes.length);
   });
@@ -374,21 +698,17 @@ describe('buildGroupOrgGraph ALL 視角節點 id 唯一（作用域化）', () =
     const r = buildGroupOrgGraph(crossGroupOrg(), ALL_GROUPS_VIEW_ID);
     const dualG1 = memberNode(r.nodes, 'dual', 'g1')!;
     const dualG2 = memberNode(r.nodes, 'dual', 'g2')!;
-    // 不同框 → 節點 id 不同，但 data.employee.id 同為裸 employeeId。
     expect(dualG1.id).not.toBe(dualG2.id);
     expect((dualG1.data as { employee: { id: string } }).employee.id).toBe('dual');
     expect((dualG2.data as { employee: { id: string } }).employee.id).toBe('dual');
   });
 });
 
-describe('buildGroupOrgGraph co-leader 納框與同層', () => {
+describe('buildGroupOrgGraph co-leader 納入分區與同層', () => {
   /**
    * CEO/COO 案：sales 組 leaderId=CEO（CEO 本人不在 sales）。
    * 成員 s1/s2 主管 CEO；s3/s4 主管 COO（COO 組外、是 exec 組 leaderId → 夠格）。
-   * → COO 為 co-leader、納入 sales 框、與 leader（CEO？）同層。
-   *
-   * 注意：leaderId=CEO，但 CEO 不在 sales 成員集合，故框內的「leader 同層基準」
-   * 由實作以 depthMap 推得（leaderLevel）。co-leader（COO）與其鉗到同層。
+   * → COO 為 co-leader、納入 sales 分區、與 leader（s1/s2 同層）同層。
    */
   function ceoCooOrg() {
     const sales = group('sales', { leaderId: 'CEO' });
@@ -438,15 +758,12 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
     });
   }
 
-  it('co-leader（組外主管）納入組框作為成員節點', () => {
+  it('co-leader（組外主管）納入分區作為成員節點', () => {
     const r = buildGroupOrgGraph(ceoCooOrg(), 'sales');
-    // s1..s4 為成員、COO 為 co-leader 納入。CEO 是 leaderId 但不在 sales 成員、
-    // 也非「組外 primary 主管帶成員」之 co-leader（CEO==leaderId 被排除）→ 不納框。
     const empIds = membersOf(r.nodes, 'sales')
       .map((n) => (n.data as { employee: { id: string } }).employee.id)
       .sort();
     expect(empIds).toEqual(['COO', 's1', 's2', 's3', 's4']);
-    // 節點 id 作用域化到 sales 框。
     const ids = membersOf(r.nodes, 'sales')
       .map((n) => n.id)
       .sort();
@@ -463,7 +780,6 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
     const r = buildGroupOrgGraph(ceoCooOrg(), 'sales');
     const coo = memberNode(r.nodes, 'COO')!;
     expect((coo.data as { assignmentId: string }).assignmentId).toBe('');
-    // 一般成員有非空 assignmentId（對照）。
     const s3 = memberNode(r.nodes, 's3')!;
     expect((s3.data as { assignmentId: string }).assignmentId).toBe('x-s3');
   });
@@ -472,17 +788,12 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
     const r = buildGroupOrgGraph(ceoCooOrg(), 'sales');
     const lv = (id: string) =>
       (memberNode(r.nodes, id)!.data as { level: number }).level;
-    // s1/s2 主管 CEO（leaderId、組外非 co-leader）→ 落 leaderLevel 起算的根層。
-    // COO 為 co-leader → 與 leader 同層；s3/s4 主管 COO → COO 下一層。
     expect(lv('s3')).toBe(lv('COO') + 1);
     expect(lv('s4')).toBe(lv('COO') + 1);
-    // 確認 s3/s4 確實比 COO 低一層（非同層）。
     expect(lv('s3')).toBeGreaterThan(lv('COO'));
   });
 
-  it('co-lead 與「組長同層」：COO（co-leader）與 s1/s2（直屬組長 CEO 的成員）同層', () => {
-    // CEO 是 leaderId 但不在框內；CEO 的直屬 s1/s2 為框內最上層（leaderLevel 起算根）。
-    // COO 為 co-leader → 鉗到 leaderLevel → 與 s1/s2 同層（呈現平行同層共管）。
+  it('co-lead 與「組長同層」：COO（co-leader）與 s1/s2 同層（同 level）', () => {
     const r = buildGroupOrgGraph(ceoCooOrg(), 'sales');
     const lv = (id: string) =>
       (memberNode(r.nodes, id)!.data as { level: number }).level;
@@ -490,7 +801,7 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
     expect(lv('COO')).toBe(lv('s2'));
   });
 
-  it('co-lead 與 leader 同層（leader 在組內案）：leader 與 co-leader 同 Y', () => {
+  it('co-lead 與 leader 同 Y（同層 → applyLevelBands 同一 Y 帶）', () => {
     // 業務部 leaderId=lead（在組內、無上級）；成員 m 主管 lead；
     // 另一成員 m2 主管 coLead（組外、是 exec leaderId → 夠格 co-leader）。
     const sales = group('sales', { leaderId: 'lead' });
@@ -517,11 +828,9 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
     const r = buildGroupOrgGraph(data, 'sales');
     const node = (id: string) => memberNode(r.nodes, id)!;
     const lvl = (id: string) => (node(id).data as { level: number }).level;
-    // leader 與 co-leader 同層級。
     expect(lvl('coLead')).toBe(lvl('lead'));
-    // 同層級 → 同 Y（applyLevelBands 以 level 決定 Y）。
+    // 同層級 → 同 Y（攤平後絕對座標仍同層帶 Y）。
     expect(node('coLead').position.y).toBe(node('lead').position.y);
-    // co-leader 的部屬 m2 落在下一層（比 co-leader 大 1）。
     expect(lvl('m2')).toBe(lvl('coLead') + 1);
   });
 
@@ -532,79 +841,12 @@ describe('buildGroupOrgGraph co-leader 納框與同層', () => {
   });
 });
 
-describe('buildGroupOrgGraph 組間關聯邊', () => {
-  it('department 父子框 → group:parent→group:child 邊', () => {
-    const data = makeOrgData({
-      employees: [emp('p'), emp('c')],
-      groups: [
-        group('parent', { kind: 'department' }),
-        group('child', { kind: 'department', parentId: 'parent' }),
-      ],
-      assignments: [
-        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
-        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
-      ],
-    });
-    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    const link = r.edges.find(
-      (e) => e.source === 'group:parent' && e.target === 'group:child',
-    );
-    expect(link).toBeDefined();
-    // 組間 link 邊為 type='default'（與組內 reporting 邊區隔）。
-    expect(link!.type).toBe('default');
-  });
-
-  it('function 組（parentId null）→ 無組間邊', () => {
-    const data = makeOrgData({
-      employees: [emp('a'), emp('b')],
-      groups: [
-        group('fn1', { kind: 'function', parentId: null }),
-        group('fn2', { kind: 'function', parentId: null }),
-      ],
-      assignments: [
-        assignment('a-a', { employeeId: 'a', groupId: 'fn1' }),
-        assignment('a-b', { employeeId: 'b', groupId: 'fn2' }),
-      ],
-    });
-    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    // 框間無 group:→group: 邊（兩個職能組各自並排）。
-    const linkEdges = r.edges.filter(
-      (e) => e.source.startsWith('group:') && e.target.startsWith('group:'),
-    );
-    expect(linkEdges).toHaveLength(0);
-  });
-
-  it('單組視角：父框不在顯示集合 → 不連組間邊', () => {
-    const data = makeOrgData({
-      employees: [emp('p'), emp('c')],
-      groups: [
-        group('parent', { kind: 'department' }),
-        group('child', { kind: 'department', parentId: 'parent' }),
-      ],
-      assignments: [
-        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
-        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
-      ],
-    });
-    // 僅顯示 child → parent 不在集合 → 無組間邊。
-    const r = buildGroupOrgGraph(data, 'child');
-    const linkEdges = r.edges.filter(
-      (e) => e.source.startsWith('group:') && e.target.startsWith('group:'),
-    );
-    expect(linkEdges).toHaveLength(0);
-  });
-
+describe('buildGroupOrgGraph 組內匯報邊', () => {
   /**
-   * 組內成員匯報邊併入頂層 edges（先前缺口已修）：
-   *
-   * `layoutIntraGroup` 算出的組內成員匯報邊（type='reporting'、`data.isPrimary`）
-   * 現已併入 `buildGroupOrgGraph` 回傳的頂層 `edges`，端點為作用域化 id
-   * （`${groupId}::${employeeId}`，與成員節點 id 一致）。
-   *
-   * 這讓 GroupOrgFlowChart `edges={edges}` 能在框內畫出成員間匯報連線，
-   * 與 GroupOrgLegendInfo 圖例（主匯報實線／其他主管虛線）一致。
+   * 組內成員匯報邊：type='reporting'、edge id `go-${groupId}-e-*`、端點為作用域化 id
+   * （`${groupId}::${employeeId}`，與成員節點 id 一致）、`data.isPrimary` 標主/次匯報。
    */
-  it('組內成員匯報邊併入頂層 edges：含 type=reporting、端點為作用域化 id、data.isPrimary', () => {
+  it('組內匯報邊：type=reporting、端點為作用域化 id、data.isPrimary、id 帶組前綴', () => {
     const data = makeOrgData({
       employees: [emp('boss'), emp('mid')],
       groups: [group('g1')],
@@ -619,7 +861,6 @@ describe('buildGroupOrgGraph 組間關聯邊', () => {
       ],
     });
     const r = buildGroupOrgGraph(data, 'g1');
-    // 組內匯報邊存在：端點為作用域化 id（指向同框 boss/mid 成員節點）。
     const intra = r.edges.find(
       (e) =>
         e.source === scopedId('g1', 'boss') &&
@@ -627,20 +868,17 @@ describe('buildGroupOrgGraph 組間關聯邊', () => {
     );
     expect(intra).toBeDefined();
     expect(intra!.type).toBe('reporting');
-    // boss 為 mid 的 primarySupervisor → 主匯報（實線）。
+    expect(intra!.id).toMatch(/^go-g1-e-/);
     expect((intra!.data as { isPrimary: boolean }).isPrimary).toBe(true);
     // 端點 id 與實際成員節點 id 對得上（非懸空邊）。
-    const ids = new Set(
-      membersOf(r.nodes, 'g1').map((n) => n.id),
-    );
+    const ids = new Set(membersOf(r.nodes, 'g1').map((n) => n.id));
     expect(ids.has(intra!.source)).toBe(true);
     expect(ids.has(intra!.target)).toBe(true);
-    // 單組視角無組間 link 邊（無父框在集合內）→ edges 僅該組內邊。
+    // 單組視角無跨組邊（無別組）→ edges 僅該組內邊。
     expect(r.edges).toHaveLength(1);
   });
 
   it('組內次匯報邊（非 primary supervisor）→ data.isPrimary=false（虛線）', () => {
-    // mid 的 primary 主管 = boss；另有次要主管 boss2（同組顯示）→ 次匯報虛線。
     const data = makeOrgData({
       employees: [emp('boss'), emp('boss2'), emp('mid')],
       groups: [group('g1')],
@@ -669,9 +907,179 @@ describe('buildGroupOrgGraph 組間關聯邊', () => {
     expect((primary!.data as { isPrimary: boolean }).isPrimary).toBe(true);
     expect((secondary!.data as { isPrimary: boolean }).isPrimary).toBe(false);
   });
+});
 
-  it('所有 edge id 全域唯一（組內 reporting + 組間 link 不重撞）', () => {
-    // 含組內匯報邊（多組）與組間 link 邊：父子 department + 各組內鏈。
+describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
+  /**
+   * 重設計移除框錨點邊 go-link-*；改以成員層級的跨組匯報邊 go-cross-*：
+   * 端點為兩位顯示中員工的「主節點」（分屬不同 cluster）、type='reporting'。
+   *
+   * 案例：parent 組成員 p；child 組成員 c 的主管為 p（跨組）→ 應有一條
+   * p(parent)→c(child) 的跨組邊，端點分屬不同 cluster。
+   */
+  function crossOrg() {
+    return makeOrgData({
+      employees: [emp('p'), emp('c')],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-c', {
+          employeeId: 'c',
+          groupId: 'child',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+        }),
+      ],
+    });
+  }
+
+  it('跨組主管 → go-cross-* 邊；端點分屬不同 cluster、type=reporting', () => {
+    const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
+    const cross = r.edges.find((e) => e.id.startsWith('go-cross-'));
+    expect(cross).toBeDefined();
+    expect(cross!.type).toBe('reporting');
+    // 端點分屬不同 cluster（前綴組不同）。
+    expect(cross!.source).toBe(scopedId('parent', 'p'));
+    expect(cross!.target).toBe(scopedId('child', 'c'));
+    const srcGroup = (cross!.source as string).split('::')[0];
+    const tgtGroup = (cross!.target as string).split('::')[0];
+    expect(srcGroup).not.toBe(tgtGroup);
+    // 端點對得上實際成員節點。
+    const ids = new Set(allMembers(r.nodes).map((n) => n.id));
+    expect(ids.has(cross!.source)).toBe(true);
+    expect(ids.has(cross!.target)).toBe(true);
+  });
+
+  it('無 go-link-* 框錨點邊；無 group:→group: 框邊', () => {
+    const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
+    expect(r.edges.some((e) => e.id.startsWith('go-link-'))).toBe(false);
+    const groupToGroup = r.edges.filter(
+      (e) =>
+        typeof e.source === 'string' &&
+        e.source.startsWith('group:') &&
+        typeof e.target === 'string' &&
+        e.target.startsWith('group:'),
+    );
+    expect(groupToGroup).toHaveLength(0);
+  });
+
+  it('無 type=default 邊（框錨點邊已移除）', () => {
+    const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
+    expect(r.edges.some((e) => e.type === 'default')).toBe(false);
+    // 所有邊皆為 reporting。
+    for (const e of r.edges) {
+      expect(e.type).toBe('reporting');
+    }
+  });
+
+  it('跨組邊不與組內邊重複：同一 (主管, 部屬) 配對若已由組內邊呈現則不再產跨組邊', () => {
+    // p、pc 皆在 parent 組、pc 主管 p（組內）；c 在 child、主管 p（跨組）。
+    const data = makeOrgData({
+      employees: [emp('p'), emp('pc'), emp('c')],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-pc', {
+          employeeId: 'pc',
+          groupId: 'parent',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+        }),
+        assignment('a-c', {
+          employeeId: 'c',
+          groupId: 'child',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    // p→pc 為組內邊（同 parent 組）。
+    const intra = r.edges.find(
+      (e) =>
+        e.source === scopedId('parent', 'p') &&
+        e.target === scopedId('parent', 'pc'),
+    );
+    expect(intra).toBeDefined();
+    expect(intra!.id).toMatch(/^go-parent-e-/);
+    // p→c 為跨組邊（go-cross-*）。
+    const cross = r.edges.find(
+      (e) =>
+        e.source === scopedId('parent', 'p') &&
+        e.target === scopedId('child', 'c'),
+    );
+    expect(cross).toBeDefined();
+    expect(cross!.id).toMatch(/^go-cross-/);
+    // p→pc 不會被當成跨組邊再加一次（無 go-cross- 指向 parent::pc）。
+    const dupCross = r.edges.filter(
+      (e) =>
+        e.id.startsWith('go-cross-') &&
+        e.target === scopedId('parent', 'pc'),
+    );
+    expect(dupCross).toHaveLength(0);
+  });
+
+  it('跨組邊主節點唯一：同員工跨多組時跨組邊以其主歸屬節點為端點', () => {
+    // c 同屬 child(primary) 與 fn(非 primary)；其主管 p 在 parent。
+    // 跨組邊應以 c 的主歸屬節點（child::c）為 target，不重複指向 fn::c。
+    const data = makeOrgData({
+      employees: [emp('p'), emp('c')],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+        group('fn', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-c-child', {
+          employeeId: 'c',
+          groupId: 'child',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+          isPrimaryGroup: true,
+        }),
+        assignment('a-c-fn', {
+          employeeId: 'c',
+          groupId: 'fn',
+          isPrimaryGroup: false,
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    const crossToC = r.edges.filter(
+      (e) =>
+        e.id.startsWith('go-cross-') &&
+        (e.target === scopedId('child', 'c') ||
+          e.target === scopedId('fn', 'c')),
+    );
+    // 僅一條跨組邊、指向主歸屬（child::c）。
+    expect(crossToC).toHaveLength(1);
+    expect(crossToC[0].target).toBe(scopedId('child', 'c'));
+  });
+
+  it('function 組（彼此無匯報關係）→ 無跨組邊', () => {
+    const data = makeOrgData({
+      employees: [emp('a'), emp('b')],
+      groups: [
+        group('fn1', { kind: 'function', parentId: null }),
+        group('fn2', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        assignment('a-a', { employeeId: 'a', groupId: 'fn1' }),
+        assignment('a-b', { employeeId: 'b', groupId: 'fn2' }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(false);
+  });
+
+  it('所有 edge id 全域唯一（組內 go-${g}-e-* + 跨組 go-cross-* 不重撞）', () => {
     const data = makeOrgData({
       employees: [emp('p'), emp('pc'), emp('c'), emp('cc')],
       groups: [
@@ -686,7 +1094,12 @@ describe('buildGroupOrgGraph 組間關聯邊', () => {
           supervisorIds: ['p'],
           primarySupervisorId: 'p',
         }),
-        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
+        assignment('a-c', {
+          employeeId: 'c',
+          groupId: 'child',
+          supervisorIds: ['pc'],
+          primarySupervisorId: 'pc',
+        }),
         assignment('a-cc', {
           employeeId: 'cc',
           groupId: 'child',
@@ -697,50 +1110,14 @@ describe('buildGroupOrgGraph 組間關聯邊', () => {
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
     const edgeIds = r.edges.map((e) => e.id);
-    // 同時涵蓋 reporting（組內）與 default（組間 link）兩類邊。
-    expect(r.edges.some((e) => e.type === 'reporting')).toBe(true);
-    expect(r.edges.some((e) => e.type === 'default')).toBe(true);
+    // 同時涵蓋組內 reporting 與跨組 reporting 兩類邊。
+    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(true);
+    expect(r.edges.some((e) => /^go-[^c].*-e-/.test(e.id))).toBe(true);
     expect(new Set(edgeIds).size).toBe(edgeIds.length);
   });
 });
 
-describe('buildGroupOrgGraph 父先排序（RF v12）', () => {
-  it('每個 groupBox 出現在其所有子節點之前', () => {
-    const data = makeOrgData({
-      employees: [emp('boss'), emp('mid'), emp('a'), emp('b')],
-      groups: [group('g1'), group('g2')],
-      assignments: [
-        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
-        assignment('a-mid', {
-          employeeId: 'mid',
-          groupId: 'g1',
-          supervisorIds: ['boss'],
-          primarySupervisorId: 'boss',
-        }),
-        assignment('a-a', { employeeId: 'a', groupId: 'g2' }),
-        assignment('a-b', {
-          employeeId: 'b',
-          groupId: 'g2',
-          supervisorIds: ['a'],
-          primarySupervisorId: 'a',
-        }),
-      ],
-    });
-    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    const order = r.nodes.map((n) => n.id);
-    // 對每個成員子節點，其 parent 框的 index 必須在前。
-    for (const n of r.nodes) {
-      if (n.type === 'employee' && n.parentId) {
-        const parentIdx = order.indexOf(n.parentId);
-        const childIdx = order.indexOf(n.id);
-        expect(parentIdx).toBeGreaterThanOrEqual(0);
-        expect(parentIdx).toBeLessThan(childIdx);
-      }
-    }
-  });
-});
-
-describe('buildGroupOrgGraph 框尺寸與相對座標', () => {
+describe('buildGroupOrgGraph 分區尺寸與成員座標', () => {
   function org() {
     return makeOrgData({
       employees: [emp('boss'), emp('mid'), emp('low')],
@@ -763,32 +1140,40 @@ describe('buildGroupOrgGraph 框尺寸與相對座標', () => {
     });
   }
 
-  it('框寬高足以容納其成員（成員相對座標 + 節點尺寸 ≤ 框尺寸）', () => {
+  it('成員為絕對座標（非相對分區）：position 可大於分區 width（不再以 extent 鉗住）', () => {
     const r = buildGroupOrgGraph(org(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const { width, height } = box.data;
+    // 單組時 cluster 位移可能為負或正；只驗證成員為頂層、座標為數值。
     for (const m of membersOf(r.nodes, 'g1')) {
-      // extent='parent'：座標相對框左上。應落在框內、含節點寬高仍不溢出。
-      expect(m.position.x).toBeGreaterThanOrEqual(0);
-      expect(m.position.y).toBeGreaterThanOrEqual(0);
-      expect(m.position.x + ORG_FLOW_NODE_WIDTH).toBeLessThanOrEqual(width);
-      expect(m.position.y + ORG_FLOW_NODE_HEIGHT).toBeLessThanOrEqual(height);
+      expect(typeof m.position.x).toBe('number');
+      expect(typeof m.position.y).toBe('number');
+      expect(m.parentId).toBeUndefined();
     }
   });
 
-  it('框 style.width/height 與 data.width/height 一致', () => {
+  it('成員 Y 為層帶：同層成員同 Y、相鄰層 Y 差一個層高', () => {
     const r = buildGroupOrgGraph(org(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(box.style?.width).toBe(box.data.width);
-    expect(box.style?.height).toBe(box.data.height);
+    const yOf = (id: string) => memberNode(r.nodes, id)!.position.y;
+    // boss / mid / low 三層 → 三個相異 Y、嚴格遞增。
+    const ys = [yOf('boss'), yOf('mid'), yOf('low')];
+    expect(ys[0]).toBeLessThan(ys[1]);
+    expect(ys[1]).toBeLessThan(ys[2]);
+    // 相鄰層 Y 差一致（層帶等距）。
+    expect(ys[1] - ys[0]).toBe(ys[2] - ys[1]);
   });
 
-  it('空組框仍有合理最小尺寸（>0）', () => {
+  it('分區尺寸 ≥ 一個節點寬高（容納成員）', () => {
+    const r = buildGroupOrgGraph(org(), 'g1');
+    const zone = zoneOf(r.nodes, 'g1')!;
+    expect(zone.data.width).toBeGreaterThanOrEqual(ORG_FLOW_NODE_WIDTH);
+    expect(zone.data.height).toBeGreaterThanOrEqual(ORG_FLOW_NODE_HEIGHT);
+  });
+
+  it('空組分區仍有合理最小尺寸（>0）', () => {
     const data = makeOrgData({ groups: [group('g1')] });
     const r = buildGroupOrgGraph(data, 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(box.data.width).toBeGreaterThan(0);
-    expect(box.data.height).toBeGreaterThan(0);
+    const zone = zoneOf(r.nodes, 'g1')!;
+    expect(zone.data.width).toBeGreaterThan(0);
+    expect(zone.data.height).toBeGreaterThan(0);
   });
 
   it('leadership Map 涵蓋顯示組、帶 leaderId/coLeaderIds', () => {
@@ -800,31 +1185,18 @@ describe('buildGroupOrgGraph 框尺寸與相對座標', () => {
   });
 });
 
-/**
- * 組內層級輔助線（data.levelLines）：補強 #1。
- *
- * `layoutIntraGroup` 把 `layoutReportingSubgraph` 回傳的層帶（`levels`，y = 該層
- * 節點中心 Y）轉成「框內相對座標」帶進 groupBox 的 `data.levelLines`：
- *   y = lv.y − minY + BOX_TITLE_HEIGHT + BOX_PADDING（與成員子節點同一套位移）。
- *
- * 斷言聚焦結構性不變式（非絕對像素）：
- * - 每條 levelLine 的 y 落在框內合理範圍（≥ 標題列+內距、≤ 框高）。
- * - label 為「第N層」字樣、含 level 數字；level 沿組內相對層級遞增。
- * - 多層匯報 → 多條 levelLine（層數 == 框內出現的相異層級數）。
- * - levelLine.y 與同層成員「節點中心」對齊（memberY + NODE_HEIGHT/2 ≈ 某條 line.y）。
- * - 組間 link 邊 `go-link-*` 帶 style（stroke + strokeWidth）。
- *
- * 常數與實作同源（避免硬編魔數漂移）。
- */
-describe('buildGroupOrgGraph 組內層級輔助線 data.levelLines', () => {
-  // 與實作一致的框內位移常數（buildGroupOrgGraph 私有，不導出 → 此處鏡像）。
-  const BOX_TITLE_HEIGHT = 56;
-  const BOX_PADDING = 24;
-  /** 框內相對位移基準：成員/輔助線皆 +（標題列 + 內距）。 */
-  const INNER_OFFSET = BOX_TITLE_HEIGHT + BOX_PADDING;
+describe('buildGroupOrgGraph 分區包住成員（zone-containment 回歸守護）', () => {
+  /**
+   * zone 修正：`groupZone` 的 position/width/height 改為「**依吸附 + 同層去重疊後成員
+   * 實際 bounding box 回推**」（不再用吸附前 cluster 尺寸）。
+   * 不變式：每位成員的矩形 `[x, x+NODE_WIDTH] × [y, y+NODE_HEIGHT]` **完全落在**其分區
+   * 矩形內（四邊皆不溢出）。下列各情境皆以 {@link expectZoneContainsMembers} 驗證。
+   *
+   * 主要破口為「**窄分區成員被同層去重疊往右推**」——推後分區右緣仍須包住該成員。
+   */
 
-  /** boss ← mid ← low：三層單鏈（產生三條層線）。 */
-  function threeLevelOrg() {
+  /** boss ← mid ← low 單一深鏈：基本包容（單組、無外力位移）。 */
+  function chainOrg() {
     return makeOrgData({
       employees: [emp('boss'), emp('mid'), emp('low')],
       groups: [group('g1')],
@@ -846,104 +1218,204 @@ describe('buildGroupOrgGraph 組內層級輔助線 data.levelLines', () => {
     });
   }
 
-  it('groupBox.data.levelLines 存在且為陣列、每條帶 level/y/label', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(Array.isArray(box.data.levelLines)).toBe(true);
-    expect(box.data.levelLines.length).toBeGreaterThan(0);
-    for (const line of box.data.levelLines) {
-      expect(typeof line.level).toBe('number');
-      expect(typeof line.y).toBe('number');
-      expect(typeof line.label).toBe('string');
-    }
+  it('單組多層：每位成員完全落在分區內', () => {
+    const r = buildGroupOrgGraph(chainOrg(), 'g1');
+    expectZoneContainsMembers(r.nodes, 'g1');
   });
 
-  it('每條 level line 的 y 落在框內合理範圍（≥ 標題列+內距、≤ 框高）', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const { height } = box.data;
-    for (const line of box.data.levelLines) {
-      // 層線中心至少落在「標題列 + 內距」之下（不會壓在標題列上）。
-      expect(line.y).toBeGreaterThanOrEqual(INNER_OFFSET);
-      // 不溢出框高。
-      expect(line.y).toBeLessThanOrEqual(height);
-    }
-  });
-
-  it('label 為「第N層」字樣、含對應 level 數字；level 嚴格遞增', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const lines = box.data.levelLines;
-    for (const line of lines) {
-      // 「第 N 層」（容許數字前後有空白；只認結構不認固定間距）。
-      expect(line.label).toMatch(/^第\s*\d+\s*層$/);
-      // label 的數字 == 該條 level（標籤用實際 level 值、不重新編號）。
-      const num = Number(line.label.replace(/[^\d]/g, ''));
-      expect(num).toBe(line.level);
-    }
-    // level 沿組內相對層級遞增（applyLevelBands 由 minLevel→maxLevel 連續填）。
-    const levels = lines.map((l) => l.level);
-    for (let i = 1; i < levels.length; i++) {
-      expect(levels[i]).toBeGreaterThan(levels[i - 1]);
-    }
-  });
-
-  it('多層匯報的組 → 多條 level line（三層鏈 → 三條相異層線）', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const lines = box.data.levelLines;
-    // boss/mid/low 三層 → 三個相異層級 → 三條層線。
-    expect(lines.length).toBe(3);
-    expect(new Set(lines.map((l) => l.level)).size).toBe(3);
-  });
-
-  it('單人組 → 僅一條 level line', () => {
+  it('寬分區（同層多子）：第二層 fan-out 成員皆落在分區內', () => {
+    // boss ← {m1..m4}：第二層四人並排 → 分區須橫向涵蓋整排。
     const data = makeOrgData({
-      employees: [emp('solo')],
+      employees: [emp('boss'), emp('m1'), emp('m2'), emp('m3'), emp('m4')],
       groups: [group('g1')],
-      assignments: [assignment('a-solo', { employeeId: 'solo', groupId: 'g1' })],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
+        ...['m1', 'm2', 'm3', 'm4'].map((e) =>
+          assignment(`a-${e}`, {
+            employeeId: e,
+            groupId: 'g1',
+            supervisorIds: ['boss'],
+            primarySupervisorId: 'boss',
+          }),
+        ),
+      ],
     });
     const r = buildGroupOrgGraph(data, 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(box.data.levelLines.length).toBe(1);
+    expectZoneContainsMembers(r.nodes, 'g1');
   });
 
-  it('空組（無成員）→ 無 level line（layoutReportingSubgraph 空輸入）', () => {
-    const data = makeOrgData({ groups: [group('g1')] });
-    const r = buildGroupOrgGraph(data, 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    expect(box.data.levelLines).toEqual([]);
-  });
-
-  it('level line 的 y 與同層成員「節點中心」對齊（memberY + NODE_HEIGHT/2 ≈ 某條 line.y）', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const lines = box.data.levelLines;
-    // 每位成員的節點中心 Y 應落在「某條與其 level 相符的層線」上（同一套框內位移）。
-    for (const m of membersOf(r.nodes, 'g1')) {
-      const memberLevel = (m.data as { level: number }).level;
-      const centerY = m.position.y + ORG_FLOW_NODE_HEIGHT / 2;
-      const line = lines.find((l) => l.level === memberLevel);
-      expect(line).toBeDefined();
-      // 中心 Y 與層線 y 對齊（兩者皆由 lv.y / topY 推得 → 期望完全相等；
-      // 容微小浮點誤差）。
-      expect(Math.abs(centerY - line!.y)).toBeLessThan(1);
+  it('ALL 視角多組：每一分區皆完全包住自己的成員', () => {
+    // parent←child 階層 + function 並排：跨組攤平 + 全圖 X 吸附後仍逐組包容。
+    const data = makeOrgData({
+      employees: [
+        emp('p'),
+        emp('pc'),
+        emp('c'),
+        emp('cc'),
+        emp('fa'),
+        emp('fb'),
+      ],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+        group('fn', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-pc', {
+          employeeId: 'pc',
+          groupId: 'parent',
+          supervisorIds: ['p'],
+          primarySupervisorId: 'p',
+        }),
+        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
+        assignment('a-cc', {
+          employeeId: 'cc',
+          groupId: 'child',
+          supervisorIds: ['c'],
+          primarySupervisorId: 'c',
+        }),
+        assignment('a-fa', { employeeId: 'fa', groupId: 'fn' }),
+        assignment('a-fb', {
+          employeeId: 'fb',
+          groupId: 'fn',
+          supervisorIds: ['fa'],
+          primarySupervisorId: 'fa',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    for (const gid of ['parent', 'child', 'fn']) {
+      expectZoneContainsMembers(r.nodes, gid);
     }
   });
 
-  it('相鄰 level line 的 y 間距 == 一個層高（ORG_FLOW_LEVEL_GAP）', () => {
-    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
-    const box = boxOf(r.nodes, 'g1')!;
-    const ys = box.data.levelLines.map((l) => l.y);
-    for (let i = 1; i < ys.length; i++) {
-      // 連續層 → topY 差一個 LEVEL_GAP；層線 y = topY + NODE_HEIGHT/2 → 同樣差 LEVEL_GAP。
-      expect(Math.abs(ys[i] - ys[i - 1] - ORG_FLOW_LEVEL_GAP)).toBeLessThan(1);
+  /**
+   * 窄分區 + 去重疊往右推（修法主要破口）：
+   * `left` 組第二層 fan-out 五人佔滿低 X 多欄；`narrow` 組（每層單人）在同一層帶
+   * （y）與 left 的子層相撞 → 去重疊 cursor 把 `narrow` 成員一路右推到遠離其原 cluster
+   * 的 X。zone 須依「推後實際座標」回推 → 右緣仍包住被右推的成員（舊邏輯用推前
+   * cluster 尺寸會在此溢出右緣）。
+   */
+  function narrowPushedRightOrg() {
+    return makeOrgData({
+      employees: [
+        emp('lboss'),
+        emp('l1'),
+        emp('l2'),
+        emp('l3'),
+        emp('l4'),
+        emp('l5'),
+        emp('nboss'),
+        emp('n1'),
+      ],
+      groups: [
+        group('left', { kind: 'function', parentId: null }),
+        group('narrow', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        assignment('a-lboss', { employeeId: 'lboss', groupId: 'left' }),
+        ...['l1', 'l2', 'l3', 'l4', 'l5'].map((e) =>
+          assignment(`a-${e}`, {
+            employeeId: e,
+            groupId: 'left',
+            supervisorIds: ['lboss'],
+            primarySupervisorId: 'lboss',
+          }),
+        ),
+        assignment('a-nboss', { employeeId: 'nboss', groupId: 'narrow' }),
+        assignment('a-n1', {
+          employeeId: 'n1',
+          groupId: 'narrow',
+          supervisorIds: ['nboss'],
+          primarySupervisorId: 'nboss',
+        }),
+      ],
+    });
+  }
+
+  it('窄分區成員被同層去重疊往右推 → 推後仍不溢出分區右緣', () => {
+    const r = buildGroupOrgGraph(narrowPushedRightOrg(), ALL_GROUPS_VIEW_ID);
+    // 兩組成員皆須各自被包住（含被右推的 narrow）。
+    expectZoneContainsMembers(r.nodes, 'left');
+    expectZoneContainsMembers(r.nodes, 'narrow');
+  });
+
+  it('窄分區情境確有「往右推」發生（否則此守護無鑑別力）', () => {
+    // 鑑別力前提：narrow 的第二層成員（n1）與 left 第二層 fan-out 同一 Y 帶，
+    // 且其 X 被推到 left 整排 fan-out 的右側（≥ left 該帶最大 X + 一欄寬）。
+    const r = buildGroupOrgGraph(narrowPushedRightOrg(), ALL_GROUPS_VIEW_ID);
+    const n1 = memberNode(r.nodes, 'n1', 'narrow')!;
+    const leftSecondLayer = ['l1', 'l2', 'l3', 'l4', 'l5'].map(
+      (e) => memberNode(r.nodes, e, 'left')!,
+    );
+    // n1 與 left 第二層在同一層帶（同 Y）。
+    for (const m of leftSecondLayer) {
+      expect(m.position.y).toBe(n1.position.y);
+    }
+    const leftMaxX = Math.max(...leftSecondLayer.map((m) => m.position.x));
+    // n1 被推到整排 left fan-out 右側（嚴格大於 left 最大 X，差距 ≥ 一欄寬）。
+    expect(n1.position.x).toBeGreaterThan(leftMaxX);
+    expect(n1.position.x - leftMaxX).toBeGreaterThanOrEqual(COLUMN_WIDTH);
+    // 而 zone 仍包住它（與上一測試同源，但此處顯式點出右緣不溢出）。
+    const zone = zoneOf(r.nodes, 'narrow')!;
+    const zoneRight = zone.position.x + (zone.style!.width as number);
+    expect(n1.position.x + ORG_FLOW_NODE_WIDTH).toBeLessThanOrEqual(zoneRight);
+  });
+
+  it('窄分區夾在兩寬分區之間（左右皆右推壓力）→ 仍完全包住', () => {
+    // left/right 皆寬（第二層各三人）、mid 窄（每層單人）夾中間。
+    const mk = (
+      prefix: string,
+      group_: string,
+      children: string[],
+    ): ReturnType<typeof assignment>[] => [
+      assignment(`a-${prefix}boss`, {
+        employeeId: `${prefix}boss`,
+        groupId: group_,
+      }),
+      ...children.map((e) =>
+        assignment(`a-${e}`, {
+          employeeId: e,
+          groupId: group_,
+          supervisorIds: [`${prefix}boss`],
+          primarySupervisorId: `${prefix}boss`,
+        }),
+      ),
+    ];
+    const data = makeOrgData({
+      employees: [
+        emp('lboss'),
+        emp('l1'),
+        emp('l2'),
+        emp('l3'),
+        emp('mboss'),
+        emp('m1'),
+        emp('rboss'),
+        emp('r1'),
+        emp('r2'),
+        emp('r3'),
+      ],
+      groups: [
+        group('left', { kind: 'function', parentId: null }),
+        group('mid', { kind: 'function', parentId: null }),
+        group('right', { kind: 'function', parentId: null }),
+      ],
+      assignments: [
+        ...mk('l', 'left', ['l1', 'l2', 'l3']),
+        ...mk('m', 'mid', ['m1']),
+        ...mk('r', 'right', ['r1', 'r2', 'r3']),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    for (const gid of ['left', 'mid', 'right']) {
+      expectZoneContainsMembers(r.nodes, gid);
     }
   });
 
-  it('co-leader 平行同層共管：co-leader 與組長同 level → 不額外增生層線', () => {
-    // CEO/COO 案：sales leaderId=CEO（不在框）；s1/s2 直屬 CEO（最上層）、
-    // COO（co-leader）鉗到同層、s3/s4 落 COO 下一層 → 框內僅兩個相異層級。
+  it('co-leader 納入分區後（多一節點）→ 分區仍包住含 co-leader 的全員', () => {
+    // sales leaderId=CEO（不在 sales）；s3/s4 主管 COO（exec 組長）→ COO 納入 sales。
+    const sales = group('sales', { leaderId: 'CEO' });
     const data = makeOrgData({
       employees: [
         emp('CEO'),
@@ -953,10 +1425,7 @@ describe('buildGroupOrgGraph 組內層級輔助線 data.levelLines', () => {
         emp('s3'),
         emp('s4'),
       ],
-      groups: [
-        group('sales', { leaderId: 'CEO' }),
-        group('exec', { leaderId: 'COO' }),
-      ],
+      groups: [sales, group('exec', { leaderId: 'COO' })],
       assignments: [
         assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
         assignment('x-coo', {
@@ -991,46 +1460,72 @@ describe('buildGroupOrgGraph 組內層級輔助線 data.levelLines', () => {
         }),
       ],
     });
-    const r = buildGroupOrgGraph(data, 'sales');
-    const box = boxOf(r.nodes, 'sales')!;
-    const lines = box.data.levelLines;
-    // 框內相異層級數（成員 level 集合）== 層線數。
-    const memberLevels = new Set(
-      membersOf(r.nodes, 'sales').map(
-        (n) => (n.data as { level: number }).level,
-      ),
-    );
-    expect(lines.length).toBe(memberLevels.size);
-    // 此案恰兩層（上層 s1/s2/COO；下層 s3/s4）。
-    expect(lines.length).toBe(2);
-    // 每位成員的 level 都有對應層線（無懸空層、無缺層）。
-    for (const lv of memberLevels) {
-      expect(lines.some((l) => l.level === lv)).toBe(true);
-    }
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    // sales 分區須包住含被納入的 co-leader（COO）在內的全部 5 個節點。
+    expect(membersOf(r.nodes, 'sales')).toHaveLength(5);
+    expectZoneContainsMembers(r.nodes, 'sales');
+    expectZoneContainsMembers(r.nodes, 'exec');
   });
 
-  it('組間 link 邊（go-link-*）帶 style（stroke + strokeWidth）', () => {
+  it('空組（無成員）→ 分區仍有可見下限尺寸（width/height > 0）', () => {
+    const data = makeOrgData({ groups: [group('empty')] });
+    const r = buildGroupOrgGraph(data, 'empty');
+    const zone = zoneOf(r.nodes, 'empty')!;
+    expect(membersOf(r.nodes, 'empty')).toHaveLength(0);
+    // 空組用 cluster 位置 + 組內佈局下限尺寸（= ZONE_PADDING*2，不為 0 → 仍可見）。
+    // 註：空組不保證 ≥ 一個節點寬高（無成員可回推），只要求 > 0 維持可見即可。
+    expect(zone.data.width).toBeGreaterThan(0);
+    expect(zone.data.height).toBeGreaterThan(0);
+  });
+
+  it('ALL 視角混合（含空組與非空組）→ 各分區皆包住自己成員、空組維持下限尺寸', () => {
     const data = makeOrgData({
-      employees: [emp('p'), emp('c')],
-      groups: [
-        group('parent', { kind: 'department' }),
-        group('child', { kind: 'department', parentId: 'parent' }),
-      ],
+      employees: [emp('boss'), emp('sub')],
+      groups: [group('full'), group('empty')],
       assignments: [
-        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
-        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
+        assignment('a-boss', { employeeId: 'boss', groupId: 'full' }),
+        assignment('a-sub', {
+          employeeId: 'sub',
+          groupId: 'full',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
       ],
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    const link = r.edges.find(
-      (e) => e.source === 'group:parent' && e.target === 'group:child',
-    );
-    expect(link).toBeDefined();
-    // edge id 以 go-link- 前綴。
-    expect(link!.id).toMatch(/^go-link-/);
-    // style 帶 stroke（中性色）與較粗 strokeWidth（區隔組內 reporting 邊）。
-    expect(link!.style).toBeDefined();
-    expect(link!.style!.stroke).toBeTruthy();
-    expect(Number(link!.style!.strokeWidth)).toBeGreaterThan(1);
+    expectZoneContainsMembers(r.nodes, 'full');
+    const emptyZone = zoneOf(r.nodes, 'empty')!;
+    expect(membersOf(r.nodes, 'empty')).toHaveLength(0);
+    expect(emptyZone.data.width).toBeGreaterThan(0);
+    expect(emptyZone.data.height).toBeGreaterThan(0);
+  });
+
+  it('非空分區 data.width===style.width、zIndex===0、成員 zIndex===1、hue 依 idx', () => {
+    // ZONE_HUES = [212,152,28,...]：第一組 idx0→212、第二組 idx1→152。
+    const data = makeOrgData({
+      employees: [emp('a0'), emp('b0')],
+      groups: [group('z0'), group('z1')],
+      assignments: [
+        assignment('a-a0', { employeeId: 'a0', groupId: 'z0' }),
+        assignment('a-b0', { employeeId: 'b0', groupId: 'z1' }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    const z0 = zoneOf(r.nodes, 'z0')!;
+    const z1 = zoneOf(r.nodes, 'z1')!;
+    // data 尺寸與 style 尺寸同源一致。
+    expect(z0.data.width).toBe(z0.style!.width);
+    expect(z0.data.height).toBe(z0.style!.height);
+    expect(z1.data.width).toBe(z1.style!.width);
+    expect(z1.data.height).toBe(z1.style!.height);
+    // 分區為背景（zIndex 0）、成員疊上（zIndex 1）。
+    expect(z0.zIndex).toBe(0);
+    expect(z1.zIndex).toBe(0);
+    for (const m of [...membersOf(r.nodes, 'z0'), ...membersOf(r.nodes, 'z1')]) {
+      expect(m.zIndex).toBe(1);
+    }
+    // hue 依 layouts 索引取 ZONE_HUES（第一組 212、第二組 152）。
+    expect(z0.data.hue).toBe(212);
+    expect(z1.data.hue).toBe(152);
   });
 });

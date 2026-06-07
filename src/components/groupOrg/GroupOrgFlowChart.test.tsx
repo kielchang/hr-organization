@@ -13,8 +13,11 @@ import type { OrgData } from '../../types/org';
  * 掛載需 ResizeObserver，jsdom 未提供 → 最小 stub。React Flow 在 jsdom 仍會渲染
  * 節點本體（已驗證），故可斷言組框標題/成員姓名等內容。
  *
- * 覆蓋：render smoke、唯讀契約（無編輯工具列、節點不可拖）、groupBox 標題顯示
- * 組名＋組長/共管、姓名回退（leaderId null → 未指定）、無 console.error。
+ * 覆蓋：render smoke、唯讀契約（無編輯工具列、節點不可拖）、groupZone 背景分區
+ * 角落標籤顯示組名＋組長/共管、姓名回退（leaderId null → 未指定）、無 console.error。
+ *
+ * 重設計：群組以 `groupZone` 背景分區呈現（取代舊 groupBox 容器框）→ 節點 class 為
+ * `.react-flow__node-groupZone`；分區 aria-label 為「組別分區 …（組長：…）」。
  */
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -99,14 +102,15 @@ describe('GroupOrgFlowChart 唯讀組別組織圖', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('groupBox 標題顯示組名 + 組長徽章（leaderId → 姓名）', () => {
+  it('groupZone 角落標籤顯示組名 + 組長徽章（leaderId → 姓名）', () => {
     const { container } = renderChart({ selectedGroupId: 'g1' });
-    // 群組框 aria-label 含組名（React Flow 在 jsdom 對節點 wrapper 設 visibility:hidden，
-    // Testing Library 可及性查詢會略過隱藏元素 → 直接以 aria-label 屬性選 GroupBoxNode 容器）。
+    // 分區 aria-label 含組名（React Flow 在 jsdom 對節點 wrapper 設 visibility:hidden，
+    // Testing Library 可及性查詢會略過隱藏元素 → 直接以 aria-label 前綴屬性選 GroupZoneNode 容器）。
+    // 重設計 aria-label 為「組別分區 業務部（組長：…）」→ 以 ^= 前綴選取。
     expect(
-      container.querySelector('[aria-label="組別 業務部"]'),
+      container.querySelector('[aria-label^="組別分區 業務部"]'),
     ).not.toBeNull();
-    // 標題列顯示組名文字（單組視角下組名亦出現在「檢視組別」下拉當前值，
+    // 角落標籤顯示組名文字（單組視角下組名亦出現在「檢視組別」下拉當前值，
     // 故可能多於一處 → 至少有一處）。
     expect(screen.getAllByText('業務部').length).toBeGreaterThanOrEqual(1);
     // 組長徽章顯示組長姓名（leaderId='boss' → 老闆）。
@@ -162,7 +166,7 @@ describe('GroupOrgFlowChart 唯讀組別組織圖', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('唯讀：成員節點不可拖曳（無 draggable class）、群組框不可選/不可拖', () => {
+  it('唯讀：成員節點不可拖曳（無 draggable class）、背景分區不可選/不可拖', () => {
     const { container } = renderChart({ selectedGroupId: 'g1' });
     // 成員 employee 節點：可選（selectable）但無 draggable（nodesDraggable=false + 各節點 draggable:false）。
     const employeeNodes = container.querySelectorAll(
@@ -172,30 +176,30 @@ describe('GroupOrgFlowChart 唯讀組別組織圖', () => {
     for (const n of employeeNodes) {
       expect(n.classList.contains('draggable')).toBe(false);
     }
-    // 群組框：不可選、不可拖（純視覺容器）。
-    const boxNodes = container.querySelectorAll('.react-flow__node-groupBox');
-    expect(boxNodes.length).toBeGreaterThan(0);
-    for (const b of boxNodes) {
-      expect(b.classList.contains('draggable')).toBe(false);
-      expect(b.classList.contains('selectable')).toBe(false);
+    // 背景分區：不可選、不可拖（純背景視覺分組）。
+    const zoneNodes = container.querySelectorAll('.react-flow__node-groupZone');
+    expect(zoneNodes.length).toBeGreaterThan(0);
+    for (const z of zoneNodes) {
+      expect(z.classList.contains('draggable')).toBe(false);
+      expect(z.classList.contains('selectable')).toBe(false);
     }
   });
 
-  it('ALL 視角：多個 active 組各一框（業務部 + 工程部）', () => {
+  it('ALL 視角：多個 active 組各一背景分區（業務部 + 工程部）', () => {
     const { container } = renderChart({ selectedGroupId: ALL_GROUPS_VIEW_ID });
-    // 兩個 active 組各一 groupBox 節點。
+    // 兩個 active 組各一 groupZone 節點。
     expect(
-      container.querySelectorAll('.react-flow__node-groupBox'),
+      container.querySelectorAll('.react-flow__node-groupZone'),
     ).toHaveLength(2);
-    // 兩組名皆渲染（各自框標題；至少一處）。
+    // 兩組名皆渲染（各自角落標籤；至少一處）。
     expect(screen.getAllByText('業務部').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('工程部').length).toBeGreaterThanOrEqual(1);
-    // 各組框容器以 aria-label 標示（直接選屬性，略過隱藏元素查詢限制）。
+    // 各分區容器以 aria-label 標示（直接選屬性，略過隱藏元素查詢限制）。
     expect(
-      container.querySelector('[aria-label="組別 業務部"]'),
+      container.querySelector('[aria-label^="組別分區 業務部"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[aria-label="組別 工程部"]'),
+      container.querySelector('[aria-label^="組別分區 工程部"]'),
     ).not.toBeNull();
   });
 
@@ -220,15 +224,15 @@ describe('GroupOrgFlowChart 唯讀組別組織圖', () => {
     expect(onNodeSelect).toHaveBeenCalledWith('boss');
   });
 
-  it('點選群組框 → onNodeSelect(null)（框不可選，視為清空）', () => {
+  it('點選背景分區 → onNodeSelect(null)（分區不可選，視為清空）', () => {
     const onNodeSelect = vi.fn();
     const { container } = renderChart({
       selectedGroupId: 'g1',
       onNodeSelect,
     });
-    const box = container.querySelector('.react-flow__node-groupBox');
-    expect(box).not.toBeNull();
-    fireEvent.click(box!);
+    const zone = container.querySelector('.react-flow__node-groupZone');
+    expect(zone).not.toBeNull();
+    fireEvent.click(zone!);
     expect(onNodeSelect).toHaveBeenCalledWith(null);
   });
 

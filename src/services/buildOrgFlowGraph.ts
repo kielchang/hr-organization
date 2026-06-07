@@ -25,6 +25,8 @@ export const ORG_FLOW_NODE_HEIGHT = NODE_HEIGHT;
 /** 加大層距，讓跨層匯報線的水平段落在層與層之間、不穿過節點 */
 const RANK_SEP = 120;
 const NODE_SEP = 60;
+/** 節點水平間距（供組別視圖 X 欄位吸附推算欄寬：NODE_WIDTH + NODE_SEP）。 */
+export const ORG_FLOW_NODE_SEP = NODE_SEP;
 /** 每層的垂直間距；亦為拖曳吸附的網格大小 */
 const LEVEL_GAP = NODE_HEIGHT + RANK_SEP;
 export const ORG_FLOW_LEVEL_GAP = LEVEL_GAP;

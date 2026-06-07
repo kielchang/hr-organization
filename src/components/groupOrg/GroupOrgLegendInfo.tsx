@@ -18,9 +18,9 @@ function LegendLine({ dashed }: { dashed?: boolean }) {
 /**
  * 組別組織圖（唯讀）專屬圖例：驚嘆號 icon，hover／點擊彈出說明。
  *
- * 內容對齊組別視圖語意（每人一節點、依組別群組；組長/共管以標題列徽章標示），
- * 不沿用 reporting/membership 的 OrgFlowLegend（其文案為「每筆歸屬一節點」，與本視圖
- * 「每人一節點」不符）。徽章語意以文字＋icon 表達，不只靠顏色。
+ * 內容對齊組別視圖語意（一張連貫組織圖、每人一節點、同組以背景分區群聚；組長/共管
+ * 以分區角落徽章標示），不沿用 reporting/membership 的 OrgFlowLegend（其文案為
+ * 「每筆歸屬一節點」，與本視圖「每人一節點」不符）。徽章語意以文字＋icon 表達，不只靠顏色。
  */
 export function GroupOrgLegendInfo() {
   const [open, setOpen] = useState(false);
@@ -61,7 +61,7 @@ export function GroupOrgLegendInfo() {
         <div className="absolute right-0 top-full z-20 mt-2 w-max max-w-xs rounded-lg border border-border bg-card p-3 shadow-lg ring-1 ring-foreground/5">
           <div className="flex flex-col gap-2 text-xs text-muted-foreground">
             <p className="leading-relaxed">
-              每個節點為一位成員，依所屬組別群組於各組框內；組間連線依 department 階層。
+              一張連貫的組織圖：每個節點為一位成員、匯報線依主管關係（含跨組）；同組成員聚在一起，以淡色背景分區標示組別。
             </p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               <span className="inline-flex items-center gap-2">

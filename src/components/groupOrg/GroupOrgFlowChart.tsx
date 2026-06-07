@@ -20,7 +20,7 @@ import { OrgFlowControlBar, type OrgFlowNavMode } from '../orgFlow/OrgFlowContro
 import { ORG_FLOW_NAV_PROPS } from '../orgFlow/orgFlowNav';
 import { OrgChartGroupSelector } from '../orgFlow/OrgChartGroupSelector';
 import { OrgDetailPanel } from '../orgFlow/OrgDetailPanel';
-import { GroupBoxNode, type GroupBoxRenderData } from './GroupBoxNode';
+import { GroupZoneNode, type GroupZoneRenderData } from './GroupZoneNode';
 import { GroupOrgLegendInfo } from './GroupOrgLegendInfo';
 import { buildGroupOrgGraph } from '../../services/buildGroupOrgGraph';
 import { buildNodeDiffMap } from '../../services/computeOrgDiff';
@@ -29,7 +29,7 @@ import type { OrgData } from '../../types/org';
 import type { OrgDiffResult } from '../../types/editSession';
 
 // nodeTypes/edgeTypes 為 module 常數（穩定參考），避免每 render 重建造成 React Flow 警告。
-const nodeTypes = { employee: EmployeeNode, groupBox: GroupBoxNode } as const;
+const nodeTypes = { employee: EmployeeNode, groupZone: GroupZoneNode } as const;
 const edgeTypes = { reporting: ReportingEdge } as const;
 
 // 唯讀詳情用的 no-op save（OrgDetailPanel 在 isEditMode=false 下永不呼叫；僅滿足必填型別）。
@@ -81,7 +81,7 @@ function GroupFlowInner({
     return buildNodeDiffMap(diffResult, employeeIds);
   }, [diffResult, builtNodes]);
 
-  // 員工姓名查表（供 groupBox 標題列把 leaderId/coLeaderIds 解析成姓名）。
+  // 員工姓名查表（供 groupZone 角落標籤把 leaderId/coLeaderIds 解析成姓名）。
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const e of orgData.employees) m.set(e.id, e.name);
@@ -90,43 +90,35 @@ function GroupFlowInner({
 
   /**
    * 對 D1 輸出做兩件唯讀後處理（不改 buildGroupOrgGraph）：
-   * 1. groupBox 節點：注入 leaderName/coLeaderNames（由姓名查表解析）、設不可選/不可拖。
+   * 1. groupZone 背景節點：注入 leaderName/coLeaderNames（由姓名查表解析）。
+   *    （不可選/不可拖/低層等已由 D1 在 node 上設定，此處沿用、僅補姓名。）
    * 2. employee 節點：注入 diffStatus（若有 diff）。
    *
-   * 並做**父先排序保險**：React Flow v12 要求父節點排在子節點之前。D1 已是父先輸出，
-   * 此處以 stable 分流（groupBox 全部移到前段、保留各自相對順序）再保險一次，
-   * 避免日後 D1 順序變動造成 parentId 解析失敗。
+   * 維持「分區背景在前、攤平成員在後」的輸出順序（D1 已如此）：成員為頂層節點、
+   * 無 parentId，順序僅影響 DOM 繪製；配合 D1 設的 zIndex 確保成員疊在分區之上。
    */
   const nodes = useMemo<Node[]>(() => {
-    const groupBoxes: Node[] = [];
-    const children: Node[] = [];
+    const zones: Node[] = [];
+    const members: Node[] = [];
     for (const n of builtNodes) {
-      if (n.type === 'groupBox') {
-        const gd = n.data as GroupBoxRenderData;
-        const renderData: GroupBoxRenderData = {
+      if (n.type === 'groupZone') {
+        const gd = n.data as GroupZoneRenderData;
+        const renderData: GroupZoneRenderData = {
           ...gd,
           leaderName: gd.leaderId != null ? nameById.get(gd.leaderId) ?? null : null,
           coLeaderNames: gd.coLeaderIds.map((id) => nameById.get(id) ?? id),
         };
-        groupBoxes.push({
-          ...n,
-          data: renderData,
-          selectable: false,
-          draggable: false,
-          // 群組框不參與連線/刪除；純視覺容器。
-          connectable: false,
-          deletable: false,
-        });
+        zones.push({ ...n, data: renderData });
       } else {
         const employeeId = (n.data as { employee: { id: string } }).employee.id;
         const child = diffMap
           ? { ...n, data: { ...n.data, diffStatus: diffMap.get(employeeId) } }
           : n;
         // D2 唯讀：成員節點可被選取（顯示詳情）但不可拖曳。
-        children.push({ ...child, draggable: false });
+        members.push({ ...child, draggable: false });
       }
     }
-    return [...groupBoxes, ...children];
+    return [...zones, ...members];
   }, [builtNodes, nameById, diffMap]);
 
   // 切換組別 / 資料更新後置中（與 reporting 視圖一致的 fitView 行為）。
@@ -165,10 +157,10 @@ function GroupFlowInner({
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      // 群組框不可選；點到框視為清空（pane click 語意）。
+      // 分區背景不可選（理論上 pointer-events-none 不會觸發）；防呆視為清空。
       // 成員節點 id 已作用域化（${groupId}::${employeeId}）→ 上拋原 employeeId
       // （OrgDetailPanel 以 employeeId 解析），取自 node.data.employee.id。
-      if (node.type === 'groupBox') {
+      if (node.type === 'groupZone') {
         onNodeSelect(null);
         return;
       }
@@ -267,11 +259,12 @@ function GroupFlowInner({
 }
 
 /**
- * 組別為主組織圖（**唯讀**）：每人一節點、依組別群組成群組框、組間以 department
- * parentId 連邊；組長/co-leader 在框標題列以徽章標示、co-leader 與組長平行同層。
+ * 組別為主組織圖（**唯讀**）：一張連貫的組織圖（每人一攤平節點、匯報線含跨組）+
+ * 同組背景分區（泳道感淡色色塊 + 角落「組名・組長」標籤）。組長/co-leader 在分區
+ * 角落標籤以徽章標示、co-leader 與組長平行同層。X 軸吸附到共用欄位刻度使整體工整。
  *
  * 與 `OrgFlowChart`（reporting，可編輯）的差異：
- * - nodeTypes 含 `groupBox`；資料源為 `buildGroupOrgGraph`。
+ * - nodeTypes 含 `groupZone`（背景分區、低層不互動）；資料源為 `buildGroupOrgGraph`。
  * - **不接任何編輯手勢**（無 onNodeDragStop/onConnect/onEdgesDelete、nodesDraggable=false）；
  *   拖曳改組為 Phase E。
  * - 保留檢視 chrome：組別選擇、pan/zoom、fitView、MiniMap、控制列、全螢幕、節點詳情。
