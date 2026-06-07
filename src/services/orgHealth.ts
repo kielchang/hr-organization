@@ -598,8 +598,9 @@ export function buildOrgHealth(
     const sIsCoLeader = leadership?.coLeaderIds.includes(s) ?? false;
 
     if (!sInGroup) {
-      // 規則 2：主管在組外。排除合法 co-lead（s 為本組推導 co-leader）與 leader。
-      if (sIsCoLeader || sIsLeader) continue;
+      // 規則 2：主管在組外。排除合法 co-lead（s 為本組推導 co-leader）與 leader，
+      // 並對稱排除「成員本人即本組組長」——組長往上的組外上級主管是正常上行階層，不算掛錯組。
+      if (sIsCoLeader || sIsLeader || leadership?.leaderId === a.employeeId) continue;
       findings.push({
         id: `group-mismatch:${a.groupId}:${a.employeeId}`,
         severity: 'warning',

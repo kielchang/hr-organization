@@ -33,14 +33,25 @@ function useEditingHarness() {
 
 /**
  * 由 base 造一份「會降低 warningCount」的草稿（self-validating）：
- * 為職能組 g8 的某成員補上主主管，消除 function-no-lead 警示。
+ * 為職能組 g8 補上「組內」匯報結構，消除 function-no-lead 警示。
+ *
+ * 注意（co-lead 收緊後的調整）：此處刻意把成員主管指向**同組（g8）另一名成員**，
+ * 而非組外的 e1。若指向組外主管，該主管在收緊後不再被推成 co-leader →
+ * Phase F 規則 2 會新增一筆 group-mismatch(warning)，剛好抵銷掉移除的
+ * function-no-lead → warningCount 不降，使本測試的 self-validating 前置失效。
+ * 改指向組內成員後：消除 function-no-lead 且不新增 group-mismatch → 淨降 1。
+ *
  * 回傳 null 表示此 seed 無法套用此 mutation（測試會據此 skip 該斷言而非誤報）。
  */
 function makeWarningReducingDraft(base: OrgData): OrgData | null {
   const draft = cloneOrgData(base);
-  const g8Member = draft.assignments.find((a) => a.groupId === 'g8');
-  if (!g8Member) return null;
-  g8Member.primarySupervisorId = 'e1';
+  const g8Members = draft.assignments.filter((a) => a.groupId === 'g8');
+  // 需至少兩名 g8 成員：一名當組內匯報根（lead）、其餘指向他（組內主管）。
+  if (g8Members.length < 2) return null;
+  const leadId = g8Members[0].employeeId;
+  for (let i = 1; i < g8Members.length; i++) {
+    g8Members[i].primarySupervisorId = leadId; // 指向組內成員，不製造 group-mismatch
+  }
   return draft;
 }
 

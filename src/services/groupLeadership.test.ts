@@ -502,6 +502,42 @@ describe('deriveGroupLeadership', () => {
     expect(deriveGroupLeadership(data, g).coLeaderIds).toEqual([]);
   });
 
+  it('組長本人的組外上級主管不算 co-lead（組長在組內、上報組外夠格主管 S）', () => {
+    // teamA：leaderId=L（在組內）。L 自己的 primary 主管 S 在組外（exec）、且夠格
+    //（S 是 exec 組 leaderId → path b）。S 是「組長 L 的正常上行匯報主管」、非平行共管。
+    // 收緊後：deriveGroupLeadership 略過組長本人那筆 assignment（`a.employeeId === leaderId` continue）
+    // → S 不被誤標為 co-lead。另一名非組長成員 m 報組內 L（不觸發 co-lead）。
+    const teamA = group('teamA', { leaderId: 'L' });
+    const data = makeOrgData({
+      employees: [emp('L'), emp('S'), emp('m')],
+      groups: [teamA, group('exec', { leaderId: 'S' })],
+      assignments: [
+        // 組長 L 在 teamA、其 primary 主管 S 在組外且夠格（exec leaderId）。
+        assignment('x-L', {
+          employeeId: 'L',
+          groupId: 'teamA',
+          supervisorIds: ['S'],
+          primarySupervisorId: 'S',
+        }),
+        assignment('x-S', { employeeId: 'S', groupId: 'exec' }),
+        // 非組長成員 m 報組內 L → 不產生 co-lead。
+        assignment('x-m', {
+          employeeId: 'm',
+          groupId: 'teamA',
+          supervisorIds: ['L'],
+          primarySupervisorId: 'L',
+        }),
+      ],
+    });
+    const r = deriveGroupLeadership(data, teamA);
+    expect(r.leaderId).toBe('L');
+    // 健全性：S 確實「夠格」（避免本案因 S 不夠格而非因『略過組長本人』才空）。
+    expect(isLeadLevel(data, 'S')).toBe(true);
+    // 關鍵：S 是組長 L 的上行主管 → 不列入 co-lead（未收緊前會誤列 S）。
+    expect(r.coLeaderIds).not.toContain('S');
+    expect(r.coLeaderIds).toEqual([]);
+  });
+
   it('co-lead 去重且 employeeId 升冪穩定排序', () => {
     // 三位組外主管 zCo / aCo / mCo 各帶部分成員、皆出現多次 → 去重後升冪 [aCo, mCo, zCo]。
     const g = group('g1', { leaderId: 'boss' });

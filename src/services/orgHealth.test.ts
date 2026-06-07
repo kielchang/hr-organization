@@ -837,6 +837,53 @@ describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
       expect(summary.warningCount).toBe(warnings.length);
       expect(findings.some((f) => f.category === 'parallel-colead' && f.severity !== 'info')).toBe(false);
     });
+
+    it('組長本人（組內）上報組外夠格主管 S → 不產生指向 S 的 parallel-colead，也不誤報 group-mismatch（規則 2 對稱排除組長本人）', () => {
+      // teamA：leaderId=L（在組內）。L 自己的 primary 主管 S 在組外（exec）、且夠格（exec leaderId）。
+      // 收緊後 deriveGroupLeadership 略過組長本人那筆 → S 不被推成 co-leader → 規則 1 不產生
+      // parallel-colead:teamA:S（L 上報 S 是正常上行匯報，非平行共管）。
+      //
+      // 規則 2 對稱排除（已落地）：當 assignment 的成員本人即本組組長（leaderId === a.employeeId）時，
+      // 其組外上級主管屬「正常上行匯報」，不視為掛錯組 → 不產生 group-mismatch:teamA:L。
+      // 即「組長往上報組外上級主管」既非平行共管（規則 1 略過），也非掛錯組（規則 2 排除）。
+      const teamA = group('teamA', { name: 'A組', leaderId: 'L' });
+      const data = makeOrgData({
+        employees: [emp('L'), emp('S'), emp('m')],
+        groups: [teamA, group('exec', { name: '高管組', leaderId: 'S' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          // 組長 L 在 teamA、上報組外夠格主管 S。
+          assignment('as-L', {
+            employeeId: 'L',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['S'],
+            primarySupervisorId: 'S',
+          }),
+          assignment('as-S', { employeeId: 'S', groupId: 'exec', jobLevelId: 'j1' }),
+          // 非組長成員 m 報組內 L（不觸發 co-lead）。
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['L'],
+            primarySupervisorId: 'L',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // 關鍵 1：S 不被推成 co-leader → 無指向 S 的 parallel-colead。
+      expect(findings.some((f) => f.id === 'parallel-colead:teamA:S')).toBe(false);
+      expect(findings.some((f) => f.category === 'parallel-colead')).toBe(false);
+      // 關鍵 2：組長 L 的組外上級主管 S 屬正常上行匯報 → 規則 2 對稱排除 → 不產生 group-mismatch:teamA:L。
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:L')).toBe(false);
+      // 對 leaderId(L) 之 assignment 不應有任何 group-mismatch / level-anomaly（兩者同 category）。
+      expect(
+        findings.some(
+          (f) => f.category === 'group-mismatch' && f.employeeId === 'L',
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('規則 2：group-mismatch（warning、主管完全在組外）', () => {
@@ -992,6 +1039,65 @@ describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
       const { findings } = buildOrgHealth(data);
       expect(findings.some((f) => f.id === 'parallel-colead:teamA:extBoss')).toBe(true);
       expect(findings.some((f) => f.id.startsWith('group-mismatch:teamA'))).toBe(false);
+    });
+
+    it('組長本人豁免是「對稱、外科式」的：同組非組長成員掛不夠格組外主管 → 仍正確報 group-mismatch（排除沒誤殺整條規則）', () => {
+      // 同一 teamA 內並置兩種情形，確認規則 2 的組長排除只豁免「組長本人那筆」、不外溢到其他成員：
+      //   (a) 組長 L 上報組外夠格主管 S（S 是 exec leaderId）→ L 那筆豁免（不報 group-mismatch:teamA:L）。
+      //   (b) 非組長成員 m 上報組外「不夠格」主管 midMgr（有上級 topBoss、且非任何組 leaderId）
+      //       → midMgr 不被推成 co-leader、m≠leaderId → 規則 2 仍命中 → group-mismatch:teamA:m(warning)。
+      // 此案是排除落地後「正向命中」的回歸守護：若實作誤把排除放寬到所有成員，(b) 會被漏報而 fail。
+      const data = makeOrgData({
+        employees: [
+          emp('L', { name: '組長' }),
+          emp('S', { name: '上級高管' }),
+          emp('topBoss'),
+          emp('midMgr', { name: '中階' }),
+          emp('m', { name: '小明' }),
+        ],
+        groups: [
+          group('teamA', { name: 'A組', leaderId: 'L' }),
+          group('exec', { name: '高管組', leaderId: 'S' }),
+          group('teamB', { name: 'B組' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          // (a) 組長 L 上報組外夠格主管 S。
+          assignment('as-L', {
+            employeeId: 'L',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['S'],
+            primarySupervisorId: 'S',
+          }),
+          assignment('as-S', { employeeId: 'S', groupId: 'exec', jobLevelId: 'j1' }),
+          // midMgr 在 teamB、主歸屬掛 topBoss（有上級）、非任何組長 → 不夠格。
+          assignment('as-top', { employeeId: 'topBoss', groupId: 'teamB', jobLevelId: 'j1' }),
+          assignment('as-mid', {
+            employeeId: 'midMgr',
+            groupId: 'teamB',
+            jobLevelId: 'j1',
+            supervisorIds: ['topBoss'],
+            primarySupervisorId: 'topBoss',
+          }),
+          // (b) 非組長成員 m（teamA）上報組外不夠格主管 midMgr。
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'teamA',
+            jobLevelId: 'j1',
+            supervisorIds: ['midMgr'],
+            primarySupervisorId: 'midMgr',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // (a) 組長本人那筆被豁免：不報 group-mismatch:teamA:L。
+      expect(findings.some((f) => f.id === 'group-mismatch:teamA:L')).toBe(false);
+      // (b) 非組長成員 m 仍正確命中：規則沒被排除誤殺。
+      const mismatch = findings.find((f) => f.id === 'group-mismatch:teamA:m');
+      expect(mismatch?.severity).toBe('warning');
+      expect(mismatch?.category).toBe('group-mismatch');
+      expect(mismatch?.employeeId).toBe('m');
     });
   });
 

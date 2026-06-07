@@ -19,6 +19,9 @@ export const ALL_GROUPS_VIEW_ID = '__all__';
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 112;
+/** 員工節點寬高（供組別視圖等重用者推算框尺寸；與本檔 dagre 用值同源）。 */
+export const ORG_FLOW_NODE_WIDTH = NODE_WIDTH;
+export const ORG_FLOW_NODE_HEIGHT = NODE_HEIGHT;
 /** 加大層距，讓跨層匯報線的水平段落在層與層之間、不穿過節點 */
 const RANK_SEP = 120;
 const NODE_SEP = 60;
@@ -262,6 +265,34 @@ function pickDisplayAssignment(
   return mine.find((a) => a.isPrimaryGroup) ?? mine[0];
 }
 
+/** `layoutReportingSubgraph` 的輸出：定位後節點 + 層帶輔助線 + 水平範圍。 */
+export interface ReportingSubgraphLayout {
+  nodes: Node<EmployeeNodeData>[];
+  levels: OrgFlowLevelLine[];
+  bounds: { minX: number; maxX: number };
+}
+
+/**
+ * 可重入的「匯報子圖」三段佈局管線：`layoutWithDagre → centerParents → applyLevelBands`。
+ *
+ * 吃**已建好**的真實節點（`EmployeeNodeData`）、匯報邊（`data.isPrimary` 標主匯報）
+ * 與 `levelMap`（每節點的有效層級，1-indexed、最小層在上），回傳定位後節點、
+ * 各層水平輔助線與 X 範圍。常數（NODE_WIDTH/HEIGHT、RANK_SEP、NODE_SEP、LEVEL_GAP）
+ * 與旗標語意全部沿用，故 `buildOrgFlowGraph`（reporting）行為等價。
+ *
+ * 給 `buildGroupOrgGraph` 重用做「組內子佈局」：座標為相對於子圖原點（左上約 0,0
+ * 起算的 dagre 排版），呼叫端可平移進群組框、或讀 `bounds`/層帶高度推算框尺寸。
+ */
+export function layoutReportingSubgraph(
+  nodes: Node<EmployeeNodeData>[],
+  edges: Edge[],
+  levelMap: Map<string, number>,
+): ReportingSubgraphLayout {
+  const laidOut = layoutWithDagre(nodes, edges, levelMap);
+  const centered = centerParents(laidOut, edges, levelMap);
+  return applyLevelBands(centered, levelMap);
+}
+
 export function buildOrgFlowGraph(
   data: OrgData,
   groupId: string,
@@ -369,10 +400,12 @@ export function buildOrgFlowGraph(
   //     供帶 dummy 的主排版與 level band 共用 → dagre rank 對齊 level，跨層邊留水平通道。
   const depthMap = computePrimaryDepth(groupAssignments);
   const levelMap = resolveLevels(nodes, displayByNode, depthMap);
-  const laidOut = layoutWithDagre(nodes, edges, levelMap);
-  // (b) 父置中於直接（主匯報）子女。
-  const centered = centerParents(laidOut, edges, levelMap);
-  // 層帶覆寫 Y + 同層去重疊。
-  const { nodes: leveled, levels, bounds } = applyLevelBands(centered, levelMap);
+  // (b) 父置中於直接（主匯報）子女 →（c）層帶覆寫 Y + 同層去重疊。
+  // 三段管線抽為 layoutReportingSubgraph，與組別視圖共用同一演算法（避免分岔）。
+  const { nodes: leveled, levels, bounds } = layoutReportingSubgraph(
+    nodes,
+    edges,
+    levelMap,
+  );
   return { nodes: leveled, edges, levels, bounds };
 }

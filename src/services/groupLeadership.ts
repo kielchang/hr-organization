@@ -97,9 +97,10 @@ export function deriveInGroupRoot(data: OrgData, groupId: string): string | null
  * 推導單一組別的領導結構（leader + 推導式 co-leader）。
  *
  * - `leaderId`：優先取 `group.leaderId`；未設（null/undefined）時即時回退推「組內匯報根」。
- * - `coLeaderIds`：對每位成員看其「在本組那筆 assignment」的 `primarySupervisorId = s`，
+ * - `coLeaderIds`：對每位**非組長**成員看其「在本組那筆 assignment」的 `primarySupervisorId = s`，
  *   若 `s != null && s != leaderId && s ∉ M`（主管在組外）**且 `isLeadLevel(s)`（夠格）**
  *   → s 為 co-leader 候選；不夠格者屬「掛錯組」（由 Phase F 報警示），不列入。
+ *   組長本人略過（其上級主管是正常上行匯報，非平行共管）。
  *   去重、排除 leaderId、回 employeeId 升冪的穩定排序陣列。
  * - 空組（無成員）→ `{ groupId, leaderId: null, coLeaderIds: [] }`。
  */
@@ -118,6 +119,7 @@ export function deriveGroupLeadership(
   const coLeaderSet = new Set<string>();
   for (const a of data.assignments) {
     if (a.groupId !== group.id) continue;
+    if (a.employeeId === leaderId) continue;
     const sup = a.primarySupervisorId;
     if (
       sup != null &&
