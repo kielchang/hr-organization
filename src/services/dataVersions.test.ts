@@ -74,6 +74,27 @@ describe('publishedVersionToInfo', () => {
     expect(out.data.schemaVersion).toBeGreaterThanOrEqual(1);
     expect(out.valid).toBe(true);
   });
+
+  it('帶入調整理由（note）到 DataVersionInfo', () => {
+    const pv: PublishedVersion = {
+      id: 'pub-note',
+      label: '有理由版',
+      publishedAt: '2026-03-03T00:00:00.000Z',
+      data: makeOrgData(),
+      note: '整併重疊職能',
+    };
+    expect(publishedVersionToInfo(pv).note).toBe('整併重疊職能');
+  });
+
+  it('無 note 的舊發布版本轉換後 note 為 undefined', () => {
+    const pv: PublishedVersion = {
+      id: 'pub-nonote',
+      label: '舊版本',
+      publishedAt: '2026-03-03T00:00:00.000Z',
+      data: makeOrgData(),
+    };
+    expect(publishedVersionToInfo(pv).note).toBeUndefined();
+  });
 });
 
 describe('apiVersionToInfo', () => {

@@ -24,7 +24,11 @@ interface EditModeToolbarProps {
   onEnterEditMode: () => void;
   onExitEditMode: () => void;
   onSaveCheckpoint: (description: string) => void;
-  onPublish: (effectiveDate?: string) => void;
+  onPublish: (opts: {
+    label?: string;
+    note?: string;
+    effectiveDate?: string;
+  }) => void;
   onToggleSnapshotPanel: () => void;
 }
 
@@ -42,6 +46,8 @@ export function EditModeToolbar({
   const [checkpointDesc, setCheckpointDesc] = useState('');
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [versionLabel, setVersionLabel] = useState('');
+  const [versionNote, setVersionNote] = useState('');
   const [effectiveDate, setEffectiveDate] = useState('');
 
   // R0.1 變革管理 nudge：三個選填問題（純前端 state，不持久化、不送後端）。
@@ -55,10 +61,12 @@ export function EditModeToolbar({
   const showChangeNudge =
     !sponsor.trim() || !affectedPeople.trim() || !sustainmentOwner.trim();
 
-  // 對話框關閉後重置三題 state（不影響發布行為）。
+  // 對話框關閉後重置版本名稱/理由與三題 state（不影響發布行為）。
   const handlePublishDialogChange = (open: boolean) => {
     setShowPublishConfirm(open);
     if (!open) {
+      setVersionLabel('');
+      setVersionNote('');
       setSponsor('');
       setAffectedPeople('');
       setSustainmentOwner('');
@@ -214,9 +222,41 @@ export function EditModeToolbar({
         description="將目前的草稿發布為一個新的版本（以發布時間命名），儲存至本機並可在「資料版本」中切換。"
         confirmLabel="確定發布"
         cancelLabel="取消"
-        onConfirm={() => onPublish(effectiveDate || undefined)}
+        onConfirm={() =>
+          onPublish({
+            label: versionLabel.trim() || undefined,
+            note: versionNote.trim() || undefined,
+            effectiveDate: effectiveDate || undefined,
+          })
+        }
       >
         <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <label htmlFor="publish-version-label" className="text-sm text-muted-foreground">
+              版本名稱（選填，留空＝以發布時間命名）
+            </label>
+            <Input
+              id="publish-version-label"
+              value={versionLabel}
+              onChange={(e) => setVersionLabel(e.target.value)}
+              placeholder="例：2026 上半年組織調整案"
+              className="w-full"
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <label htmlFor="publish-version-note" className="text-sm text-muted-foreground">
+              這次調整的理由（選填）
+            </label>
+            <Textarea
+              id="publish-version-note"
+              value={versionNote}
+              onChange={(e) => setVersionNote(e.target.value)}
+              placeholder="例：強化跨部門協作、整併重疊職能"
+              className="w-full"
+            />
+          </div>
+
           <div className="grid gap-1.5">
             <label htmlFor="publish-effective-date" className="text-sm text-muted-foreground">
               生效日（選填，留空＝發布即生效）

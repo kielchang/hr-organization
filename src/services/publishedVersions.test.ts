@@ -39,6 +39,41 @@ describe('publishedVersions', () => {
     expect(created.effectiveDate).toBeUndefined();
   });
 
+  it('可記錄調整理由（note）並 trim', () => {
+    const { created } = addPublishedVersion(
+      makeOrgData(),
+      '有理由版',
+      undefined,
+      '  整併重疊職能  ',
+    );
+    expect(created.note).toBe('整併重疊職能');
+    expect(loadPublishedVersions()[0].note).toBe('整併重疊職能');
+  });
+
+  it('note 為空字串或純空白時不存（undefined）', () => {
+    const blank = addPublishedVersion(makeOrgData(), '空白理由', undefined, '   ');
+    expect(blank.created.note).toBeUndefined();
+    const empty = addPublishedVersion(makeOrgData(), '空字串理由', undefined, '');
+    expect(empty.created.note).toBeUndefined();
+    expect(loadPublishedVersions().every((v) => v.note === undefined)).toBe(true);
+  });
+
+  it('未指定 note 時為 undefined', () => {
+    const { created } = addPublishedVersion(makeOrgData(), '無理由版');
+    expect(created.note).toBeUndefined();
+  });
+
+  it('生效日與調整理由可同時記錄', () => {
+    const { created } = addPublishedVersion(
+      makeOrgData(),
+      '完整版',
+      '2026-12-31',
+      '強化跨部門協作',
+    );
+    expect(created.effectiveDate).toBe('2026-12-31');
+    expect(created.note).toBe('強化跨部門協作');
+  });
+
   it('依 id 刪除', () => {
     const { created } = addPublishedVersion(makeOrgData(), 'A');
     addPublishedVersion(makeOrgData(), 'B');

@@ -13,6 +13,8 @@ export interface PublishedVersion {
   data: OrgData;
   /** 生效日（YYYY-MM-DD）；未設＝發布即生效。 */
   effectiveDate?: string;
+  /** 這次調整的理由（選填，版本層級 metadata）。 */
+  note?: string;
 }
 
 export interface PublishedVersionsBundle {
@@ -57,13 +59,16 @@ export function addPublishedVersion(
   data: OrgData,
   label?: string,
   effectiveDate?: string,
+  note?: string,
 ): { versions: PublishedVersion[]; created: PublishedVersion } {
+  const trimmedNote = note?.trim();
   const created: PublishedVersion = {
     id: newId(),
     label: label?.trim() || timestampLabel(),
     publishedAt: new Date().toISOString(),
     data: cloneOrgData(data),
     ...(effectiveDate ? { effectiveDate } : {}),
+    ...(trimmedNote ? { note: trimmedNote } : {}),
   };
   const next = [created, ...loadPublishedVersions()];
   persist(next);

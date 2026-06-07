@@ -121,12 +121,17 @@ describe('EditModeToolbar — R0.1 發布摩擦三題（CM nudge）', () => {
     await screen.findByRole('dialog');
     await user.click(screen.getByRole('button', { name: '確定發布' }));
 
-    // 生效日留空 → onPublish(undefined)；三題不進入發布參數（純 nudge）
+    // 名稱/理由/生效日皆留空 → onPublish 收到全 undefined 的 options；
+    // 三題不進入發布參數（純 nudge）
     expect(onPublish).toHaveBeenCalledTimes(1);
-    expect(onPublish).toHaveBeenCalledWith(undefined);
+    expect(onPublish).toHaveBeenCalledWith({
+      label: undefined,
+      note: undefined,
+      effectiveDate: undefined,
+    });
   });
 
-  it('三題填妥後發布行為不變（仍呼叫 onPublish，參數與既有相同）', async () => {
+  it('三題填妥後發布行為不變（仍呼叫 onPublish，名稱/理由/生效日仍為 undefined）', async () => {
     const user = userEvent.setup();
     const { onPublish } = renderEditing();
 
@@ -142,8 +147,13 @@ describe('EditModeToolbar — R0.1 發布摩擦三題（CM nudge）', () => {
     await user.type(inDialog.getByLabelText(/sustainment owner/), '李小華');
     await user.click(inDialog.getByRole('button', { name: '確定發布' }));
 
+    // 三題僅 nudge、不持久化，不進入 onPublish；名稱/理由/生效日未填仍 undefined
     expect(onPublish).toHaveBeenCalledTimes(1);
-    expect(onPublish).toHaveBeenCalledWith(undefined);
+    expect(onPublish).toHaveBeenCalledWith({
+      label: undefined,
+      note: undefined,
+      effectiveDate: undefined,
+    });
   });
 
   it('對話框關閉再開啟：三題 state 重置（重開仍顯示柔性提醒）', async () => {
@@ -163,5 +173,108 @@ describe('EditModeToolbar — R0.1 發布摩擦三題（CM nudge）', () => {
     const inDialog = within(dialog);
     expect(inDialog.getByLabelText(/sponsor/)).toHaveValue('');
     expect(inDialog.getByText(NUDGE_TEXT)).toBeInTheDocument();
+  });
+});
+
+describe('EditModeToolbar — R4.3 版本命名 + 調整理由', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it('發布對話框含「版本名稱」與「調整理由」欄位', async () => {
+    const user = userEvent.setup();
+    renderEditing();
+
+    await user.click(screen.getByRole('button', { name: '發布' }));
+    const dialog = await screen.findByRole('dialog');
+    const inDialog = within(dialog);
+
+    expect(
+      inDialog.getByLabelText(/版本名稱（選填/),
+    ).toBeInTheDocument();
+    expect(
+      inDialog.getByLabelText(/這次調整的理由（選填）/),
+    ).toBeInTheDocument();
+  });
+
+  it('填入名稱、理由與生效日後 onPublish 收到對應 options', async () => {
+    const user = userEvent.setup();
+    const { onPublish } = renderEditing();
+
+    await user.click(screen.getByRole('button', { name: '發布' }));
+    const dialog = await screen.findByRole('dialog');
+    const inDialog = within(dialog);
+
+    await user.type(
+      inDialog.getByLabelText(/版本名稱（選填/),
+      '2026 上半年組織調整案',
+    );
+    await user.type(
+      inDialog.getByLabelText(/這次調整的理由（選填）/),
+      '整併重疊職能',
+    );
+    await user.type(
+      inDialog.getByLabelText(/生效日（選填/),
+      '2026-12-31',
+    );
+    await user.click(inDialog.getByRole('button', { name: '確定發布' }));
+
+    expect(onPublish).toHaveBeenCalledTimes(1);
+    expect(onPublish).toHaveBeenCalledWith({
+      label: '2026 上半年組織調整案',
+      note: '整併重疊職能',
+      effectiveDate: '2026-12-31',
+    });
+  });
+
+  it('名稱與理由僅含空白時轉為 undefined（trim 後為空）', async () => {
+    const user = userEvent.setup();
+    const { onPublish } = renderEditing();
+
+    await user.click(screen.getByRole('button', { name: '發布' }));
+    const dialog = await screen.findByRole('dialog');
+    const inDialog = within(dialog);
+
+    await user.type(inDialog.getByLabelText(/版本名稱（選填/), '   ');
+    await user.type(inDialog.getByLabelText(/這次調整的理由（選填）/), '  ');
+    await user.click(inDialog.getByRole('button', { name: '確定發布' }));
+
+    expect(onPublish).toHaveBeenCalledTimes(1);
+    expect(onPublish).toHaveBeenCalledWith({
+      label: undefined,
+      note: undefined,
+      effectiveDate: undefined,
+    });
+  });
+
+  it('對話框關閉後重置名稱/理由（重開為空）', async () => {
+    const user = userEvent.setup();
+    renderEditing();
+
+    // 第一次開啟並填名稱/理由
+    await user.click(screen.getByRole('button', { name: '發布' }));
+    let dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByLabelText(/版本名稱（選填/),
+      '暫存名稱',
+    );
+    await user.type(
+      within(dialog).getByLabelText(/這次調整的理由（選填）/),
+      '暫存理由',
+    );
+    await user.click(within(dialog).getByRole('button', { name: '取消' }));
+
+    // 重新開啟 → 名稱/理由欄應已清空
+    await user.click(screen.getByRole('button', { name: '發布' }));
+    dialog = await screen.findByRole('dialog');
+    const inDialog = within(dialog);
+    expect(inDialog.getByLabelText(/版本名稱（選填/)).toHaveValue('');
+    expect(inDialog.getByLabelText(/這次調整的理由（選填）/)).toHaveValue('');
   });
 });

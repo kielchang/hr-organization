@@ -25,6 +25,8 @@ export interface DataVersionInfo {
   source: DataVersionSource;
   /** 生效日（YYYY-MM-DD），僅發布版本可能有；未設＝發布即生效。 */
   effectiveDate?: string;
+  /** 這次調整的理由（選填），僅本機發布版本可能有；雲端版本無。 */
+  note?: string;
 }
 
 const emptyOrgData: OrgData = {
@@ -121,6 +123,7 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
     isSeed: false,
     source: 'published',
     effectiveDate: pv.effectiveDate,
+    note: pv.note,
   };
 }
 

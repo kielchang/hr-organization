@@ -74,6 +74,34 @@ describe('OrgProvider', () => {
     expect(result.current.activeVersionId).toBe(newId);
     expect(result.current.dataVersions.some((v) => v.id === newId)).toBe(true);
   });
+
+  it('publishVersion 只傳 draft（無 opts）仍正常發布（向後相容）', () => {
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    let newId = '';
+    act(() => {
+      newId = result.current.publishVersion(result.current.data);
+    });
+    const created = result.current.dataVersions.find((v) => v.id === newId);
+    expect(created).toBeDefined();
+    expect(created?.note).toBeUndefined();
+    expect(created?.effectiveDate).toBeUndefined();
+  });
+
+  it('publishVersion 帶 opts（label/note/effectiveDate）正確傳遞', () => {
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    let newId = '';
+    act(() => {
+      newId = result.current.publishVersion(result.current.data, {
+        label: '2026 上半年調整案',
+        note: '整併重疊職能',
+        effectiveDate: '2026-12-31',
+      });
+    });
+    const created = result.current.dataVersions.find((v) => v.id === newId);
+    expect(created?.label).toBe('發布 · 2026 上半年調整案');
+    expect(created?.note).toBe('整併重疊職能');
+    expect(created?.effectiveDate).toBe('2026-12-31');
+  });
 });
 
 describe('OrgProvider（啟用後端 API）', () => {

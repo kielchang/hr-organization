@@ -8,8 +8,11 @@ export interface OrgContextValue {
   activeVersionId: string;
   activeVersion: DataVersionInfo | undefined;
   selectDataVersion: (id: string) => void;
-  /** 發布草稿為新的本機版本（可指定生效日 YYYY-MM-DD），回傳新版本 id */
-  publishVersion: (draft: OrgData, effectiveDate?: string) => string;
+  /** 發布草稿為新的本機版本（可選填版本名稱、調整理由、生效日 YYYY-MM-DD），回傳新版本 id */
+  publishVersion: (
+    draft: OrgData,
+    opts?: { label?: string; note?: string; effectiveDate?: string },
+  ) => string;
   /** 刪除一個本機發布版本（內建版本不受影響） */
   deletePublishedVersion: (id: string) => void;
   /** 將所有本機發布版本匯出成可攜帶的整包檔 */

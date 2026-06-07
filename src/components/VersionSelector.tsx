@@ -92,6 +92,11 @@ export function VersionSelector() {
           </Button>
         )}
       </div>
+      {activeVersion?.note && (
+        <p className="text-sm text-muted-foreground">
+          調整理由：{activeVersion.note}
+        </p>
+      )}
       {activeVersion && !activeVersion.valid && activeVersion.errors.length > 0 && (
         <Alert variant="destructive">
           <AlertDescription>

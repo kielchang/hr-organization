@@ -158,28 +158,42 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     [allVersions],
   );
 
-  /** 發布草稿為一個新的本機版本（自動以時間戳命名，可指定生效日），並切換為當前版本。 */
-  const publishVersion = useCallback((draft: OrgData, effectiveDate?: string) => {
-    const { created } = addPublishedVersion(draft, undefined, effectiveDate);
-    setDataVersions(loadAllVersions());
-    setActiveVersionId(created.id);
-    const next = backfillAssignmentLevels(cloneOrgData(created.data));
-    setData(next);
-    saveDraft(next);
-    saveActiveVersionId(created.id);
-    // 啟用後端時，寫穿到雲端並併入下拉（best-effort）。
-    if (isApiEnabled()) {
-      apiClient
-        .publishVersion(created.label, created.data)
-        .then((v) =>
-          setRemoteVersions((prev) =>
-            prev.some((p) => p.id === v.id) ? prev : [...prev, apiVersionToInfo(v)],
-          ),
-        )
-        .catch((err) => console.warn('發布到雲端失敗', err));
-    }
-    return created.id;
-  }, []);
+  /**
+   * 發布草稿為一個新的本機版本，並切換為當前版本。
+   * opts：版本名稱（留空＝時間戳命名）、調整理由、生效日（皆選填）。
+   */
+  const publishVersion = useCallback(
+    (
+      draft: OrgData,
+      opts?: { label?: string; note?: string; effectiveDate?: string },
+    ) => {
+      const { created } = addPublishedVersion(
+        draft,
+        opts?.label,
+        opts?.effectiveDate,
+        opts?.note,
+      );
+      setDataVersions(loadAllVersions());
+      setActiveVersionId(created.id);
+      const next = backfillAssignmentLevels(cloneOrgData(created.data));
+      setData(next);
+      saveDraft(next);
+      saveActiveVersionId(created.id);
+      // 啟用後端時，寫穿到雲端並併入下拉（best-effort）。note 不寫穿。
+      if (isApiEnabled()) {
+        apiClient
+          .publishVersion(created.label, created.data)
+          .then((v) =>
+            setRemoteVersions((prev) =>
+              prev.some((p) => p.id === v.id) ? prev : [...prev, apiVersionToInfo(v)],
+            ),
+          )
+          .catch((err) => console.warn('發布到雲端失敗', err));
+      }
+      return created.id;
+    },
+    [],
+  );
 
   const deletePublishedVersionById = useCallback(
     (id: string) => {

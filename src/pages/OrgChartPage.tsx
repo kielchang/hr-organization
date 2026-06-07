@@ -125,10 +125,14 @@ export function OrgChartPage() {
     setShowSnapshotPanel(true);
   };
 
-  const handlePublish = (effectiveDate?: string) => {
+  const handlePublish = (opts: {
+    label?: string;
+    note?: string;
+    effectiveDate?: string;
+  }) => {
     const draft = editSession.getDraftData();
     if (!draft) return;
-    publishVersion(cloneOrgData(draft), effectiveDate);
+    publishVersion(cloneOrgData(draft), opts);
     editSession.exitEditMode();
     setShowSnapshotPanel(false);
     setStaleDataWarning(false);
