@@ -89,20 +89,36 @@ describe('ReportingEdge', () => {
   it('有 data.label → 渲染標籤文字，且不出現內建白底（.react-flow__edge-textbg）', () => {
     const { container } = renderEdge({ isPrimary: true, label: '主匯報', offset: 60 });
 
-    // 標籤文字以透明底 div 自繪。
+    // 標籤文字以白底 div 自繪（坐在線上、白底遮住文字底下那一小段線）。
     expect(screen.getByText('主匯報')).toBeInTheDocument();
     // 線連續不被切：絕不出現內建 EdgeText 的白底 rect（本元件從不傳 label 給 BaseEdge）。
     expect(container.querySelector('.react-flow__edge-textbg')).toBeNull();
   });
 
-  it('標籤 div 透明（無背景）、pointerEvents:none（不擋互動）、字級 10', () => {
+  it('標籤 div 白底（var(--background)、非透明）、pointerEvents:none（不擋互動）、字級 10', () => {
     renderEdge({ isPrimary: true, label: '主匯報', offset: 60 });
     const label = screen.getByText('主匯報');
 
-    expect(label.style.backgroundColor).toBe('');
-    expect(label.style.background).toBe('');
+    // 反轉先前決定：label 從透明底改白底，坐在線上、白底遮住文字底下那一小段線。
+    // 以 inline style 斷言而非 getComputedStyle：jsdom 不解析 CSS 變數，computed 對
+    // var(--background) 行為不穩（可能回原字串或空），inline style.backgroundColor 才確定。
+    expect(label.style.backgroundColor).toBe('var(--background)');
+    expect(label.style.backgroundColor).not.toBe('');
+    expect(label.style.backgroundColor).not.toBe('transparent');
+    expect(label.style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
     expect(label.style.pointerEvents).toBe('none');
     expect(label.style.fontSize).toBe('10px');
+  });
+
+  it('標籤 div 置中坐在線上：transform 不含 translateY(-10px)（不再浮在線上方）', () => {
+    renderEdge({ isPrimary: true, label: '主匯報', offset: 60 });
+    const label = screen.getByText('主匯報');
+
+    // 反轉先前「浮在線上方 10px」決定：transform 只 translate(-50%,-50%) + labelX/labelY，
+    // 不得再有把 label 往上推的 translateY(-10px)。
+    expect(label.style.transform).toContain('translate(-50%, -50%)');
+    expect(label.style.transform).not.toContain('translateY(-10px)');
+    expect(label.style.transform).not.toContain('-10px');
   });
 
   it('無 data.label → 不渲染標籤（純線）', () => {

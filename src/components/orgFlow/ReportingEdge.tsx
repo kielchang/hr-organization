@@ -19,8 +19,8 @@ export interface ReportingEdgeData {
 }
 
 /**
- * 自訂匯報線：標籤透明底、浮在線水平段上方約 10px、與線平行（水平文字），
- * 線在底下連續不被切斷（內建 smoothstep label 的白底會把線切兩段，故自繪）。
+ * 自訂匯報線：標籤白底、置中坐在線水平段上（與線平行的水平文字），
+ * 白底只遮住文字底下那一小段線，視覺上線從文字左右兩側共線進出、看起來連續直直穿過。
  *
  * 路由參數與原 smoothstep 一致（borderRadius:12、offset 由 data.offset 帶入），
  * 視覺路由不變。線型由 data.isPrimary 決定：主匯報實線、次要虛線。
@@ -69,9 +69,12 @@ export function ReportingEdge({
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) translateY(-10px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               fontSize: 10,
               color: 'var(--muted-foreground)',
+              backgroundColor: 'var(--background)',
+              padding: '0 4px',
+              borderRadius: 2,
               pointerEvents: 'none',
               whiteSpace: 'nowrap',
             }}
