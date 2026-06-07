@@ -19,6 +19,7 @@ const BpmnListPage = lazy(() => import('./pages/BpmnListPage').then((m) => ({ de
 const BpmnDesignerPage = lazy(() => import('./pages/BpmnDesignerPage').then((m) => ({ default: m.BpmnDesignerPage })));
 const BpmnSimulatePage = lazy(() => import('./pages/BpmnSimulatePage').then((m) => ({ default: m.BpmnSimulatePage })));
 const BpmnImpactPage = lazy(() => import('./pages/BpmnImpactPage').then((m) => ({ default: m.BpmnImpactPage })));
+const RoadmapPage = lazy(() => import('./pages/RoadmapPage').then((m) => ({ default: m.RoadmapPage })));
 
 function PageFallback() {
   return (
@@ -44,6 +45,7 @@ function App() {
                 <Route path="compare" element={<ScenarioComparePage />} />
                 <Route path="changelog" element={<ChangeLogPage />} />
                 <Route path="csv-import" element={<CsvImportPage />} />
+                <Route path="roadmap" element={<RoadmapPage />} />
                 <Route path="bpmn" element={<BpmnListPage />} />
                 <Route path="bpmn/impact" element={<BpmnImpactPage />} />
                 <Route path="bpmn/:processId" element={<BpmnDesignerPage />} />

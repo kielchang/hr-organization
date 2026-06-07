@@ -8,6 +8,7 @@ import {
   GitCompare,
   History,
   LayoutDashboard,
+  Map as MapIcon,
   TriangleAlert,
   Users,
   X,
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/bpmn/impact', label: '變更影響', icon: TriangleAlert },
   { to: '/changelog', label: '調整紀錄', icon: History },
   { to: '/csv-import', label: 'CSV 匯入', icon: FileSpreadsheet },
+  { to: '/roadmap', label: '改善 Roadmap', icon: MapIcon },
 ] as const;
 
 export function Layout() {
