@@ -333,6 +333,60 @@ describe('reassignSupervisor（拖人改匯報線）', () => {
     expect(updated.primarySupervisorId).toBe('newBoss');
     expect(updated.supervisorIds).toEqual(['newBoss']);
   });
+
+  it('清除 level 覆寫：成功 reassign 後被拖者的手動層級覆寫被清為 undefined（跟隨新主管計算深度）', () => {
+    // 契約（drag-to-reassign）：換主管時清掉舊的垂直拖曳層級覆寫，
+    // 讓被拖者跟隨新主管的計算深度，而非殘留手動 level。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+      level: 7, // 既有手動層級覆寫
+    });
+    const base = reassignBase(staffAss);
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.primarySupervisorId).toBe('newBoss');
+    // 核心：手動 level 覆寫被清除（undefined），不殘留 7。
+    expect(updated.level).toBeUndefined();
+  });
+
+  it('失敗 reassign（循環）不動到 level 覆寫：原 level 保留、data 為原物件', () => {
+    // 失敗路徑整筆不套用 → 既有 level 覆寫不應被清掉。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['oldBoss'],
+      primarySupervisorId: 'oldBoss',
+      level: 7,
+    });
+    const newBossAss = assignment('a-newBoss', {
+      employeeId: 'newBoss',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['staff'],
+      primarySupervisorId: 'staff',
+    });
+    const base = makeOrgData({
+      employees: [emp('oldBoss'), emp('newBoss'), emp('staff')],
+      groups: [group('g1', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss, newBossAss],
+    });
+
+    const { data, error } = reassignSupervisor(base, 'a-staff', 'newBoss', OP);
+
+    expect(error).toMatch(/循環/);
+    // 整筆不套用：回原 data，level 覆寫原封不動。
+    expect(data).toBe(base);
+    expect(data.assignments.find((a) => a.id === 'a-staff')!.level).toBe(7);
+  });
 });
 
 describe('importOrgData / createEmptyAssignment', () => {
