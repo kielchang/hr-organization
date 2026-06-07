@@ -112,7 +112,7 @@ const PHASES: RoadmapPhase[] = [
     title: 'Phase 5 — 體驗摩擦消除（UXR 視角）',
     description: 'UXR 模擬三情境發現的小型體驗修補，個別獨立。',
     order: 6,
-    status: 'planned',
+    status: 'in-progress',
   },
   {
     id: 'phase-observing',
@@ -409,9 +409,12 @@ const ITEMS: RoadmapItem[] = [
   {
     id: 'R5.2',
     title: '編輯態 before / after 浮層',
-    description: '不發布也能看指標變化，鼓勵反覆試算。',
-    status: 'planned',
-    sources: ['uxr'],
+    description:
+      '編輯模式即時顯示 4 指標（平均管理幅度/最大層級/警示數/規劃就緒度）的 before→after 變化，不發布也能看影響、鼓勵反覆試算。',
+    status: 'done',
+    commitHash: '8d72028',
+    completedAt: '2026-06-07',
+    sources: ['uxr', 'pm'],
     size: 'medium',
     phaseId: 'phase-5',
   },

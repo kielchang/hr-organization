@@ -40,8 +40,10 @@ describe('RoadmapPage render smoke', () => {
     expect(screen.getAllByText('已排程').length).toBeGreaterThan(0);
     expect(screen.getAllByText('待訪談').length).toBeGreaterThan(0);
     expect(screen.getAllByText('觀察中').length).toBeGreaterThan(0);
-    // 「進行中 / 合計」只出現在 StatCard 標籤裡，可用 getByText。
-    expect(screen.getByText('進行中')).toBeInTheDocument();
+    // 「進行中」會同時出現在 StatCard 標籤與 phase 狀態徽章（當有 in-progress 項目時，
+    // 例如 phase-5），用 getAllByText 確認至少出現一次。
+    expect(screen.getAllByText('進行中').length).toBeGreaterThan(0);
+    // 「合計」只出現在 StatCard 標籤裡（無對應狀態徽章），可用 getByText。
     expect(screen.getByText('合計')).toBeInTheDocument();
 
     // 3. vibe 警告 callout（CM 顧問核心警告 — 出現「高估自己」與「30%」字樣）
