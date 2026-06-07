@@ -84,6 +84,82 @@ export interface OrgHealth {
   findings: OrgHealthFinding[];
 }
 
+/** 規劃就緒度的單一維度（結構面）。 */
+export interface ReadinessDimension {
+  key: 'span' | 'structure' | 'function' | 'keyPerson';
+  /** 繁中：管理幅度健康／結構完整性／職能覆蓋／關鍵人風險。 */
+  label: string;
+  /** 0–100，由該維度相關 finding 從 100 起扣。 */
+  score: number;
+  /** 該維度相關 finding 數。 */
+  findingCount: number;
+}
+
+/** 規劃就緒度（**結構面**，非完整變革就緒度）。 */
+export interface ReadinessResult {
+  /** 0–100，四維度等權平均。 */
+  total: number;
+  /** ≥80 high、60–79 medium、<60 low。 */
+  level: 'high' | 'medium' | 'low';
+  dimensions: ReadinessDimension[];
+}
+
+/** warning 每筆扣分（較重）。 */
+const READINESS_WARNING_PENALTY = 15;
+/** info 每筆扣分（較輕）。 */
+const READINESS_INFO_PENALTY = 5;
+
+/** 維度 → 對應的 finding category 與繁中標籤。 */
+const READINESS_DIMENSIONS: ReadonlyArray<{
+  key: ReadinessDimension['key'];
+  label: string;
+  categories: ReadonlyArray<OrgHealthFinding['category']>;
+}> = [
+  { key: 'span', label: '管理幅度健康', categories: ['span'] },
+  { key: 'structure', label: '結構完整性', categories: ['chain', 'cycle'] },
+  { key: 'function', label: '職能覆蓋', categories: ['function'] },
+  { key: 'keyPerson', label: '關鍵人風險', categories: ['spof'] },
+];
+
+/**
+ * 由 OrgHealth 推導「結構面」規劃就緒度（純函式）。
+ *
+ * - 四維度（span／structure／function／keyPerson）各從 100 起扣：
+ *   warning 每筆 −15、info 每筆 −5，最低 0。
+ * - total＝四維度等權平均（四捨五入到整數）。
+ * - level：≥80 high、60–79 medium、<60 low。
+ * - 誠實命名：僅涵蓋**結構面**，不含 leadership／comms／sponsor 等變革要素。
+ */
+export function buildReadiness(health: OrgHealth): ReadinessResult {
+  const dimensions: ReadinessDimension[] = READINESS_DIMENSIONS.map((dim) => {
+    const related = health.findings.filter((f) =>
+      dim.categories.includes(f.category),
+    );
+    const penalty = related.reduce(
+      (sum, f) =>
+        sum +
+        (f.severity === 'warning'
+          ? READINESS_WARNING_PENALTY
+          : READINESS_INFO_PENALTY),
+      0,
+    );
+    return {
+      key: dim.key,
+      label: dim.label,
+      score: Math.max(0, 100 - penalty),
+      findingCount: related.length,
+    };
+  });
+
+  const total = Math.round(
+    dimensions.reduce((sum, d) => sum + d.score, 0) / dimensions.length,
+  );
+  const level: ReadinessResult['level'] =
+    total >= 80 ? 'high' : total >= 60 ? 'medium' : 'low';
+
+  return { total, level, dimensions };
+}
+
 /** 取每位員工的主歸屬（isPrimaryGroup===true）那筆 assignment。 */
 function primaryAssignmentByEmployee(
   assignments: Assignment[],
@@ -256,7 +332,7 @@ export function buildOrgHealth(
         id: `chain-orphan:${emp.id}`,
         severity: 'warning',
         category: 'chain',
-        message: `員工「${emp.name}」沒有任何組別歸屬（孤兒節點），不在任何匯報線上。`,
+        message: `員工「${emp.name}」沒有任何組別歸屬（無任何歸屬），不在任何匯報線上。`,
         employeeId: emp.id,
       });
       continue;

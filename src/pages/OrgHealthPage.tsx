@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  ChevronDown,
+  GaugeCircle,
   Info,
   Layers,
   ShieldAlert,
@@ -26,7 +29,9 @@ import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCov
 import { useOrg } from '../context/useOrg';
 import {
   buildOrgHealth,
+  buildReadiness,
   type OrgHealthFinding,
+  type ReadinessResult,
   type SpanEntry,
 } from '../services/orgHealth';
 
@@ -46,9 +51,29 @@ const categoryLabel: Record<OrgHealthFinding['category'], string> = {
   span: '管理幅度',
   depth: '層級深度',
   function: '職能覆蓋',
-  chain: '斷鏈',
+  chain: '懸空匯報',
   cycle: '匯報循環',
-  spof: '單點風險',
+  spof: '無備援主管',
+};
+
+/** R0.3 健檢分群固定順序（warning 為主的群優先）。 */
+const CATEGORY_ORDER: ReadonlyArray<OrgHealthFinding['category']> = [
+  'chain',
+  'cycle',
+  'spof',
+  'span',
+  'function',
+  'depth',
+];
+
+/** R0.5 就緒度等級 → Badge variant 與中文標籤。 */
+const readinessLevelMeta: Record<
+  ReadinessResult['level'],
+  { variant: 'success' | 'warning' | 'destructive'; label: string }
+> = {
+  high: { variant: 'success', label: '結構就緒' },
+  medium: { variant: 'warning', label: '尚需補強' },
+  low: { variant: 'destructive', label: '結構待整理' },
 };
 
 /** 摘要卡片。 */
@@ -120,18 +145,160 @@ function SpanList({
   );
 }
 
+/** R0.5 規劃就緒度區塊：total 大數字 + level 徽章 + 四維度 + CM 註記。 */
+function ReadinessSection({ readiness }: { readiness: ReadinessResult }) {
+  const meta = readinessLevelMeta[readiness.level];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <GaugeCircle className="size-4 text-muted-foreground" />
+          規劃就緒度
+        </CardTitle>
+        <CardDescription>
+          以結構面 finding 推導的快速訊號（管理幅度、結構完整性、職能覆蓋、關鍵人風險）
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-center lg:gap-8">
+        {/* 總分 + 等級徽章 */}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col">
+            <span className="text-4xl font-semibold leading-none tracking-tight">
+              {readiness.total}
+            </span>
+            <span className="mt-1 text-xs text-muted-foreground">/ 100 分</span>
+          </div>
+          <Badge variant={meta.variant} className="self-start">
+            {meta.label}
+          </Badge>
+        </div>
+
+        {/* 四維度 */}
+        <ul className="grid gap-2.5 sm:grid-cols-2">
+          {readiness.dimensions.map((d) => (
+            <li key={d.key} className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{d.label}</span>
+                <span className="font-medium tabular-nums">{d.score}</span>
+              </div>
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                role="presentation"
+              >
+                <div
+                  className={
+                    d.score >= 80
+                      ? 'h-full rounded-full bg-success'
+                      : d.score >= 60
+                        ? 'h-full rounded-full bg-warning'
+                        : 'h-full rounded-full bg-destructive'
+                  }
+                  style={{ width: `${d.score}%` }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <CardContent className="-mt-2">
+        <p className="rounded-lg border border-info/30 bg-info/10 px-3 py-2 text-xs text-info-foreground">
+          此為<strong className="font-semibold">結構面</strong>
+          就緒度；完整的變革就緒（sponsor、溝通、抗拒管理）需搭配 stakeholder
+          評估——見
+          <Link
+            to="/roadmap"
+            className="mx-0.5 font-medium underline underline-offset-2"
+          >
+            改善 Roadmap
+          </Link>
+          Phase 1。
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** R0.3 單一 category 的可摺疊群（原生 details/summary，鍵盤可及）。 */
+function FindingGroup({
+  category,
+  findings,
+}: {
+  category: OrgHealthFinding['category'];
+  findings: OrgHealthFinding[];
+}) {
+  // 群內 warning 在前、info 在後（穩定排序）。
+  const sorted = [...findings].sort((a, b) => {
+    const rank = (s: OrgHealthFinding['severity']) =>
+      s === 'warning' ? 0 : 1;
+    return rank(a.severity) - rank(b.severity);
+  });
+  const hasWarning = sorted.some((f) => f.severity === 'warning');
+
+  return (
+    <details open className="group rounded-lg border border-border bg-card">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [details:not([open])_&]:-rotate-90" />
+        <span>{categoryLabel[category]}</span>
+        {hasWarning && (
+          <span
+            className="size-1.5 shrink-0 rounded-full bg-destructive"
+            aria-label="包含警示"
+          />
+        )}
+        <Badge variant="muted" className="ml-auto">
+          {sorted.length}
+        </Badge>
+      </summary>
+      <ul className="flex flex-col gap-2 px-3 pb-3 pt-1">
+        {sorted.map((f) => (
+          <li
+            key={f.id}
+            className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm ring-1 ring-foreground/5"
+          >
+            {f.severity === 'warning' ? (
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
+            ) : (
+              <Info className="mt-0.5 size-4 shrink-0 text-info-foreground" />
+            )}
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-foreground">{f.message}</span>
+              <Badge
+                variant={severityBadgeVariant(f.severity)}
+                className="self-start"
+              >
+                {severityLabel[f.severity]}
+              </Badge>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 export function OrgHealthPage() {
   const { data } = useOrg();
   const health = useMemo(() => buildOrgHealth(data), [data]);
+  const readiness = useMemo(() => buildReadiness(health), [health]);
 
   const { summary, span, depth, findings } = health;
+
+  // R0.3 依固定 category 順序分群（空群不顯示）。
+  const findingGroups = useMemo(
+    () =>
+      CATEGORY_ORDER.map((category) => ({
+        category,
+        items: findings.filter((f) => f.category === category),
+      })).filter((g) => g.items.length > 0),
+    [findings],
+  );
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold tracking-tight">規劃健檢</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          以目前編輯中的組織資料量化評估組織結構：管理幅度、層級深度、職能覆蓋缺口，以及斷鏈／循環／單點等結構風險，協助規劃決策。
+          以目前編輯中的組織資料量化評估組織結構：管理幅度、層級深度、職能覆蓋缺口，以及懸空匯報／循環指派／無備援主管等結構風險，協助規劃決策。
         </p>
       </header>
 
@@ -152,6 +319,9 @@ export function OrgHealthPage() {
           tone="warning"
         />
       </section>
+
+      {/* R0.5 規劃就緒度（摘要卡下、findings 上） */}
+      <ReadinessSection readiness={readiness} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* 2. 管理幅度 */}
@@ -234,34 +404,20 @@ export function OrgHealthPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {findings.length === 0 ? (
+          {findingGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               未發現結構風險，目前組織結構健康。
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {findings.map((f) => (
-                <li
-                  key={f.id}
-                  className="flex items-start gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm ring-1 ring-foreground/5"
-                >
-                  {f.severity === 'warning' ? (
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
-                  ) : (
-                    <Info className="mt-0.5 size-4 shrink-0 text-info-foreground" />
-                  )}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-foreground">{f.message}</span>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant={severityBadgeVariant(f.severity)}>
-                        {severityLabel[f.severity]}
-                      </Badge>
-                      <Badge variant="outline">{categoryLabel[f.category]}</Badge>
-                    </div>
-                  </div>
-                </li>
+            <div className="flex flex-col gap-2">
+              {findingGroups.map((g) => (
+                <FindingGroup
+                  key={g.category}
+                  category={g.category}
+                  findings={g.items}
+                />
               ))}
-            </ul>
+            </div>
           )}
         </CardContent>
       </Card>

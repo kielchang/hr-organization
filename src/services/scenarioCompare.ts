@@ -25,6 +25,24 @@ export interface ScenarioInput {
   data: OrgData;
 }
 
+/**
+ * 「保留事項」摘要（CM 安定感訊號）：相對基準有多少員工／歸屬維持不變。
+ * 計算重用 `computeOrgDiff` 結果，未變動＝基準總數 −(removed + modified)。
+ * `unchangedRatio` 以歸屬為準（見下方欄位說明）。
+ */
+export interface ScenarioRetained {
+  /** 兩版都存在且內容相同的員工數。 */
+  unchangedEmployees: number;
+  /** 兩版都存在且內容相同的歸屬數。 */
+  unchangedAssignments: number;
+  /**
+   * 未變動歸屬 / 基準歸屬總數（0–1，基準歸屬數為 0 時回 0）。
+   * 用歸屬（而非員工）為分母：安定感訊號的本質是「歸屬（部門/主管/職級）有沒有變」，
+   * 而非「員工 record 是否改名/離職」。詳見契約 §R0.4。
+   */
+  unchangedRatio: number;
+}
+
 /** 一個情境的計算結果：對「基準情境」的 diff + 自己的健檢 */
 export interface ScenarioResult {
   input: ScenarioInput;
@@ -42,6 +60,8 @@ export interface ScenarioResult {
     addedEdges: number;
     removedEdges: number;
   };
+  /** 相對基準的未變動摘要；基準自己全等於總數、ratio=1。 */
+  retained: ScenarioRetained;
 }
 
 /** 程式用指標 id，對齊契約 §2 `metricMatrix` 列順序。 */
@@ -98,6 +118,35 @@ function summarizeDiff(diff: OrgDiffResult): ScenarioResult['diffSummary'] {
     addedEdges: diff.addedEdgeKeys.size,
     removedEdges: diff.removedEdgeKeys.size,
   };
+}
+
+/**
+ * 由 diff 與基準總數推導「保留事項」摘要（純函式）。
+ *
+ * - 未變動員工＝基準員工總數 −(removed + modified)；歸屬同理。
+ * - `unchangedRatio` 以基準「歸屬」總數為分母（為 0 時回 0，避免除以零）——
+ *   安定感訊號的本質是歸屬有沒有變，不是員工 record 是否改名/離職（契約 §R0.4）。
+ * - 與 `computeOrgDiff` 同一群體（全部 employees/assignments，不只 active），
+ *   確保分子分母一致。
+ */
+function summarizeRetained(
+  diff: OrgDiffResult,
+  baseEmployeeTotal: number,
+  baseAssignmentTotal: number,
+): ScenarioRetained {
+  const unchangedEmployees = Math.max(
+    0,
+    baseEmployeeTotal - diff.removedEmployeeIds.size - diff.modifiedEmployeeIds.size,
+  );
+  const unchangedAssignments = Math.max(
+    0,
+    baseAssignmentTotal -
+      diff.removedAssignmentIds.size -
+      diff.modifiedAssignmentIds.size,
+  );
+  const unchangedRatio =
+    baseAssignmentTotal === 0 ? 0 : unchangedAssignments / baseAssignmentTotal;
+  return { unchangedEmployees, unchangedAssignments, unchangedRatio };
 }
 
 /**
@@ -183,6 +232,8 @@ export function buildScenarioComparison(
   }));
 
   const baseline = normalizedInputs[0];
+  const baseEmployeeTotal = baseline.data.employees.length;
+  const baseAssignmentTotal = baseline.data.assignments.length;
   const scenarios: ScenarioResult[] = normalizedInputs.map((input, index) => {
     const diffVsBaseline =
       index === 0 ? emptyDiff() : computeOrgDiff(baseline.data, input.data);
@@ -191,6 +242,11 @@ export function buildScenarioComparison(
       health: buildOrgHealth(input.data),
       diffVsBaseline,
       diffSummary: summarizeDiff(diffVsBaseline),
+      retained: summarizeRetained(
+        diffVsBaseline,
+        baseEmployeeTotal,
+        baseAssignmentTotal,
+      ),
     };
   });
 

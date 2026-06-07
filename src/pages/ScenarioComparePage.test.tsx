@@ -95,4 +95,19 @@ describe('ScenarioComparePage 規劃情境比較 render smoke', () => {
     });
     expect(removeButtons.length).toBe(2);
   });
+
+  it('R0.4：未達 2 情境時不渲染結構差異卡與「保留事項」行', () => {
+    // 預設僅 1 個有效情境（基準）。R0.4 的「保留事項」行屬於結構差異摘要卡，
+    // 只在 ≥2 情境時渲染；此處驗證未達門檻時不誤渲染（避免無基準對照時亂報）。
+    // 互動切換第二槽（Radix Select）在 jsdom 已知脆弱，且 retained 計算已由
+    // scenarioCompare.test.ts 完整覆蓋；此處只做穩定的負向斷言。
+    renderWithProviders(<ScenarioComparePage />, { route: '/compare' });
+
+    expect(
+      screen.getByText(/請選擇至少 2 個有效版本/),
+    ).toBeInTheDocument();
+    // 「N% 員工的歸屬維持不變」與「結構差異」摘要皆不應出現。
+    expect(screen.queryByText(/員工的歸屬維持不變/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/相對基準/)).not.toBeInTheDocument();
+  });
 });

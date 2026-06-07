@@ -1,4 +1,9 @@
-import { buildOrgHealth } from './orgHealth';
+import {
+  buildOrgHealth,
+  buildReadiness,
+  type OrgHealth,
+  type OrgHealthFinding,
+} from './orgHealth';
 import { assignment, emp, group, jobLevel, makeOrgData } from '../test/fixtures';
 
 /**
@@ -725,5 +730,257 @@ describe('buildOrgHealth — summary 與不變式', () => {
     expect(depth.maxDepth).toBe(0);
     expect(findings).toEqual([]);
     expect(functionCoverage.functions).toEqual([]);
+  });
+});
+
+describe('buildReadiness（規劃就緒度 — 結構面）', () => {
+  /**
+   * buildReadiness 僅讀取 health.findings；其餘欄位不影響計分。
+   * 以最小 OrgHealth-like 物件造各類別 finding，精準控制每維度扣分，
+   * 比真造一整份 OrgData 更穩定、邊界更好湊。
+   *
+   * 維度 → category 對應（對齊契約 R0.5）：
+   *   span      ← ['span']
+   *   structure ← ['chain','cycle']
+   *   function  ← ['function']
+   *   keyPerson ← ['spof']
+   * 計分：每維度自 100 起扣（warning −15、info −5），Math.max(0,…)；
+   * total＝四維等權平均（Math.round）；level：≥80 high／60–79 medium／<60 low。
+   */
+
+  /** 造 count 筆指定 category／severity 的 finding（內容除分類外不影響計分）。 */
+  function findingsOf(
+    category: OrgHealthFinding['category'],
+    severity: OrgHealthFinding['severity'],
+    count: number,
+  ): OrgHealthFinding[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `${category}-${severity}:${i}`,
+      severity,
+      category,
+      message: `${category} ${severity} #${i}`,
+    }));
+  }
+
+  /** 以給定 findings 組出 buildReadiness 只會讀到 findings 的最小 OrgHealth。 */
+  function healthWith(findings: OrgHealthFinding[]): OrgHealth {
+    return {
+      summary: {
+        activeEmployees: 0,
+        departments: 0,
+        functions: 0,
+        supervisors: 0,
+        avgSpan: 0,
+        maxDepth: 0,
+        warningCount: findings.filter((f) => f.severity === 'warning').length,
+      },
+      span: {
+        entries: [],
+        average: 0,
+        max: 0,
+        min: 0,
+        supervisorCount: 0,
+        wide: [],
+        narrow: [],
+      },
+      depth: { maxDepth: 0, perLevel: [] },
+      functionCoverage: {
+        functions: [],
+        functionsWithoutMembers: [],
+        functionsWithoutLead: [],
+        crossFunctionLoad: [],
+      },
+      findings,
+    };
+  }
+
+  /** 維度 key → score，便於斷言。 */
+  function scoresByKey(health: OrgHealth): Record<string, number> {
+    const r = buildReadiness(health);
+    return Object.fromEntries(r.dimensions.map((d) => [d.key, d.score]));
+  }
+
+  it('健康組織（無 findings）→ 四維 score 全 100、total 100、level high', () => {
+    const r = buildReadiness(healthWith([]));
+    expect(r.dimensions.map((d) => d.key)).toEqual([
+      'span',
+      'structure',
+      'function',
+      'keyPerson',
+    ]);
+    expect(r.dimensions.every((d) => d.score === 100)).toBe(true);
+    expect(r.dimensions.every((d) => d.findingCount === 0)).toBe(true);
+    expect(r.total).toBe(100);
+    expect(r.level).toBe('high');
+  });
+
+  it('純 warning：某維 N 筆 warning → 該維 score = max(0, 100 − 15N)', () => {
+    // structure 維度放 2 筆 warning（chain）→ 100 − 30 = 70；其餘維度 100。
+    const r = buildReadiness(healthWith(findingsOf('chain', 'warning', 2)));
+    const scores = scoresByKey(healthWith(findingsOf('chain', 'warning', 2)));
+    expect(scores.structure).toBe(100 - 15 * 2); // 70
+    expect(scores.span).toBe(100);
+    expect(scores.function).toBe(100);
+    expect(scores.keyPerson).toBe(100);
+    // structure 維度的 findingCount 對到該類別筆數
+    const structureDim = r.dimensions.find((d) => d.key === 'structure');
+    expect(structureDim?.findingCount).toBe(2);
+  });
+
+  it('info 扣分較輕：1 筆 info → 該維 −5', () => {
+    // span narrow 屬 info → span 維 100 − 5 = 95
+    const scores = scoresByKey(healthWith(findingsOf('span', 'info', 1)));
+    expect(scores.span).toBe(95);
+  });
+
+  it('warning 與 info 混扣：1 warning + 2 info → −15 − 10 = −25', () => {
+    const mixed = [
+      ...findingsOf('spof', 'warning', 1),
+      ...findingsOf('spof', 'info', 2),
+    ];
+    const scores = scoresByKey(healthWith(mixed));
+    expect(scores.keyPerson).toBe(100 - 15 - 5 * 2); // 75
+  });
+
+  it('扣到 0 下限：堆超量 warning 不會出現負分', () => {
+    // 10 筆 warning → 100 − 150 = −50，應被 Math.max(0,…) 夾到 0
+    const scores = scoresByKey(healthWith(findingsOf('function', 'warning', 10)));
+    expect(scores.function).toBe(0);
+  });
+
+  it('structure 維度同時吃 chain 與 cycle 兩類別', () => {
+    const combo = [
+      ...findingsOf('chain', 'warning', 1),
+      ...findingsOf('cycle', 'warning', 1),
+    ];
+    const r = buildReadiness(healthWith(combo));
+    const structureDim = r.dimensions.find((d) => d.key === 'structure');
+    expect(structureDim?.findingCount).toBe(2);
+    expect(structureDim?.score).toBe(100 - 15 * 2); // 70
+  });
+
+  it('各維 findingCount 精準對應其 category（不互相污染）', () => {
+    const all = [
+      ...findingsOf('span', 'info', 3), // span
+      ...findingsOf('chain', 'warning', 1), // structure
+      ...findingsOf('cycle', 'warning', 1), // structure
+      ...findingsOf('function', 'warning', 2), // function
+      ...findingsOf('spof', 'warning', 1), // keyPerson
+      // depth 不屬任何就緒度維度 → 應被忽略
+      ...findingsOf('depth', 'info', 4),
+    ];
+    const r = buildReadiness(healthWith(all));
+    const byKey = Object.fromEntries(
+      r.dimensions.map((d) => [d.key, d.findingCount]),
+    );
+    expect(byKey.span).toBe(3);
+    expect(byKey.structure).toBe(2); // chain + cycle
+    expect(byKey.function).toBe(2);
+    expect(byKey.keyPerson).toBe(1);
+    // depth findings 不影響任何維度的計分
+    expect(scoresByKey(healthWith(all)).function).toBe(100 - 15 * 2);
+  });
+
+  describe('level 邊界（total 由四維等權平均 Math.round 推得）', () => {
+    /**
+     * 每維 score 必為 5 的倍數（penalty＝15w+5i）。
+     * 以「各維放 K 筆 info」精準把某維壓到目標分數，湊出指定 total。
+     */
+    function infoCountFor(targetScore: number): number {
+      return (100 - targetScore) / 5; // info 每筆 −5
+    }
+    function healthForScores(scores: {
+      span: number;
+      structure: number;
+      function: number;
+      keyPerson: number;
+    }): OrgHealth {
+      return healthWith([
+        ...findingsOf('span', 'info', infoCountFor(scores.span)),
+        ...findingsOf('chain', 'info', infoCountFor(scores.structure)),
+        ...findingsOf('function', 'info', infoCountFor(scores.function)),
+        ...findingsOf('spof', 'info', infoCountFor(scores.keyPerson)),
+      ]);
+    }
+
+    it('total 恰為 80 → high（sum 320 / 4）', () => {
+      const r = buildReadiness(
+        healthForScores({ span: 80, structure: 80, function: 80, keyPerson: 80 }),
+      );
+      expect(r.total).toBe(80);
+      expect(r.level).toBe('high');
+    });
+
+    it('total 79 → medium（sum 315 / 4 = 78.75 四捨五入 79）', () => {
+      const r = buildReadiness(
+        healthForScores({ span: 80, structure: 80, function: 80, keyPerson: 75 }),
+      );
+      expect(r.total).toBe(79);
+      expect(r.level).toBe('medium');
+    });
+
+    it('total 恰為 60 → medium（sum 240 / 4）', () => {
+      const r = buildReadiness(
+        healthForScores({ span: 60, structure: 60, function: 60, keyPerson: 60 }),
+      );
+      expect(r.total).toBe(60);
+      expect(r.level).toBe('medium');
+    });
+
+    it('total 59 → low（sum 235 / 4 = 58.75 四捨五入 59）', () => {
+      const r = buildReadiness(
+        healthForScores({ span: 60, structure: 60, function: 60, keyPerson: 55 }),
+      );
+      expect(r.total).toBe(59);
+      expect(r.level).toBe('low');
+    });
+  });
+
+  it('直接吃 buildOrgHealth 輸出：spof + function 變動會降對應維度', () => {
+    // 真造一份含 spof（warning）與 function-no-lead（warning）的 OrgData，
+    // 驗證 buildReadiness 串接 buildOrgHealth 的結果一致。
+    const data = makeOrgData({
+      employees: [emp('sup'), emp('r1'), emp('r2'), emp('m1')],
+      groups: [
+        group('dept', { kind: 'department' }),
+        group('fn', { code: 'FN', name: '無頭職能', kind: 'function' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-r1', {
+          employeeId: 'r1',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        assignment('as-r2', {
+          employeeId: 'r2',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        // 無 lead 職能：成員無 primarySupervisorId
+        assignment('as-m1', {
+          employeeId: 'm1',
+          groupId: 'fn',
+          jobLevelId: 'j1',
+          isPrimaryGroup: false,
+        }),
+      ],
+    });
+    const health = buildOrgHealth(data);
+    const r = buildReadiness(health);
+    const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+    // keyPerson：1 筆 spof warning → 85
+    expect(byKey.keyPerson.findingCount).toBe(1);
+    expect(byKey.keyPerson.score).toBe(85);
+    // function：1 筆 no-lead warning → 85
+    expect(byKey.function.findingCount).toBe(1);
+    expect(byKey.function.score).toBe(85);
+    // structure 無 finding → 100
+    expect(byKey.structure.score).toBe(100);
   });
 });

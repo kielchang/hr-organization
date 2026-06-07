@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { OrgHealthPage } from './OrgHealthPage';
 
@@ -42,8 +42,51 @@ describe('OrgHealthPage 規劃健檢 render smoke', () => {
     expect(screen.getByText('職能覆蓋訊號')).toBeInTheDocument();
     expect(screen.getByText('結構風險 / 警示清單')).toBeInTheDocument();
 
+    // R0.5 規劃就緒度區塊：四維度標籤於就緒度卡內呈現
+    const readinessTitle = screen.getByText('規劃就緒度');
+    const readinessCard = readinessTitle.closest(
+      '[data-slot="card"]',
+    ) as HTMLElement;
+    expect(readinessCard).not.toBeNull();
+    const inReadiness = within(readinessCard);
+    expect(inReadiness.getByText('管理幅度健康')).toBeInTheDocument();
+    expect(inReadiness.getByText('結構完整性')).toBeInTheDocument();
+    expect(inReadiness.getByText('職能覆蓋')).toBeInTheDocument();
+    expect(inReadiness.getByText('關鍵人風險')).toBeInTheDocument();
+
     // 渲染期間不應有 React 錯誤/警告
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('R0.5：規劃就緒度區塊顯示 total 數字、等級徽章與 /roadmap 連結', () => {
+    renderWithProviders(<OrgHealthPage />, { route: '/health' });
+
+    // 就緒度卡片標題
+    const heading = screen.getByText('規劃就緒度');
+    const card = heading.closest('[data-slot="card"]') as HTMLElement;
+    expect(card).not.toBeNull();
+    // 卡片內含 total 大數字（0–100 的純數字）與「/ 100 分」單位
+    expect(card.textContent).toMatch(/\d+/);
+    expect(card.textContent).toContain('/ 100 分');
+
+    // 等級徽章為三種文案之一（high=結構就緒／medium=尚需補強／low=結構待整理）
+    expect(card.textContent).toMatch(/結構就緒|尚需補強|結構待整理/);
+
+    // CM 註記連結指向 /roadmap
+    const roadmapLink = screen.getByRole('link', { name: '改善 Roadmap' });
+    expect(roadmapLink).toHaveAttribute('href', '/roadmap');
+  });
+
+  it('R0.2/R0.3：findings 以中文 category 分群、舊工程詞標籤不再出現', () => {
+    renderWithProviders(<OrgHealthPage />, { route: '/health' });
+
+    // 至少出現一個 R0.2 後的中文 category 標籤（seed 含 spof → 無備援主管）。
+    expect(screen.getByText('無備援主管')).toBeInTheDocument();
+
+    // 舊的工程詞 category 標籤不應再以分群標題出現。
+    // （categoryLabel 已將 chain→懸空匯報、spof→無備援主管）
+    expect(screen.queryByText('斷鏈')).not.toBeInTheDocument();
+    expect(screen.queryByText('單點風險')).not.toBeInTheDocument();
   });
 
   it('摘要卡片數值與服務輸出一致（在職人數為非負整數字串）', () => {

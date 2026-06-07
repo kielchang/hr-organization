@@ -49,7 +49,7 @@ export function BaselineSelector({
                 : 'bg-transparent text-muted-foreground hover:bg-muted'
             }`}
           >
-            捕捉快照
+            設定比較基準
           </button>
           <button
             onClick={() => onSourceChange('version')}
@@ -84,9 +84,9 @@ export function BaselineSelector({
             </>
           ) : (
             <div className="flex-1 flex items-center gap-3">
-              <p className="text-xs text-muted-foreground flex-1">尚未建立快照——點擊按鈕擷取目前組織狀態</p>
+              <p className="text-xs text-muted-foreground flex-1">尚未設定基準——點擊按鈕記下目前組織狀態作為比較對照</p>
               <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={onCapture}>
-                <Camera className="size-3.5" />建立基準快照
+                <Camera className="size-3.5" />記下目前狀態為基準
               </Button>
             </div>
           )}

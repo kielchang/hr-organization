@@ -258,9 +258,12 @@ const toneClass: Record<'warning' | 'success', string> = {
 function DiffSummaryCard({
   result,
   baselineLabel,
+  baselineAssignmentTotal,
 }: {
   result: ScenarioResult;
   baselineLabel: string;
+  /** 基準歸屬總數（對齊 retained.unchangedRatio 的分母群體）。 */
+  baselineAssignmentTotal: number;
 }) {
   const s = result.diffSummary;
   const totalEmployeeChange =
@@ -268,6 +271,11 @@ function DiffSummaryCard({
   const totalAssignmentChange =
     s.addedAssignments + s.removedAssignments + s.modifiedAssignments;
   const noChange = totalEmployeeChange + totalAssignmentChange === 0;
+
+  // R0.4 保留事項（安定感訊號）：大部分配置不變先講（以歸屬為準）。
+  const { unchangedAssignments, unchangedRatio } = result.retained;
+  const retainedPercent = Math.round(unchangedRatio * 100);
+  const showRetained = baselineAssignmentTotal > 0;
 
   return (
     <Card size="sm">
@@ -279,7 +287,7 @@ function DiffSummaryCard({
           相對基準「{baselineLabel}」的結構差異
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
         {noChange ? (
           <p className="text-sm text-muted-foreground">
             與基準結構完全相同。
@@ -319,6 +327,20 @@ function DiffSummaryCard({
               </Badge>
             )}
           </ul>
+        )}
+
+        {/* R0.4 保留事項：先講「大部分不變」以降低焦慮（CM）。 */}
+        {showRetained && (
+          <p className="flex items-start gap-1.5 text-sm text-success">
+            <span aria-hidden="true">✓</span>
+            <span>
+              <strong className="font-semibold">
+                {retainedPercent}% 的人員配置維持不變
+              </strong>
+              （{baselineAssignmentTotal} 筆歸屬中 {unchangedAssignments}{' '}
+              筆不受影響）
+            </span>
+          </p>
         )}
       </CardContent>
     </Card>
@@ -526,6 +548,9 @@ export function ScenarioComparePage() {
                 key={r.input.versionId}
                 result={r}
                 baselineLabel={baselineResult?.input.label ?? ''}
+                baselineAssignmentTotal={
+                  baselineResult?.input.data.assignments.length ?? 0
+                }
               />
             ))}
           </section>

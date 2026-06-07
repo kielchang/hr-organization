@@ -171,7 +171,7 @@ export function BpmnImpactPage() {
             <TabsContent value="health" className="space-y-4 mt-4">
               <div className="rounded-lg border border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
                 以目前組織資料（即時）對所有流程進行健檢，無需設定基準。
-                統計各核准節點的「找不到核准人」及「單點風險」情況。
+                統計各核准節點的「找不到核准人」及「僅一位核准人（無備援）」情況。
               </div>
 
               <ScrollArea>

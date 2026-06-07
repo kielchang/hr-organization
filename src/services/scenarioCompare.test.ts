@@ -561,3 +561,330 @@ describe('buildScenarioComparison — 健全性', () => {
     expect(result.scenarios[0].input.data).toBe(data);
   });
 });
+
+describe('buildScenarioComparison — retained（保留事項摘要，R0.4）', () => {
+  /**
+   * retained 重用 computeOrgDiff 的計數：
+   *   unchangedEmployees   = 基準員工總數 −(removedEmployees + modifiedEmployees)
+   *   unchangedAssignments = 基準歸屬總數 −(removedAssignments + modifiedAssignments)
+   *   unchangedRatio       = unchangedEmployees / 基準員工總數（為 0 時回 0）
+   * 群體＝全部 employees/assignments（含 inactive），與 computeOrgDiff 一致。
+   */
+
+  it('基準（第一個情境）：unchanged 全等於總數、ratio===1', () => {
+    // 基準自己 diff 為空 → 未變動數＝總數。造 3 名員工、3 筆歸屬。
+    const base = makeOrgData({
+      employees: [emp('a'), emp('b'), emp('c')],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-a', { employeeId: 'a', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-b', {
+          employeeId: 'b',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+        assignment('as-c', {
+          employeeId: 'c',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+    const result = buildScenarioComparison([toInput('base', base, '基準')]);
+    const retained = result.scenarios[0].retained;
+    expect(retained.unchangedEmployees).toBe(base.employees.length); // 3
+    expect(retained.unchangedAssignments).toBe(base.assignments.length); // 3
+    expect(retained.unchangedRatio).toBe(1);
+  });
+
+  it('兩情境有變動：unchanged = 基準總數 −(removed + modified)、ratio 正確', () => {
+    // 基準 5 名員工、5 筆歸屬。
+    const base = makeOrgData({
+      employees: [
+        emp('keep1'),
+        emp('keep2'),
+        emp('rm', { name: '待移除' }),
+        emp('mod', { name: '原名' }),
+        emp('boss'),
+      ],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-boss', { employeeId: 'boss', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-keep1', {
+          employeeId: 'keep1',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-keep2', {
+          employeeId: 'keep2',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-rm', {
+          employeeId: 'rm',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-mod', {
+          employeeId: 'mod',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    // 提案：移除 rm（含其歸屬）、mod 改名（員工 modified）。
+    const curr = makeOrgData({
+      employees: [
+        emp('keep1'),
+        emp('keep2'),
+        // rm 移除
+        emp('mod', { name: '新名' }), // 改名 → modifiedEmployees
+        emp('boss'),
+      ],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-boss', { employeeId: 'boss', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-keep1', {
+          employeeId: 'keep1',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-keep2', {
+          employeeId: 'keep2',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        // as-rm 移除
+        assignment('as-mod', {
+          employeeId: 'mod',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+
+    const result = buildScenarioComparison([
+      toInput('base', base, '基準'),
+      toInput('curr', curr, '提案'),
+    ]);
+    const proposal = result.scenarios[1];
+    const s = proposal.diffSummary;
+    const retained = proposal.retained;
+
+    // 健全性：的確抓到移除 1 人、改名 1 人。
+    expect(s.removedEmployees).toBe(1); // rm
+    expect(s.modifiedEmployees).toBe(1); // mod 改名
+    expect(s.removedAssignments).toBe(1); // as-rm
+
+    // 契約公式：員工
+    expect(retained.unchangedEmployees).toBe(
+      base.employees.length - s.removedEmployees - s.modifiedEmployees,
+    );
+    expect(retained.unchangedEmployees).toBe(3); // 5 −(1+1)
+
+    // 契約公式：歸屬
+    expect(retained.unchangedAssignments).toBe(
+      base.assignments.length - s.removedAssignments - s.modifiedAssignments,
+    );
+
+    // ratio 以基準「歸屬」總數為分母（R0.4：安定感訊號＝歸屬有沒有變，非員工 record）。
+    // 基準 5 筆歸屬；移除 as-rm（removedAssignments=1）；
+    // mod 僅員工改名、as-mod 歸屬內容不變 → 不算 modifiedAssignment（modifiedAssignments=0）。
+    // → unchangedAssignments = 5 −(1+0) = 4，ratio = 4/5 = 0.8。
+    expect(s.modifiedAssignments).toBe(0); // 改名不動歸屬
+    expect(retained.unchangedAssignments).toBe(4);
+    expect(retained.unchangedRatio).toBeCloseTo(4 / 5, 10); // 0.8
+    expect(retained.unchangedRatio).toBe(
+      retained.unchangedAssignments / base.assignments.length,
+    );
+  });
+
+  it('空基準（基準 employees 為 0）→ unchangedRatio===0（不為 NaN/Infinity）', () => {
+    // 基準完全空（員工 0、歸屬 0）→ 歸屬分母為 0，
+    // 確認 unchangedRatio 走 0 分支（不為 NaN/Infinity）。
+    const emptyBase = makeOrgData({
+      employees: [],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [],
+    });
+    const other = makeOrgData({
+      employees: [emp('e1')],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-e1', { employeeId: 'e1', groupId: 'dept', jobLevelId: 'j1' }),
+      ],
+    });
+    const result = buildScenarioComparison([
+      toInput('base', emptyBase, '空基準'),
+      toInput('curr', other, '提案'),
+    ]);
+    const retained = result.scenarios[1].retained;
+    expect(retained.unchangedRatio).toBe(0);
+    expect(Number.isNaN(retained.unchangedRatio)).toBe(false);
+    expect(Number.isFinite(retained.unchangedRatio)).toBe(true);
+    // 空基準自己 retained 也應為 0、ratio 0（總數 0）
+    const baseRetained = result.scenarios[0].retained;
+    expect(baseRetained.unchangedEmployees).toBe(0);
+    expect(baseRetained.unchangedRatio).toBe(0);
+  });
+
+  it('全員移除（極端變動）：unchanged 夾到 0、ratio 0，皆不為負', () => {
+    // 基準 2 名員工、2 筆歸屬；提案把兩人全移除 → removed=2，unchanged=0。
+    const base = makeOrgData({
+      employees: [emp('x'), emp('y')],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-x', { employeeId: 'x', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-y', { employeeId: 'y', groupId: 'dept', jobLevelId: 'j1' }),
+      ],
+    });
+    // 提案仍需 ≥1 員工才有意義的群體；放一個全新員工 z（added，不影響基準 removed 計）。
+    const curr = makeOrgData({
+      employees: [emp('z')],
+      groups: [group('dept', { kind: 'department' })],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-z', { employeeId: 'z', groupId: 'dept', jobLevelId: 'j1' }),
+      ],
+    });
+    const result = buildScenarioComparison([
+      toInput('base', base, '基準'),
+      toInput('curr', curr, '全換'),
+    ]);
+    const proposal = result.scenarios[1];
+    expect(proposal.diffSummary.removedEmployees).toBe(2); // x、y 皆移除
+    expect(proposal.retained.unchangedEmployees).toBe(0);
+    expect(proposal.retained.unchangedEmployees).toBeGreaterThanOrEqual(0);
+    expect(proposal.retained.unchangedAssignments).toBeGreaterThanOrEqual(0);
+    expect(proposal.retained.unchangedRatio).toBe(0);
+    expect(proposal.retained.unchangedRatio).toBeGreaterThanOrEqual(0);
+  });
+
+  it('鑑別力：員工 record 完全沒變、但歸屬大改（換部門+換主管）→ unchangedRatio 明顯低於 1', () => {
+    // R0.4 的核心：安定感訊號要反映「歸屬有沒有變」，不是「員工 record 是否改名/離職」。
+    // 舊邏輯（員工分母）會誤報 ratio=1（沒人改名/離職），新邏輯（歸屬分母）應抓到歸屬大改。
+    // 基準：boss + 3 名部屬同在 deptA、皆 report to boss（4 名員工、4 筆歸屬）。
+    const base = makeOrgData({
+      employees: [emp('boss'), emp('a'), emp('b'), emp('c')],
+      groups: [
+        group('deptA', { kind: 'department' }),
+        group('deptB', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-boss', { employeeId: 'boss', groupId: 'deptA', jobLevelId: 'j1' }),
+        assignment('as-a', {
+          employeeId: 'a',
+          groupId: 'deptA',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-b', {
+          employeeId: 'b',
+          groupId: 'deptA',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-c', {
+          employeeId: 'c',
+          groupId: 'deptA',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    // 提案：員工陣列「逐字相同」（沒改名、沒離職、沒新增）；
+    // 但 a→換到 deptB、b→改主管（report to a）、c→換部門又改主管。
+    // 只有 boss 的歸屬完全沒動。
+    const curr = makeOrgData({
+      employees: [emp('boss'), emp('a'), emp('b'), emp('c')],
+      groups: [
+        group('deptA', { kind: 'department' }),
+        group('deptB', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [
+        assignment('as-boss', { employeeId: 'boss', groupId: 'deptA', jobLevelId: 'j1' }),
+        assignment('as-a', {
+          employeeId: 'a',
+          groupId: 'deptB', // 換部門
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('as-b', {
+          employeeId: 'b',
+          groupId: 'deptA',
+          jobLevelId: 'j1',
+          supervisorIds: ['a'], // 換主管
+          primarySupervisorId: 'a',
+        }),
+        assignment('as-c', {
+          employeeId: 'c',
+          groupId: 'deptB', // 換部門
+          jobLevelId: 'j1',
+          supervisorIds: ['a'], // 換主管
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+
+    const result = buildScenarioComparison([
+      toInput('base', base, '基準'),
+      toInput('curr', curr, '重組'),
+    ]);
+    const proposal = result.scenarios[1];
+    const s = proposal.diffSummary;
+    const retained = proposal.retained;
+
+    // 員工層面「零變動」——舊邏輯會在這裡誤判成完全安定。
+    expect(s.addedEmployees).toBe(0);
+    expect(s.removedEmployees).toBe(0);
+    expect(s.modifiedEmployees).toBe(0);
+
+    // 歸屬層面：as-a / as-b / as-c 內容皆變 → modifiedAssignments=3、無增刪。
+    expect(s.modifiedAssignments).toBe(3);
+    expect(s.addedAssignments).toBe(0);
+    expect(s.removedAssignments).toBe(0);
+
+    // 新邏輯（歸屬分母）：unchangedAssignments = 4 −(0+3) = 1（只剩 boss）。
+    expect(retained.unchangedAssignments).toBe(1);
+    // 核心斷言：ratio = 1/4 = 0.25，明顯低於 1（證明反映了歸屬大改）。
+    expect(retained.unchangedRatio).toBeCloseTo(1 / 4, 10);
+    expect(retained.unchangedRatio).toBeLessThan(1);
+
+    // 對照：若仍用「員工分母」舊邏輯會回 1（沒人改名/離職），故新值必須小於它，
+    // 守護「不會像舊邏輯誤報高安定感」。
+    const staleEmployeeRatio =
+      retained.unchangedEmployees / base.employees.length; // 4/4 = 1
+    expect(staleEmployeeRatio).toBe(1);
+    expect(retained.unchangedRatio).toBeLessThan(staleEmployeeRatio);
+  });
+});
