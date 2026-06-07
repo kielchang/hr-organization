@@ -6,6 +6,7 @@ import {
   type Node,
 } from '@xyflow/react';
 import type { EmployeeNodeData } from '../components/orgFlow/EmployeeNode';
+import type { ReportingEdgeData } from '../components/orgFlow/ReportingEdge';
 import type { Assignment, OrgData } from '../types/org';
 import type { NodeDiffStatus } from '../types/editSession';
 import { computePrimaryDepth, effectiveLevel } from './reportingDepth';
@@ -336,28 +337,27 @@ export function buildOrgFlowGraph(
   let edgeIndex = 0;
   for (const [key, isPrimary] of edgePrimary) {
     const [source, target] = key.split('\0');
-    const edge: Edge & { pathOptions?: { borderRadius?: number; offset?: number } } = {
+    const edge: Edge = {
       id: `e-${edgeIndex++}`,
       source,
       target,
-      type: 'smoothstep',
+      // 自訂 edge：透明底標籤浮在線上、線連續不被內建 label 白底切斷。
+      type: 'reporting',
       animated: false,
-      // (c) 圓角小一點、水平段下沉到層間空隙中央，讓隔層匯報線轉折更清楚、
-      //     與中間層節點明顯分離（smoothstep 的 pathOptions）。
-      pathOptions: { borderRadius: 12, offset: RANK_SEP / 2 },
-      style: isPrimary
-        ? { strokeWidth: 2 }
-        : { strokeWidth: 1.5, strokeDasharray: '6 4' },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 18,
         height: 18,
       },
-      // 控制流（父→子女主匯報樹）以結構欄位承載，不耦合 UI 顯示字串；
-      // label 僅供畫面顯示，改文案/i18n 不影響父置中邏輯（centerParents）。
-      data: { isPrimary },
-      label: isPrimary ? '主匯報' : '虛線匯報',
-      labelStyle: { fontSize: 10 },
+      // 控制流（父→子女主匯報樹）以結構欄位 isPrimary 承載，不耦合 UI 顯示字串；
+      // centerParents 仍依賴 data.isPrimary。label 僅供畫面顯示，改文案/i18n 不影響
+      // 父置中邏輯。offset 沿用原 smoothstep pathOptions（水平段下沉到層間空隙中央，
+      // borderRadius 固定 12，由 ReportingEdge 取用）。
+      data: {
+        isPrimary,
+        label: isPrimary ? '主匯報' : '虛線匯報',
+        offset: RANK_SEP / 2,
+      } satisfies ReportingEdgeData,
     };
     edges.push(edge);
   }

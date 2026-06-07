@@ -71,8 +71,39 @@ describe('buildOrgFlowGraph', () => {
 
     const primary = r.edges.find((e) => e.source === 'boss' && e.target === 'mid');
     const dotted = r.edges.find((e) => e.source === 'boss' && e.target === 'low');
-    expect(primary?.label).toBe('主匯報');
-    expect(dotted?.label).toBe('虛線匯報');
+
+    // 標籤改造後：邊改用自訂 type='reporting'（不再用內建 smoothstep + 頂層 label）。
+    expect(primary?.type).toBe('reporting');
+    expect(dotted?.type).toBe('reporting');
+    // 不再有頂層 label（白底會切斷線）；文案/結構旗標改放 edge.data，由自訂 edge 自繪。
+    expect(primary?.label).toBeUndefined();
+    expect(dotted?.label).toBeUndefined();
+    // 文案改讀 data.label：mid 主管 boss 為主匯報、low 對 boss 為虛線匯報。
+    expect(primary?.data?.label).toBe('主匯報');
+    expect(dotted?.data?.label).toBe('虛線匯報');
+    // 結構旗標 data.isPrimary（centerParents 依賴；不耦合 UI 顯示字串）。
+    expect(primary?.data?.isPrimary).toBe(true);
+    expect(dotted?.data?.isPrimary).toBe(false);
+    // 自訂 edge 取用的路由 offset 帶在 data 上（沿用原 smoothstep pathOptions）。
+    expect(typeof primary?.data?.offset).toBe('number');
+    expect(typeof dotted?.data?.offset).toBe('number');
+  });
+
+  it('每條邊都用 reporting type、data 帶 label/isPrimary/offset，數量與來源一致', () => {
+    const r = buildOrgFlowGraph(sampleOrg(), 'g1');
+    // sampleOrg 的匯報來源：mid→boss(主)、low→mid(主)、low→boss(虛線) 共 3 條，
+    // 全在組內（無外洩給 g2/out）。
+    expect(r.edges).toHaveLength(3);
+    for (const e of r.edges) {
+      expect(e.type).toBe('reporting');
+      // 標籤文案只有兩種，由 isPrimary 決定。
+      expect(e.data?.label).toBe(e.data?.isPrimary ? '主匯報' : '虛線匯報');
+      expect(typeof e.data?.isPrimary).toBe('boolean');
+      expect(typeof e.data?.offset).toBe('number');
+      // 頂層 label/labelStyle 已移除（避免內建白底切線）。
+      expect(e.label).toBeUndefined();
+      expect((e as { labelStyle?: unknown }).labelStyle).toBeUndefined();
+    }
   });
 
   it('節點 data 帶職級名稱、主組別與層級', () => {

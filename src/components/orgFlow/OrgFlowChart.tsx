@@ -19,6 +19,7 @@ import {
 } from '../../services/buildOrgFlowGraph';
 import { buildNodeDiffMap } from '../../services/computeOrgDiff';
 import { EmployeeNode, type EmployeeNodeData } from './EmployeeNode';
+import { ReportingEdge } from './ReportingEdge';
 import { OrgFlowLevelLines } from './OrgFlowLevelLines';
 import { OrgFlowFullscreenButton, OrgFlowMiniMap } from './OrgFlowChartChrome';
 import { OrgFlowControlBar, type OrgFlowNavMode } from './OrgFlowControlBar';
@@ -39,6 +40,7 @@ import {
 import { useOrg } from '../../context/useOrg';
 
 const nodeTypes = { employee: EmployeeNode } as const;
+const edgeTypes = { reporting: ReportingEdge } as const;
 
 export interface OrgFlowChartProps {
   variant: OrgFlowChartVariant;
@@ -373,6 +375,7 @@ function FlowInner({
         nodes={renderedNodes as import('@xyflow/react').Node[]}
         edges={edges}
         nodeTypes={nodeTypes as import('@xyflow/react').NodeTypes}
+        edgeTypes={edgeTypes as import('@xyflow/react').EdgeTypes}
         onNodesChange={onNodesChange as import('@xyflow/react').OnNodesChange}
         onNodeClick={onNodeClick}
         onNodeDrag={onNodeDrag}
