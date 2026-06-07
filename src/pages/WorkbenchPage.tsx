@@ -2,10 +2,8 @@ import { useMemo, useState } from 'react';
 import { ReportingEditCanvas } from '../components/orgFlow/ReportingEditCanvas';
 import { WorkbenchInsightPanel } from '../components/orgFlow/WorkbenchInsightPanel';
 import { WorkbenchGuideLinks } from '../components/orgFlow/WorkbenchGuideLinks';
-import {
-  pickDefaultGroupId,
-  resolveGroupId,
-} from '../components/orgFlow/orgFlowGroupSelection';
+import { resolveGroupId } from '../components/orgFlow/orgFlowGroupSelection';
+import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
 import { buildOrgHealth } from '../services/orgHealth';
 import { useOrgFlowEditing } from '../hooks/useOrgFlowEditing';
 
@@ -21,7 +19,9 @@ export function WorkbenchPage() {
   const editing = useOrgFlowEditing();
   const { orgData } = editing;
 
-  const [groupId, setGroupId] = useState(() => pickDefaultGroupId(orgData.groups));
+  // 工作台是整合主介面，預設用「全公司視角」開啟（不挑單組），
+  // reporting + membership 皆從全公司起。/org-chart 維持 pickDefaultGroupId。
+  const [groupId, setGroupId] = useState<string>(ALL_GROUPS_VIEW_ID);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   const resolvedGroupId = useMemo(

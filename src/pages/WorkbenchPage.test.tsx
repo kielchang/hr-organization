@@ -46,6 +46,11 @@ describe('WorkbenchPage 組織圖工作台 render smoke', () => {
       screen.getByRole('button', { name: '進入編輯' }),
     ).toBeInTheDocument();
 
+    // 預設為「全公司視角」：組別選擇器（檢視組別）當前值顯示「全公司」，
+    // 而非預設挑某個單一組別（契約 §1：工作台以全公司開啟）。
+    expect(screen.getByText('檢視組別')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveTextContent('全公司');
+
     // 渲染期間不應有 React 錯誤/警告
     expect(errorSpy).not.toHaveBeenCalled();
   });
