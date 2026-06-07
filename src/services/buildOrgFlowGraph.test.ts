@@ -219,6 +219,135 @@ describe('buildOrgFlowGraph 佈局結構不變式', () => {
     expect(Math.abs(boss - mid)).toBeLessThanOrEqual(NODE_WIDTH / 2);
   });
 
+  /**
+   * 奇偶中位數父置中（Phase C）：父 X 由「(min+max)/2」改為子女 X 的奇偶中位數
+   * （奇→中位子節點 X；偶→中間兩子 X 中點；先升冪排序）。
+   *
+   * 直接子女在 dagre 同 rank 多為均勻間距 → median == midpoint，無法區別新舊。
+   * 故刻意讓「相鄰兩名子女各帶子樹」把它們撐開、其餘子女維持葉節點 →
+   * 子女 X 間距不均，median ≠ (min+max)/2，可明確驗證新行為。
+   */
+
+  // 3 子（奇數）且間距不均：c1/c2 各帶 3 名孫 → 被撐開到左/中遠端，c3 為葉。
+  function uneven3ChildrenOrg() {
+    const ks = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6'];
+    return makeOrgData({
+      employees: [emp('p'), emp('c1'), emp('c2'), emp('c3'), ...ks.map((k) => emp(k))],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'g1' }),
+        ...['c1', 'c2', 'c3'].map((c) =>
+          assignment(`a-${c}`, {
+            employeeId: c,
+            groupId: 'g1',
+            supervisorIds: ['p'],
+            primarySupervisorId: 'p',
+          }),
+        ),
+        ...['k1', 'k2', 'k3'].map((k) =>
+          assignment(`a-${k}`, {
+            employeeId: k,
+            groupId: 'g1',
+            supervisorIds: ['c1'],
+            primarySupervisorId: 'c1',
+          }),
+        ),
+        ...['k4', 'k5', 'k6'].map((k) =>
+          assignment(`a-${k}`, {
+            employeeId: k,
+            groupId: 'g1',
+            supervisorIds: ['c2'],
+            primarySupervisorId: 'c2',
+          }),
+        ),
+      ],
+    });
+  }
+
+  it('奇數子（3）父對齊中位子 X，且明確區別舊 (min+max)/2', () => {
+    const r = buildOrgFlowGraph(uneven3ChildrenOrg(), 'g1');
+    const x = (id: string) => r.nodes.find((n) => n.id === id)!.position.x;
+    const kids = [x('c1'), x('c2'), x('c3')].sort((a, b) => a - b);
+    const median = kids[1];
+    const oldMidpoint = (kids[0] + kids[2]) / 2;
+
+    // 父對齊中位子節點 X（新行為）。
+    expect(x('p')).toBe(median);
+    // 間距不均下 median !== (min+max)/2 → 確認非舊公式。
+    expect(median).not.toBe(oldMidpoint);
+    expect(x('p')).not.toBe(oldMidpoint);
+  });
+
+  it('亂序輸入仍正確：父對齊中位子（centerParents 內部排序生效）', () => {
+    // 反轉 assignment 輸入順序 → dagre 絕對 X 會變，但「父 == 中位子 X」不變。
+    const base = uneven3ChildrenOrg();
+    const shuffled = makeOrgData({
+      ...base,
+      assignments: [...base.assignments].reverse(),
+    });
+    const r = buildOrgFlowGraph(shuffled, 'g1');
+    const x = (id: string) => r.nodes.find((n) => n.id === id)!.position.x;
+    const kids = [x('c1'), x('c2'), x('c3')].sort((a, b) => a - b);
+    expect(x('p')).toBe(kids[1]); // 仍對齊中位子
+  });
+
+  // 4 子（偶數）且間距不均：c1/c2 各帶子樹被撐開、c3/c4 為葉聚右 → 間距不均。
+  function uneven4ChildrenOrg() {
+    const ks = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6'];
+    return makeOrgData({
+      employees: [
+        emp('p'),
+        emp('c1'),
+        emp('c2'),
+        emp('c3'),
+        emp('c4'),
+        ...ks.map((k) => emp(k)),
+      ],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'g1' }),
+        ...['c1', 'c2', 'c3', 'c4'].map((c) =>
+          assignment(`a-${c}`, {
+            employeeId: c,
+            groupId: 'g1',
+            supervisorIds: ['p'],
+            primarySupervisorId: 'p',
+          }),
+        ),
+        ...['k1', 'k2', 'k3'].map((k) =>
+          assignment(`a-${k}`, {
+            employeeId: k,
+            groupId: 'g1',
+            supervisorIds: ['c1'],
+            primarySupervisorId: 'c1',
+          }),
+        ),
+        ...['k4', 'k5', 'k6'].map((k) =>
+          assignment(`a-${k}`, {
+            employeeId: k,
+            groupId: 'g1',
+            supervisorIds: ['c2'],
+            primarySupervisorId: 'c2',
+          }),
+        ),
+      ],
+    });
+  }
+
+  it('偶數子（4）父落在中間兩子之間，明確偏離舊 (min+max)/2', () => {
+    const r = buildOrgFlowGraph(uneven4ChildrenOrg(), 'g1');
+    const x = (id: string) => r.nodes.find((n) => n.id === id)!.position.x;
+    const kids = [x('c1'), x('c2'), x('c3'), x('c4')].sort((a, b) => a - b);
+    const oldMidpoint = (kids[0] + kids[3]) / 2; // 舊：min/max 中點
+
+    const p = x('p');
+    // 父落在子女整體範圍內。
+    expect(p).toBeGreaterThanOrEqual(kids[0]);
+    expect(p).toBeLessThanOrEqual(kids[3]);
+    // 間距不均下：新（偏中間兩子）明確偏離舊 (min+max)/2，且偏向「主幹」中段而非右側離群。
+    expect(p).toBeLessThan(oldMidpoint);
+  });
+
   it('跨層 dummy 不影響輸出結構：仍只有真實節點、edge 維持原 source→target 單條', () => {
     const r = buildOrgFlowGraph(skipLevelOrg(), 'g1');
 

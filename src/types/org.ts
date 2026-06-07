@@ -18,6 +18,8 @@ export interface Group {
   status: EntityStatus;
   /** 組別種類；migration 回填舊資料為 'department'，新表單必填。 */
   kind: GroupKind;
+  /** 組長（employeeId）；migration toV4 以組內匯報根回填；可 null＝未指定。 */
+  leaderId?: string | null;
 }
 
 export interface JobLevel {

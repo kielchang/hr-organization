@@ -169,10 +169,13 @@ function centerParents(
   const x = new Map(laidOut.map((n) => [n.id, n.position.x]));
   for (const pid of parents) {
     const kids = children.get(pid)!;
-    const kidXs = kids.map((k) => x.get(k)!);
-    const min = Math.min(...kidXs);
-    const max = Math.max(...kidXs);
-    x.set(pid, (min + max) / 2);
+    // 奇偶中位數父置中：升冪排序子女 X，奇數對齊中位子節點、偶數取中間兩子中點。
+    // 比 (min+max)/2 更貼齊「主幹」子女，避免單一離群子女把父往邊緣拉。
+    const kidXs = kids.map((k) => x.get(k)!).sort((a, b) => a - b);
+    const n = kidXs.length;
+    const centerX =
+      n % 2 === 1 ? kidXs[(n - 1) / 2] : (kidXs[n / 2 - 1] + kidXs[n / 2]) / 2;
+    x.set(pid, centerX);
   }
 
   return laidOut.map((n) => ({ ...n, position: { ...n.position, x: x.get(n.id)! } }));

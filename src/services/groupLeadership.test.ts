@@ -1,0 +1,452 @@
+import {
+  deriveAllGroupLeadership,
+  deriveGroupLeadership,
+  deriveInGroupRoot,
+} from './groupLeadership';
+import { assignment, emp, group, makeOrgData } from '../test/fixtures';
+
+/**
+ * groupLeadership：組長（leaderId）＋推導式 co-leader。
+ *
+ * - `deriveInGroupRoot`：以「組內匯報根」回退組長（leaderId 未設時用）。
+ * - `deriveGroupLeadership`：leaderId 優先取 group.leaderId、否則回退；
+ *   co-leader = 組內成員的主管落在組外者（去重、排除 leaderId、employeeId 升冪）。
+ */
+
+describe('deriveInGroupRoot', () => {
+  it('空組（無成員）→ null', () => {
+    const data = makeOrgData({ groups: [group('g1')] });
+    expect(deriveInGroupRoot(data, 'g1')).toBeNull();
+  });
+
+  it('單根：唯一一位主管為 null 的成員即組內匯報根', () => {
+    // boss(無主管) ← a ← b，皆在 g1 → 根 = boss。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('a'), emp('b')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-a', {
+          employeeId: 'a',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('x-b', {
+          employeeId: 'b',
+          groupId: 'g1',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+    expect(deriveInGroupRoot(data, 'g1')).toBe('boss');
+  });
+
+  it('主管在組外亦算候選根（其主管不在組內）', () => {
+    // a 的主管 outBoss 不在 g1 → a 為候選根；組內僅 a 為候選 → 回 a。
+    const data = makeOrgData({
+      employees: [emp('a'), emp('outBoss')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('x-a', {
+          employeeId: 'a',
+          groupId: 'g1',
+          supervisorIds: ['outBoss'],
+          primarySupervisorId: 'outBoss',
+        }),
+        assignment('x-out', { employeeId: 'outBoss', groupId: 'g2' }),
+      ],
+    });
+    expect(deriveInGroupRoot(data, 'g1')).toBe('a');
+  });
+
+  it('多根 tiebreak 1：組內有效層級最高（深度最小）優先', () => {
+    // 兩位候選：root(深度1) 與 deep(主管 root、深度2 但主管在組內→非候選)。
+    // 為造多候選：root 與 island 皆無組內主管（depth 1），但 root 有組內部屬 → 由 tiebreak 2 解。
+    // 此處改以「深度」直接區分：mgr(無主管,depth1) 與 sub(主管在組外,depth1) 同深 →
+    // 改用一個深度更小者勝出的場景：
+    //   top(無主管 depth1) ← child(主管 top depth2)；另有 lone(主管在組外 depth1)。
+    //   候選 = {top, lone}（child 主管在組內非候選）。top 與 lone 同 depth1 →
+    //   tiebreak2：top 有組內部屬 child(1)、lone 無(0) → top 勝。
+    const data = makeOrgData({
+      employees: [emp('top'), emp('child'), emp('lone'), emp('outBoss')],
+      groups: [group('g1'), group('g2')],
+      assignments: [
+        assignment('x-top', { employeeId: 'top', groupId: 'g1' }),
+        assignment('x-child', {
+          employeeId: 'child',
+          groupId: 'g1',
+          supervisorIds: ['top'],
+          primarySupervisorId: 'top',
+        }),
+        assignment('x-lone', {
+          employeeId: 'lone',
+          groupId: 'g1',
+          supervisorIds: ['outBoss'],
+          primarySupervisorId: 'outBoss',
+        }),
+        assignment('x-out', { employeeId: 'outBoss', groupId: 'g2' }),
+      ],
+    });
+    // top 與 lone 同為候選（深度皆 1）；top 有組內部屬 → tiebreak2 勝。
+    expect(deriveInGroupRoot(data, 'g1')).toBe('top');
+  });
+
+  it('多根 tiebreak 2：同深度時組內直接部屬數最多優先', () => {
+    // 兩位無主管候選 manyReports / fewReports（depth 皆 1）。
+    // manyReports 有 2 名組內部屬、fewReports 有 1 名 → manyReports 勝。
+    const data = makeOrgData({
+      employees: [
+        emp('manyReports'),
+        emp('fewReports'),
+        emp('r1'),
+        emp('r2'),
+        emp('r3'),
+      ],
+      groups: [group('g1')],
+      assignments: [
+        assignment('x-many', { employeeId: 'manyReports', groupId: 'g1' }),
+        assignment('x-few', { employeeId: 'fewReports', groupId: 'g1' }),
+        assignment('x-r1', {
+          employeeId: 'r1',
+          groupId: 'g1',
+          supervisorIds: ['manyReports'],
+          primarySupervisorId: 'manyReports',
+        }),
+        assignment('x-r2', {
+          employeeId: 'r2',
+          groupId: 'g1',
+          supervisorIds: ['manyReports'],
+          primarySupervisorId: 'manyReports',
+        }),
+        assignment('x-r3', {
+          employeeId: 'r3',
+          groupId: 'g1',
+          supervisorIds: ['fewReports'],
+          primarySupervisorId: 'fewReports',
+        }),
+      ],
+    });
+    expect(deriveInGroupRoot(data, 'g1')).toBe('manyReports');
+  });
+
+  it('多根 tiebreak 3：深度與部屬數皆同 → employeeId 升冪第一', () => {
+    // bbb / aaa 皆無主管、皆無組內部屬（depth1、reports0）→ 取 employeeId 升冪 aaa。
+    const data = makeOrgData({
+      employees: [emp('bbb'), emp('aaa')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('x-bbb', { employeeId: 'bbb', groupId: 'g1' }),
+        assignment('x-aaa', { employeeId: 'aaa', groupId: 'g1' }),
+      ],
+    });
+    expect(deriveInGroupRoot(data, 'g1')).toBe('aaa');
+  });
+
+  it('職能組（parentId null、kind=function）一樣依組內 assignment 推根', () => {
+    // 跨部門職能組：成員主管多在組外 → 仍能推出組內匯報根（depth1 + tiebreak）。
+    const data = makeOrgData({
+      employees: [emp('lead'), emp('m1'), emp('extBoss')],
+      groups: [
+        group('xfn', { kind: 'function', parentId: null }),
+        group('home', { kind: 'department' }),
+      ],
+      assignments: [
+        assignment('x-lead', { employeeId: 'lead', groupId: 'xfn' }),
+        assignment('x-m1', {
+          employeeId: 'm1',
+          groupId: 'xfn',
+          supervisorIds: ['lead'],
+          primarySupervisorId: 'lead',
+        }),
+        // extBoss 不在 xfn → 不影響 xfn 推導。
+        assignment('x-ext', { employeeId: 'extBoss', groupId: 'home' }),
+      ],
+    });
+    expect(deriveInGroupRoot(data, 'xfn')).toBe('lead');
+  });
+});
+
+describe('deriveGroupLeadership', () => {
+  it('空組 → { leaderId: null, coLeaderIds: [] }', () => {
+    const g = group('g1');
+    const data = makeOrgData({ groups: [g] });
+    expect(deriveGroupLeadership(data, g)).toEqual({
+      groupId: 'g1',
+      leaderId: null,
+      coLeaderIds: [],
+    });
+  });
+
+  it('leaderId 已設 → 直接採用，不回退推導', () => {
+    // 即使 boss 才是組內匯報根，group.leaderId='picked' 仍優先採用。
+    const g = group('g1', { leaderId: 'picked' });
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('picked'), emp('staff')],
+      groups: [g],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-picked', {
+          employeeId: 'picked',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('x-staff', {
+          employeeId: 'staff',
+          groupId: 'g1',
+          supervisorIds: ['picked'],
+          primarySupervisorId: 'picked',
+        }),
+      ],
+    });
+    const r = deriveGroupLeadership(data, g);
+    expect(r.leaderId).toBe('picked');
+  });
+
+  it('leaderId 未設 → 回退組內匯報根', () => {
+    const g = group('g1');
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('a')],
+      groups: [g],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-a', {
+          employeeId: 'a',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    expect(deriveGroupLeadership(data, g).leaderId).toBe('boss');
+  });
+
+  it('CEO/COO 共管：業務部 leaderId=CEO、部分成員主管=COO（COO 不在業務部）→ coLeaderIds=[COO]', () => {
+    // 業務部成員 s1/s2 主管 CEO（組長，不算 co-lead）；s3/s4 主管 COO（組外）→ COO co-lead。
+    const sales = group('sales', { leaderId: 'CEO' });
+    const data = makeOrgData({
+      employees: [
+        emp('CEO'),
+        emp('COO'),
+        emp('s1'),
+        emp('s2'),
+        emp('s3'),
+        emp('s4'),
+      ],
+      groups: [sales, group('exec')],
+      assignments: [
+        // CEO/COO 本人歸屬高管組 exec（不在 sales）。
+        assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
+        assignment('x-coo', {
+          employeeId: 'COO',
+          groupId: 'exec',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        // sales 成員：s1/s2 主管 CEO（= leaderId，不算 co-lead）。
+        assignment('x-s1', {
+          employeeId: 's1',
+          groupId: 'sales',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-s2', {
+          employeeId: 's2',
+          groupId: 'sales',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        // s3/s4 主管 COO（組外、非 leaderId）→ COO 為 co-lead。
+        assignment('x-s3', {
+          employeeId: 's3',
+          groupId: 'sales',
+          supervisorIds: ['COO'],
+          primarySupervisorId: 'COO',
+        }),
+        assignment('x-s4', {
+          employeeId: 's4',
+          groupId: 'sales',
+          supervisorIds: ['COO'],
+          primarySupervisorId: 'COO',
+        }),
+      ],
+    });
+    const r = deriveGroupLeadership(data, sales);
+    expect(r.leaderId).toBe('CEO');
+    // COO 出現兩次（s3/s4）→ 去重後僅一個。
+    expect(r.coLeaderIds).toEqual(['COO']);
+  });
+
+  it('co-lead 排除 leaderId：主管恰為組長者不重複列入 co-lead', () => {
+    // leaderId=CEO；所有成員主管皆 CEO（組外）→ co-lead 應排除 CEO → []。
+    const g = group('g1', { leaderId: 'CEO' });
+    const data = makeOrgData({
+      employees: [emp('CEO'), emp('m1'), emp('m2')],
+      groups: [g, group('exec')],
+      assignments: [
+        assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
+        assignment('x-m1', {
+          employeeId: 'm1',
+          groupId: 'g1',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-m2', {
+          employeeId: 'm2',
+          groupId: 'g1',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+      ],
+    });
+    expect(deriveGroupLeadership(data, g).coLeaderIds).toEqual([]);
+  });
+
+  it('組內主管（非組外）不算 co-lead', () => {
+    // leaderId=boss；mid 主管 boss（組內 leader）、low 主管 mid（組內、非組外）→ 無 co-lead。
+    const g = group('g1', { leaderId: 'boss' });
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mid'), emp('low')],
+      groups: [g],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('x-low', {
+          employeeId: 'low',
+          groupId: 'g1',
+          supervisorIds: ['mid'],
+          primarySupervisorId: 'mid',
+        }),
+      ],
+    });
+    expect(deriveGroupLeadership(data, g).coLeaderIds).toEqual([]);
+  });
+
+  it('co-lead 去重且 employeeId 升冪穩定排序', () => {
+    // 三位組外主管 zCo / aCo / mCo 各帶部分成員、皆出現多次 → 去重後升冪 [aCo, mCo, zCo]。
+    const g = group('g1', { leaderId: 'boss' });
+    const data = makeOrgData({
+      employees: [
+        emp('boss'),
+        emp('zCo'),
+        emp('aCo'),
+        emp('mCo'),
+        emp('m1'),
+        emp('m2'),
+        emp('m3'),
+        emp('m4'),
+        emp('m5'),
+        emp('m6'),
+      ],
+      groups: [g, group('exec')],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-zco', { employeeId: 'zCo', groupId: 'exec' }),
+        assignment('x-aco', { employeeId: 'aCo', groupId: 'exec' }),
+        assignment('x-mco', { employeeId: 'mCo', groupId: 'exec' }),
+        // 每位組外主管帶兩名成員 → 各重複出現一次（測去重）。
+        assignment('x-m1', {
+          employeeId: 'm1',
+          groupId: 'g1',
+          supervisorIds: ['zCo'],
+          primarySupervisorId: 'zCo',
+        }),
+        assignment('x-m2', {
+          employeeId: 'm2',
+          groupId: 'g1',
+          supervisorIds: ['zCo'],
+          primarySupervisorId: 'zCo',
+        }),
+        assignment('x-m3', {
+          employeeId: 'm3',
+          groupId: 'g1',
+          supervisorIds: ['aCo'],
+          primarySupervisorId: 'aCo',
+        }),
+        assignment('x-m4', {
+          employeeId: 'm4',
+          groupId: 'g1',
+          supervisorIds: ['aCo'],
+          primarySupervisorId: 'aCo',
+        }),
+        assignment('x-m5', {
+          employeeId: 'm5',
+          groupId: 'g1',
+          supervisorIds: ['mCo'],
+          primarySupervisorId: 'mCo',
+        }),
+        assignment('x-m6', {
+          employeeId: 'm6',
+          groupId: 'g1',
+          supervisorIds: ['mCo'],
+          primarySupervisorId: 'mCo',
+        }),
+      ],
+    });
+    expect(deriveGroupLeadership(data, g).coLeaderIds).toEqual([
+      'aCo',
+      'mCo',
+      'zCo',
+    ]);
+  });
+
+  it('co-lead 只看 primarySupervisorId，忽略虛線次要主管', () => {
+    // 成員 m1 主管 CEO（primary）、另掛虛線 dotCo（組外、非 primary）→ co-lead 不含 dotCo。
+    const g = group('g1', { leaderId: 'CEO' });
+    const data = makeOrgData({
+      employees: [emp('CEO'), emp('dotCo'), emp('m1')],
+      groups: [g, group('exec')],
+      assignments: [
+        assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
+        assignment('x-dot', { employeeId: 'dotCo', groupId: 'exec' }),
+        assignment('x-m1', {
+          employeeId: 'm1',
+          groupId: 'g1',
+          supervisorIds: ['CEO', 'dotCo'],
+          primarySupervisorId: 'CEO',
+        }),
+      ],
+    });
+    expect(deriveGroupLeadership(data, g).coLeaderIds).toEqual([]);
+  });
+});
+
+describe('deriveAllGroupLeadership', () => {
+  it('回 Map<groupId, GroupLeadership> 涵蓋所有組別', () => {
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('a')],
+      groups: [
+        group('g1', { leaderId: 'boss' }),
+        group('g2'), // 空組
+      ],
+      assignments: [
+        assignment('x-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('x-a', {
+          employeeId: 'a',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+    const all = deriveAllGroupLeadership(data);
+    expect([...all.keys()].sort()).toEqual(['g1', 'g2']);
+    expect(all.get('g1')).toEqual({
+      groupId: 'g1',
+      leaderId: 'boss',
+      coLeaderIds: [],
+    });
+    expect(all.get('g2')).toEqual({
+      groupId: 'g2',
+      leaderId: null,
+      coLeaderIds: [],
+    });
+  });
+});

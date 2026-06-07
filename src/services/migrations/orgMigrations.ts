@@ -1,9 +1,10 @@
 import type { Assignment, Group, OrgData } from '../../types/org';
 import { backfillAssignmentLevels } from '../assignmentLevels';
+import { deriveInGroupRoot } from '../groupLeadership';
 import { runMigrations, type Migration } from './runMigrations';
 
 /** OrgData 目前的 schema 版本。新增結構性變更時 +1 並補一個 migration step。 */
-export const ORG_SCHEMA_VERSION = 3;
+export const ORG_SCHEMA_VERSION = 4;
 
 function asRecord(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
@@ -74,7 +75,42 @@ const toV3: Migration = {
   },
 };
 
-export const orgMigrations: Migration[] = [toV1, toV2, toV3];
+/**
+ * 為每個 group 回填 `leaderId`。
+ *
+ * - `leaderId` 已有值（含 null 以外的字串）的組不動。
+ * - 否則推「組內匯報根」當組長（`deriveInGroupRoot`，與 `deriveGroupLeadership`
+ *   回退邏輯共用同一演算法，避免重寫）：
+ *   - 候選 = 組內成員中，其「該組那筆 assignment」的 `primarySupervisorId` 為 null、
+ *     或主管不在組內者。
+ *   - 多候選時 deterministic：組內有效層級最高（深度最小）→ 組內直接部屬數最多
+ *     → employeeId 升冪第一。
+ *   - 無成員 → `leaderId = null`。
+ *
+ * 可 export 供 QA 單測。純函式、不可變（回傳新 Group 陣列）。
+ */
+export function backfillGroupLeaders(data: OrgData): Group[] {
+  return asArray<Group>(data.groups).map((g) => {
+    if (g.leaderId !== undefined && g.leaderId !== null) return g;
+    return { ...g, leaderId: deriveInGroupRoot(data, g.id) };
+  });
+}
+
+/**
+ * v3 → v4：為 `Group` 補上 `leaderId`（組長）。
+ * - 以「組內匯報根」回填缺漏的 `leaderId`；空組為 null。
+ * - co-leader 採推導不落地（`groupLeadership.deriveGroupLeadership`），不進 schema。
+ */
+const toV4: Migration = {
+  to: 4,
+  migrate: (raw) => {
+    const data = raw as OrgData;
+    const groups = backfillGroupLeaders(data);
+    return { ...data, schemaVersion: 4, groups };
+  },
+};
+
+export const orgMigrations: Migration[] = [toV1, toV2, toV3, toV4];
 
 /** 將任意版本的組織資料升級到目前 schema 版本。 */
 export function migrateOrgData(raw: unknown): OrgData {
