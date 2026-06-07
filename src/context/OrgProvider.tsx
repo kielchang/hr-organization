@@ -51,6 +51,17 @@ const emptyOrgData: OrgData = {
 
 const DRAFT_STORAGE_KEY = 'hr-org-draft';
 const ACTIVE_VERSION_KEY = 'hr-org-active-version';
+const CLOUD_SYNC_PENDING_KEY = 'hr-org-cloud-sync-pending';
+
+/** 讀回「未同步到雲端」旗標；後端停用時恆視為 false。 */
+function loadCloudSyncPending(): boolean {
+  if (!isApiEnabled()) return false;
+  try {
+    return localStorage.getItem(CLOUD_SYNC_PENDING_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 function saveDraft(data: OrgData) {
   safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
@@ -145,6 +156,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   );
   const [data, setData] = useState<OrgData>(() => initial.data);
   const [operator, setOperator] = useState('HR User');
+  // 「本機已發布但未成功上雲」旗標：後端啟用時有意義，並持久化於 localStorage。
+  const [pendingCloudSync, setPendingCloudSyncState] = useState<boolean>(
+    loadCloudSyncPending,
+  );
+
+  // 設定 pending 並同步寫回 localStorage（best-effort，後端停用時恆為 false）。
+  const setPendingCloudSync = useCallback((next: boolean) => {
+    if (!isApiEnabled()) return;
+    setPendingCloudSyncState(next);
+    safeSetItem(CLOUD_SYNC_PENDING_KEY, next ? 'true' : 'false');
+  }, []);
   // 雲端（後端 API）版本：啟用 VITE_API_URL 時載入並併入下拉。與本機版本分開保存，
   // 避免本機重新整理（loadAllVersions）覆寫掉雲端清單。
   const [remoteVersions, setRemoteVersions] = useState<DataVersionInfo[]>([]);
@@ -262,18 +284,27 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       saveActiveVersionId(created.id);
       // 啟用後端時，寫穿到雲端並併入下拉（best-effort）。note 不寫穿。
       if (isApiEnabled()) {
+        // 發布當下若離線，雲端寫入註定失敗，先標記未同步（catch 也會再次標記，冪等）。
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setPendingCloudSync(true);
+        }
         apiClient
           .publishVersion(created.label, created.data)
-          .then((v) =>
+          .then((v) => {
             setRemoteVersions((prev) =>
               prev.some((p) => p.id === v.id) ? prev : [...prev, apiVersionToInfo(v)],
-            ),
-          )
-          .catch((err) => console.warn('發布到雲端失敗', err));
+            );
+            // 已成功上雲，清除未同步旗標。
+            setPendingCloudSync(false);
+          })
+          .catch((err) => {
+            console.warn('發布到雲端失敗', err);
+            setPendingCloudSync(true);
+          });
       }
       return created.id;
     },
-    [],
+    [setPendingCloudSync],
   );
 
   const deletePublishedVersionById = useCallback(
@@ -433,6 +464,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       loadFromFile,
       exportData,
       applyChange,
+      pendingCloudSync,
     }),
     [
       data,
@@ -453,6 +485,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       loadFromFile,
       exportData,
       applyChange,
+      pendingCloudSync,
     ],
   );
 

@@ -29,6 +29,12 @@ export interface OrgContextValue {
   newAssignmentFor: (employeeId: string) => Assignment;
   loadFromFile: (data: OrgData) => void;
   exportData: (filename?: string) => void;
+  /**
+   * 是否有「本機已發布、但尚未成功同步到雲端」的變更。
+   * 僅 `isApiEnabled()`（後端啟用）時有意義；後端停用時恆為 false。
+   * 持久化於 localStorage，重整後仍反映未上雲狀態。
+   */
+  pendingCloudSync: boolean;
   applyChange: (
     mutate: (current: OrgData) => { data: OrgData; error?: string },
     onSuccess?: () => void,

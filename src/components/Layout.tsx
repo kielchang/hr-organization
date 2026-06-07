@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { DataToolbar } from './DataToolbar';
 import { DeployInfo } from './DeployInfo';
+import { CloudSyncBanner } from './CloudSyncBanner';
 import { onStorageError } from '../services/storage';
 
 const navItems = [
@@ -68,6 +69,7 @@ export function Layout() {
             <DeployInfo />
           </div>
         </header>
+        <CloudSyncBanner />
         {storageFailed && (
           <div
             role="alert"

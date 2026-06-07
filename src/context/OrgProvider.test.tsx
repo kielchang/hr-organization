@@ -311,3 +311,133 @@ describe('OrgProvider 自動「預設最新雲端版」（草稿優先，否則�
     expect(result.current.data.employees.some((e) => e.employeeNo === 'EDIT1')).toBe(true);
   });
 });
+
+describe('OrgProvider 未同步雲端旗標（pendingCloudSync）', () => {
+  const CLOUD_SYNC_PENDING_KEY = 'hr-org-cloud-sync-pending';
+  const cloudOrg = () => ({ ...makeOrgData(), employees: [] });
+
+  /** 暫時設定 navigator.onLine（configurable 才能覆寫 / 還原）。 */
+  function setOnLine(value: boolean) {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    setOnLine(true);
+  });
+
+  /**
+   * 後端啟用，listVersions 回單筆雲端版本；POST /api/versions 依 `publishOk` 決定
+   * 成功（回 201）或失敗（回 500 → apiClient request throw → publishVersion .catch）。
+   */
+  function setupFetch(publishOk: boolean) {
+    const calls: { method: string; url: string }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ method, url });
+      if (method === 'GET' && url.endsWith('/api/versions')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { id: 'ver-cloud1', label: '雲端A', data: cloudOrg(), publishedAt: '2026-05-05T00:00:00.000Z' },
+          ],
+        } as Response;
+      }
+      if (method === 'POST' && url.endsWith('/api/versions')) {
+        if (publishOk) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ id: 'ver-new', label: '雲端New', data: cloudOrg(), publishedAt: '2026-05-06T00:00:00.000Z' }),
+          } as Response;
+        }
+        // 非 2xx → apiClient.request 拋 ApiError → publishVersion 的 .catch 觸發。
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubEnv('VITE_API_URL', 'http://api.test');
+    vi.stubGlobal('fetch', fetchMock);
+    return { calls };
+  }
+
+  it('後端啟用、雲端寫入成功 → pendingCloudSync=false 且 localStorage 為 false', async () => {
+    setOnLine(true);
+    const { calls } = setupFetch(true);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+
+    act(() => {
+      result.current.publishVersion(result.current.data);
+    });
+
+    // 等 publishVersion 內 .then 成功回呼清除 pending。
+    await waitFor(() => expect(result.current.pendingCloudSync).toBe(false));
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_KEY)).toBe('false');
+    warnSpy.mockRestore();
+  });
+
+  it('雲端寫入失敗（reject）→ pendingCloudSync=true 且持久化', async () => {
+    setOnLine(true);
+    const { calls } = setupFetch(false);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+
+    act(() => {
+      result.current.publishVersion(result.current.data);
+    });
+
+    // 等 publishVersion 內 .catch 回呼標記 pending。
+    await waitFor(() => expect(result.current.pendingCloudSync).toBe(true));
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_KEY)).toBe('true');
+    warnSpy.mockRestore();
+  });
+
+  it('發布當下離線（navigator.onLine=false）→ pendingCloudSync=true', async () => {
+    setOnLine(true);
+    const { calls } = setupFetch(false);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+
+    // 發布當下離線：發布前先切離線，使 publishVersion 同步區塊立即標記 pending。
+    setOnLine(false);
+    act(() => {
+      result.current.publishVersion(result.current.data);
+    });
+
+    await waitFor(() => expect(result.current.pendingCloudSync).toBe(true));
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_KEY)).toBe('true');
+    warnSpy.mockRestore();
+  });
+
+  it('後端停用 → pendingCloudSync 恆為 false（不讀/不設）', () => {
+    // 即使 localStorage 預置 'true'，後端停用時 loadCloudSyncPending 回 false。
+    localStorage.setItem(CLOUD_SYNC_PENDING_KEY, 'true');
+    // 不 stubEnv VITE_API_URL → isApiEnabled() 為 false。
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    expect(result.current.pendingCloudSync).toBe(false);
+
+    // 後端停用時 publishVersion 不走雲端寫穿，pending 仍為 false。
+    act(() => {
+      result.current.publishVersion(result.current.data);
+    });
+    expect(result.current.pendingCloudSync).toBe(false);
+  });
+
+  it('初始從 localStorage 讀回 pending（預置 true + 後端啟用 → 初始 true）', async () => {
+    localStorage.setItem(CLOUD_SYNC_PENDING_KEY, 'true');
+    const { calls } = setupFetch(true);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 初始即反映持久化的未同步狀態（不需等待非同步）。
+    expect(result.current.pendingCloudSync).toBe(true);
+    // 等雲端 effect 跑完，避免 act 警告殘留。
+    await waitFor(() => expect(calls.some((c) => c.method === 'GET')).toBe(true));
+    warnSpy.mockRestore();
+  });
+});
