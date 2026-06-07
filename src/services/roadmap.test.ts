@@ -11,7 +11,9 @@ import {
  * 對應契約 docs/契約-Roadmap頁面.md §2。
  *
  * - getRoadmapData() 回傳 frozen 物件、含必要鍵與必要 phases
- * - 已完成 7 項 + commit hash 對應
+ * - 已完成項目（done）帶 commitHash / completedAt；涵蓋 7 個歷史 commit hash
+ *   注意：done 可出現在任何 phase——phase-completed 放歷史大里程碑（M1-M5），
+ *   各 Phase 內項目完成後就地標 done、不搬移；phase-completed 內必為 done（反向成立）
  * - countByStatus() 5 個欄位加總等於 total，done >= 7
  * - groupItemsByPhase() phase 按 order、item 按 id 字串升冪，且無孤兒
  */
@@ -88,8 +90,27 @@ describe('services/roadmap.ts', () => {
         expect(it.commitHash, `done item ${it.id} 必須帶 commitHash`).toBeTruthy();
         expect(it.completedAt, `done item ${it.id} 必須帶 completedAt`).toBeTruthy();
         expect(it.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        // 已完成項目應該分到 phase-completed
-        expect(it.phaseId).toBe('phase-completed');
+        // 注意：done 項目可出現在任何 phase。
+        // phase-completed 放歷史大里程碑（M1-M5 等）；各 Phase 內的項目
+        // 完成後就地標 done、不搬移到 phase-completed。故不再斷言 phaseId。
+      }
+    });
+
+    it('phase-completed 內的所有項目都是 done（反向：歷史里程碑桶只放已完成）', () => {
+      const completedItems = data.items.filter(
+        (it) => it.phaseId === 'phase-completed',
+      );
+      expect(completedItems.length).toBeGreaterThan(0);
+      for (const it of completedItems) {
+        expect(it.status, `phase-completed 內 ${it.id} 應為 done`).toBe('done');
+      }
+    });
+
+    it('phase-0 內的所有項目都已是 done（守護「Phase 0 已完成」進度狀態）', () => {
+      const phase0Items = data.items.filter((it) => it.phaseId === 'phase-0');
+      expect(phase0Items.length).toBeGreaterThan(0);
+      for (const it of phase0Items) {
+        expect(it.status, `phase-0 內 ${it.id} 應為 done`).toBe('done');
       }
     });
 

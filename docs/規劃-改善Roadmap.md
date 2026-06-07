@@ -17,12 +17,12 @@
 CM 顧問的核心警告：**「HR 在 30% 完成度時以為自己在 90%」**。
 工具當前的「規劃 → 一鍵發布 → 結束」流程暗示完成感過早。**必須在工具核心流程注入 CM 思維**。
 
-### Phase 0 — vibe 校準（低成本高槓桿）
-- [ ] `R0.1` **發布按鈕加摩擦**：publish 前提問三題（sponsor 誰？stakeholder 名單？sustainment owner？），任一題空白警告但不擋
-- [ ] `R0.2` **詞彙稽核**：去工程化全站文案（SPOF→無備援主管、斷鏈→懸空匯報、層級深度→組織層級、節點→人員、邊→匯報線、捕捉快照→設定比較基準、function→跨部門職能、發布→**改名留待 Phase 1 決定**）
-- [ ] `R0.3` **健檢結果分群摺疊**：findings 按類別分群（span/depth/function/chain/cycle/spof），減少資訊過載
-- [ ] `R0.4` **「保留事項」摘要**（CM 獨家、低成本）：scenarioCompare 結果加一欄「**未變動的部分**」（從 diff 反推），給員工 anchor
-- [ ] `R0.5` **Readiness Score**（CM 獨家、低成本）：從現有 findings 自動算 100 分量表（Leadership/Capacity/Stakeholder/Infrastructure/Comms 五大類），在 `/health` 加分頁
+### Phase 0 — vibe 校準（低成本高槓桿）✅ 完成 commit `1bdd955`
+- [x] `R0.1` **發布按鈕加摩擦**：publish 前提問三題（sponsor 誰？stakeholder 名單？sustainment owner？），三題皆**選填**、任一題空白柔性提醒但不擋；純前端 nudge，不寫入 `OrgData`
+- [x] `R0.2` **詞彙稽核**：去工程化全站文案（SPOF→無備援主管、斷鏈→懸空匯報、孤兒節點→無任何歸屬、捕捉快照→設定比較基準、BPMN 影響「僅一位核准人（無備援）」；**BPMN 設計子頁「節點」維持流程語境**；「發布」改名留待 Phase 1 決定）
+- [x] `R0.3` **健檢結果分群摺疊**：findings 按類別分群（span/depth/function/chain/cycle/spof）、可摺疊（原生 `details`），減少資訊過載
+- [x] `R0.4` **「保留事項」摘要**（CM 獨家、低成本）：scenarioCompare 結果加一欄「**未變動的部分**」（從 diff 反推），給員工 anchor；ratio 以**歸屬**為分母，UI 顯示「X% 的人員配置維持不變」
+- [x] `R0.5` **規劃就緒度（結構面）**（CM 獨家、低成本）：從現有 findings 自動算 0–100 量表，採**結構面 4 維度**（管理幅度／結構完整性／職能覆蓋／關鍵人風險），在 `/health` 加區塊；誠實命名「結構面」，完整變革就緒需搭配 stakeholder 評估（連 Phase 1）
 
 ## 2. Phase 1 — 補 Desire 階段（Stakeholder 視角）
 
