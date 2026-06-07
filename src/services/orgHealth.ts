@@ -160,6 +160,116 @@ export function buildReadiness(health: OrgHealth): ReadinessResult {
   return { total, level, dimensions };
 }
 
+/** 單一健檢指標在 base→draft 之間的變化。 */
+export interface HealthMetricDelta {
+  key: 'avgSpan' | 'maxDepth' | 'warningCount' | 'readiness';
+  /** 繁中：平均管理幅度／最大層級／警示數／規劃就緒度。 */
+  label: string;
+  before: number;
+  after: number;
+  /**
+   * after - before。avgSpan 以 round 到小數 1 位後的 before/after 計算
+   * （與顯示精度一致）；其餘為整數指標，即原值差。
+   */
+  delta: number;
+  /**
+   * 對該指標 delta 的好壞：
+   * avgSpan/maxDepth/warningCount 越小越好；readiness 越大越好；相等 unchanged。
+   */
+  direction: 'improved' | 'worsened' | 'unchanged';
+}
+
+/** base→draft 的健檢指標比較結果（固定 4 項，供編輯態浮層取用）。 */
+export interface OrgHealthDelta {
+  /** 固定 4 項，順序：avgSpan, maxDepth, warningCount, readiness。 */
+  metrics: HealthMetricDelta[];
+  /** 任一 metric.delta !== 0。 */
+  hasChanges: boolean;
+}
+
+/** 「越小越好」指標的方向判定。 */
+function lowerIsBetter(before: number, after: number): HealthMetricDelta['direction'] {
+  if (after < before) return 'improved';
+  if (after > before) return 'worsened';
+  return 'unchanged';
+}
+
+/** 「越大越好」指標的方向判定。 */
+function higherIsBetter(before: number, after: number): HealthMetricDelta['direction'] {
+  if (after > before) return 'improved';
+  if (after < before) return 'worsened';
+  return 'unchanged';
+}
+
+/**
+ * 比較兩份 OrgData 的高層健檢指標（純函式），供編輯態 before→after 浮層使用。
+ *
+ * - 重用 buildOrgHealth / buildReadiness，不重造演算法。
+ * - 4 指標固定順序：avgSpan, maxDepth, warningCount, readiness。
+ * - avgSpan/maxDepth/warningCount 越小越好；readiness 越大越好（見 direction 規則）。
+ * - avgSpan「越小越好」為 v1 簡化假設（過小亦非理想，但主訊號是警示減少）。
+ * - avgSpan 的 before/after/delta/direction 皆以「四捨五入到小數 1 位」後的值計算，
+ *   與 UI 顯示精度（toFixed(1)）一致，避免「4.8→4.8 卻標改善 −0.1」的矛盾；
+ *   maxDepth/warningCount/readiness 為整數，沿用原值。
+ */
+export function compareOrgHealth(base: OrgData, draft: OrgData): OrgHealthDelta {
+  const baseHealth = buildOrgHealth(base);
+  const draftHealth = buildOrgHealth(draft);
+  const baseReadiness = buildReadiness(baseHealth).total;
+  const draftReadiness = buildReadiness(draftHealth).total;
+
+  // avgSpan 顯示為 1 位小數，方向/差值也須以 round 後的值計算，四者才會自洽。
+  const round1 = (v: number): number => Math.round(v * 10) / 10;
+  const avgSpanBefore = round1(baseHealth.summary.avgSpan);
+  const avgSpanAfter = round1(draftHealth.summary.avgSpan);
+
+  const metrics: HealthMetricDelta[] = [
+    {
+      key: 'avgSpan',
+      label: '平均管理幅度',
+      before: avgSpanBefore,
+      after: avgSpanAfter,
+      delta: avgSpanAfter - avgSpanBefore,
+      direction: lowerIsBetter(avgSpanBefore, avgSpanAfter),
+    },
+    {
+      key: 'maxDepth',
+      label: '最大層級',
+      before: baseHealth.summary.maxDepth,
+      after: draftHealth.summary.maxDepth,
+      delta: draftHealth.summary.maxDepth - baseHealth.summary.maxDepth,
+      direction: lowerIsBetter(
+        baseHealth.summary.maxDepth,
+        draftHealth.summary.maxDepth,
+      ),
+    },
+    {
+      key: 'warningCount',
+      label: '警示數',
+      before: baseHealth.summary.warningCount,
+      after: draftHealth.summary.warningCount,
+      delta: draftHealth.summary.warningCount - baseHealth.summary.warningCount,
+      direction: lowerIsBetter(
+        baseHealth.summary.warningCount,
+        draftHealth.summary.warningCount,
+      ),
+    },
+    {
+      key: 'readiness',
+      label: '規劃就緒度',
+      before: baseReadiness,
+      after: draftReadiness,
+      delta: draftReadiness - baseReadiness,
+      direction: higherIsBetter(baseReadiness, draftReadiness),
+    },
+  ];
+
+  return {
+    metrics,
+    hasChanges: metrics.some((m) => m.delta !== 0),
+  };
+}
+
 /** 取每位員工的主歸屬（isPrimaryGroup===true）那筆 assignment。 */
 function primaryAssignmentByEmployee(
   assignments: Assignment[],

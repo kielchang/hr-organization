@@ -4,9 +4,11 @@ import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
 import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCoveragePanel';
 import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
+import { EditImpactBar } from '../components/orgFlow/EditImpactBar';
 import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
 import { computeOrgDiff } from '../services/computeOrgDiff';
+import { compareOrgHealth } from '../services/orgHealth';
 import { useOrg } from '../context/useOrg';
 import { useEditSession } from '../hooks/useEditSession';
 import { cloneOrgData } from '../services/exportImport';
@@ -95,6 +97,17 @@ export function OrgChartPage() {
     if (!snapshot) return null;
     return computeOrgDiff(editSession.session.baseData, snapshot.orgData);
   }, [editSession.session]);
+
+  // 編輯態 before→after 指標（R5.2）：以進編輯前快照 vs 當前草稿比較。
+  // 注意：此 useMemo 僅以 isEditMode 把關，不含 chartMode 限制；
+  // 「只在匯報組織圖顯示」由下方 JSX 的 chartMode === 'reporting' 條件負責。
+  const impactDelta = useMemo(() => {
+    if (!editSession.isEditMode || !editSession.session) return null;
+    return compareOrgHealth(
+      editSession.session.baseData,
+      editSession.session.draftData,
+    );
+  }, [editSession.isEditMode, editSession.session]);
 
   const handleEnterEditMode = () => {
     editSession.enterEditMode(data);
@@ -186,6 +199,11 @@ export function OrgChartPage() {
           onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
         />
       )}
+
+      {/* 編輯態 before→after 指標浮層（R5.2）：僅匯報組織圖編輯模式顯示 */}
+      {chartMode === 'reporting' &&
+        editSession.isEditMode &&
+        impactDelta && <EditImpactBar delta={impactDelta} />}
 
       {/* 組別歸屬視角：種類過濾切換（全部／部門／職能） */}
       {chartMode === 'membership' && (

@@ -1,6 +1,7 @@
 import {
   buildOrgHealth,
   buildReadiness,
+  compareOrgHealth,
   type OrgHealth,
   type OrgHealthFinding,
 } from './orgHealth';
@@ -982,5 +983,400 @@ describe('buildReadiness（規劃就緒度 — 結構面）', () => {
     expect(byKey.function.score).toBe(85);
     // structure 無 finding → 100
     expect(byKey.structure.score).toBe(100);
+  });
+});
+
+describe('compareOrgHealth（編輯態 before→after 指標比較）', () => {
+  /**
+   * compareOrgHealth 串接 buildOrgHealth + buildReadiness，產出 4 個固定指標的 delta。
+   *
+   * 約定（對齊契約 R5.2 §2）：
+   *  - metrics 固定 4 項、固定順序：avgSpan, maxDepth, warningCount, readiness。
+   *  - avgSpan/maxDepth/warningCount：after < before → improved（越小越好）。
+   *  - readiness：after > before → improved（越大越好；方向與前三者相反）。
+   *  - delta = after - before（原值，不四捨五入）。
+   *  - hasChanges = 任一 metric.delta !== 0。
+   *
+   * 造資料策略：以 wide span 主管的部屬數操控 warningCount——9 名部屬觸發
+   * span-wide(warning)、抽掉一名變 8 名即不再觸發，藉此構造「改善／惡化」對照。
+   * 此 finding 屬 span 維度（warning），同時影響 warningCount 與 readiness。
+   */
+
+  /** 造一份「sup 帶 n 名部屬」的 OrgData（n>=9 會觸發 span-wide warning）。 */
+  function spanData(reportCount: number) {
+    const reports = Array.from({ length: reportCount }, (_, i) => `r${i}`);
+    return makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('sup'), ...reports.map((id) => emp(id))],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        ...reports.map((id) =>
+          assignment(`as-${id}`, {
+            employeeId: id,
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['sup'],
+            primarySupervisorId: 'sup',
+          }),
+        ),
+      ],
+    });
+  }
+
+  /** metric key → 該筆 delta，便於斷言。 */
+  function byKey(delta: ReturnType<typeof compareOrgHealth>) {
+    return Object.fromEntries(delta.metrics.map((m) => [m.key, m]));
+  }
+
+  it('base===draft（同一份）→ 4 指標 delta 全 0、direction 全 unchanged、hasChanges false', () => {
+    const data = spanData(9); // 內容不影響「相同即無變化」的結論
+    const result = compareOrgHealth(data, data);
+
+    expect(result.metrics).toHaveLength(4);
+    expect(result.metrics.every((m) => m.delta === 0)).toBe(true);
+    expect(result.metrics.every((m) => m.direction === 'unchanged')).toBe(true);
+    expect(result.metrics.every((m) => m.before === m.after)).toBe(true);
+    expect(result.hasChanges).toBe(false);
+  });
+
+  it('metrics 順序固定為 avgSpan, maxDepth, warningCount, readiness', () => {
+    const result = compareOrgHealth(spanData(9), spanData(8));
+    expect(result.metrics.map((m) => m.key)).toEqual([
+      'avgSpan',
+      'maxDepth',
+      'warningCount',
+      'readiness',
+    ]);
+    // 標籤亦對齊契約（繁中）
+    expect(result.metrics.map((m) => m.label)).toEqual([
+      '平均管理幅度',
+      '最大層級',
+      '警示數',
+      '規劃就緒度',
+    ]);
+  });
+
+  it('draft 改善（過寬主管抽掉一名部屬 → warningCount 下降）→ warningCount improved、delta<0、hasChanges true', () => {
+    // base：9 名部屬 → span-wide(warning) + spof(warning)，warningCount=2
+    // draft：8 名部屬 → 不再過寬，僅剩 spof(warning)，warningCount=1（少一筆 span-wide）
+    const base = spanData(9);
+    const draft = spanData(8);
+
+    // 前置不變式：確認造的資料一邊比另一邊多一筆 warning（span-wide）
+    expect(buildOrgHealth(base).summary.warningCount).toBe(2);
+    expect(buildOrgHealth(draft).summary.warningCount).toBe(1);
+
+    const result = compareOrgHealth(base, draft);
+    const m = byKey(result);
+
+    expect(m.warningCount.before).toBe(2);
+    expect(m.warningCount.after).toBe(1);
+    expect(m.warningCount.delta).toBe(-1);
+    expect(m.warningCount.direction).toBe('improved'); // 越小越好
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it('draft 惡化（過寬主管多帶一名部屬 → warningCount 上升）→ warningCount worsened、delta>0', () => {
+    // base：8 名（warningCount=1）；draft：9 名（多一筆 span-wide → 2）→ 方向與上題相反
+    const base = spanData(8);
+    const draft = spanData(9);
+
+    const result = compareOrgHealth(base, draft);
+    const m = byKey(result);
+
+    expect(m.warningCount.before).toBe(1);
+    expect(m.warningCount.after).toBe(2);
+    expect(m.warningCount.delta).toBe(1);
+    expect(m.warningCount.direction).toBe('worsened'); // 越小越好，變多即惡化
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it('readiness 方向相反：after>before → improved（與 warningCount「越小越好」反向）', () => {
+    // 同一組 base(9 名、有 span warning)→draft(8 名、無 warning)：
+    // warningCount 下降（improved），同時 readiness 上升（after>before）也應為 improved。
+    const base = spanData(9);
+    const draft = spanData(8);
+
+    const baseReadiness = buildReadiness(buildOrgHealth(base)).total;
+    const draftReadiness = buildReadiness(buildOrgHealth(draft)).total;
+    // 前置不變式：抽掉過寬 warning 後 readiness 確實提升
+    expect(draftReadiness).toBeGreaterThan(baseReadiness);
+
+    const m = byKey(compareOrgHealth(base, draft));
+    expect(m.readiness.before).toBe(baseReadiness);
+    expect(m.readiness.after).toBe(draftReadiness);
+    expect(m.readiness.delta).toBe(draftReadiness - baseReadiness);
+    expect(m.readiness.delta).toBeGreaterThan(0);
+    expect(m.readiness.direction).toBe('improved'); // 越大越好
+
+    // 反向驗證：base↔draft 互換 → readiness 下降 → worsened
+    const reversed = byKey(compareOrgHealth(draft, base));
+    expect(reversed.readiness.delta).toBeLessThan(0);
+    expect(reversed.readiness.direction).toBe('worsened');
+    // 同一組互換下，warningCount 反向變成 worsened（與 readiness 的 worsened 同向「整體變差」，
+    // 但兩者的「越小/越大」規則相反，仍各自判對）
+    expect(reversed.warningCount.direction).toBe('worsened');
+  });
+
+  it('before/after 存 number 原值（avgSpan 不被 toFixed 破壞型別、保留小數）', () => {
+    // sup 帶 3 名部屬、mgr 帶 1 名 → avgSpan = (3+1)/2 = 2（base）
+    const base = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('sup'), emp('mgr'), emp('a'), emp('b'), emp('c')],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mgr', {
+          employeeId: 'mgr',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        ...['a', 'b'].map((id) =>
+          assignment(`as-${id}`, {
+            employeeId: id,
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['sup'],
+            primarySupervisorId: 'sup',
+          }),
+        ),
+        assignment('as-c', {
+          employeeId: 'c',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['mgr'],
+          primarySupervisorId: 'mgr',
+        }),
+      ],
+    });
+    // draft：把 c 從 mgr 移到 sup → sup 帶 mgr+a+b+c=4、mgr 帶 0（退出 entries）
+    // → avgSpan = 4 / 1 = 4
+    const draft = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('sup'), emp('mgr'), emp('a'), emp('b'), emp('c')],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mgr', {
+          employeeId: 'mgr',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        ...['a', 'b', 'c'].map((id) =>
+          assignment(`as-${id}`, {
+            employeeId: id,
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['sup'],
+            primarySupervisorId: 'sup',
+          }),
+        ),
+      ],
+    });
+
+    const m = byKey(compareOrgHealth(base, draft));
+    expect(typeof m.avgSpan.before).toBe('number');
+    expect(typeof m.avgSpan.after).toBe('number');
+    expect(m.avgSpan.before).toBe(2);
+    expect(m.avgSpan.after).toBe(4);
+    expect(m.avgSpan.delta).toBe(2);
+    // avgSpan 越小越好 → 變大為惡化
+    expect(m.avgSpan.direction).toBe('worsened');
+  });
+
+  it('avgSpan 保留小數 1 位精度（1 位小數值原樣保留、不被 round 成整數）', () => {
+    // sup 帶 2 名、mgr 帶 1 名 → avgSpan = (2+1)/2 = 1.5
+    // 1.5 本就是 1 位小數，round 到 1dp 仍為 1.5 → 應原樣保留、非被 round 成整數 2。
+    const data = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('sup'), emp('mgr'), emp('a'), emp('b')],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mgr', {
+          employeeId: 'mgr',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        assignment('as-a', {
+          employeeId: 'a',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['sup'],
+          primarySupervisorId: 'sup',
+        }),
+        assignment('as-b', {
+          employeeId: 'b',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['mgr'],
+          primarySupervisorId: 'mgr',
+        }),
+      ],
+    });
+    const m = byKey(compareOrgHealth(data, data));
+    expect(m.avgSpan.before).toBe(1.5); // 1 位小數值原樣保留
+    expect(Number.isInteger(m.avgSpan.before)).toBe(false); // 未被 round 成整數
+  });
+
+  /**
+   * 造「每位主管各帶固定人數部屬」的扁平結構，方便精準控制原始 avgSpan。
+   * reportsPerSupervisor 是各主管的直接部屬數陣列；
+   * avgSpan = sum(reportsPerSupervisor) / reportsPerSupervisor.length。
+   * 為避免 span-wide 警示干擾此處對 avgSpan round 的聚焦，預設各主管部屬數 < 門檻 8。
+   */
+  function flatSpanData(reportsPerSupervisor: number[]) {
+    const employees: ReturnType<typeof emp>[] = [];
+    const assignments: ReturnType<typeof assignment>[] = [];
+    reportsPerSupervisor.forEach((reports, s) => {
+      const supId = `sup${s}`;
+      employees.push(emp(supId));
+      assignments.push(
+        assignment(`as-${supId}`, { employeeId: supId, groupId: 'dept', jobLevelId: 'j1' }),
+      );
+      for (let r = 0; r < reports; r += 1) {
+        const repId = `r${s}_${r}`;
+        employees.push(emp(repId));
+        assignments.push(
+          assignment(`as-${repId}`, {
+            employeeId: repId,
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: [supId],
+            primarySupervisorId: supId,
+          }),
+        );
+      }
+    });
+    return makeOrgData({ ...baseGroupsAndLevels(), employees, assignments });
+  }
+
+  it('avgSpan 多位小數會 round 到 1 位（如 4.333… → 4.3），before/after 小數位 ≤1', () => {
+    // 3 名主管帶 (5, 5, 3) → avgSpan = 13 / 3 = 4.3333…（多位小數）
+    const data = flatSpanData([5, 5, 3]);
+
+    // 前置不變式：原始 avgSpan 確為多位小數（不是已經 1dp）
+    const rawAvg = buildOrgHealth(data).summary.avgSpan;
+    expect(rawAvg).toBeCloseTo(13 / 3, 10);
+    expect(Number(rawAvg.toFixed(1))).toBe(4.3); // 顯示精度
+
+    const m = byKey(compareOrgHealth(data, data));
+    // before/after 已被 round 到 1 位（不再是 4.3333…）
+    expect(m.avgSpan.before).toBe(4.3);
+    expect(m.avgSpan.after).toBe(4.3);
+    // 小數位 ≤1：×10 後為整數
+    expect(Number.isInteger(m.avgSpan.before * 10)).toBe(true);
+    expect(Number.isInteger(m.avgSpan.after * 10)).toBe(true);
+    // 同份資料 → delta 0、unchanged
+    expect(m.avgSpan.delta).toBe(0);
+    expect(m.avgSpan.direction).toBe('unchanged');
+  });
+
+  it('回歸守護：base/draft 原始 avgSpan 不同但 round 後同（皆 →4.8）→ delta 0、unchanged（不再誤報「改善 −0.1」）', () => {
+    // 需「兩個不同整數分子落在同一 1dp bucket」：兩分數差 = 1/分母 < 0.1，故分母（主管數）須 >10。
+    // 取 12 名主管：
+    //   base  部屬總數 58 → 58/12 = 4.8333…  → round1 → 4.8
+    //   draft 部屬總數 57 → 57/12 = 4.75      → round1 → 4.8（Math.round(47.5)=48）
+    // 兩者原始值不同（4.8333… vs 4.75）卻 round 後相同；舊實作會算出 before 4.8333…、
+    // after 4.75 → delta −0.0833…（顯示時截成 −0.1、direction improved）= 此 case 要守住的回歸點。
+    const SUPERVISORS = 12;
+
+    // 把總部屬數平均分配到各主管（餘數逐一加 1），總和精準為指定值。
+    const distribute = (total: number, buckets: number): number[] => {
+      const base = Math.floor(total / buckets);
+      const remainder = total - base * buckets;
+      return Array.from({ length: buckets }, (_, i) => base + (i < remainder ? 1 : 0));
+    };
+
+    const baseDist = distribute(58, SUPERVISORS); // sum 58
+    const draftDist = distribute(57, SUPERVISORS); // sum 57
+    const base = flatSpanData(baseDist);
+    const draft = flatSpanData(draftDist);
+
+    // 前置不變式：原始 avgSpan 確實不同
+    const rawBase = buildOrgHealth(base).summary.avgSpan;
+    const rawDraft = buildOrgHealth(draft).summary.avgSpan;
+    expect(rawBase).toBeCloseTo(58 / 12, 10);
+    expect(rawDraft).toBeCloseTo(57 / 12, 10);
+    expect(rawBase).not.toBe(rawDraft); // 原值不同
+    // 各主管部屬數 < 8，確保不觸發 span-wide 警示干擾
+    expect(Math.max(...baseDist, ...draftDist)).toBeLessThan(8);
+
+    const m = byKey(compareOrgHealth(base, draft));
+    // round 後 before/after 皆 4.8
+    expect(m.avgSpan.before).toBe(4.8);
+    expect(m.avgSpan.after).toBe(4.8);
+    // 關鍵守護：round 後相同 → delta 0、unchanged（非舊行為的 −0.1/improved）
+    expect(m.avgSpan.delta).toBe(0);
+    expect(m.avgSpan.direction).toBe('unchanged');
+  });
+
+  it('maxDepth 改善：拉平一條過深匯報鏈使 maxDepth 下降 → improved、delta<0', () => {
+    // base：root→mid→leaf 三層線性鏈 → maxDepth 3
+    const base = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('root'), emp('mid'), emp('leaf')],
+      assignments: [
+        assignment('as-root', { employeeId: 'root', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mid', {
+          employeeId: 'mid',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['root'],
+          primarySupervisorId: 'root',
+        }),
+        assignment('as-leaf', {
+          employeeId: 'leaf',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['mid'],
+          primarySupervisorId: 'mid',
+        }),
+      ],
+    });
+    // draft：leaf 改直接掛 root（拉平一層）→ maxDepth 2
+    const draft = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('root'), emp('mid'), emp('leaf')],
+      assignments: [
+        assignment('as-root', { employeeId: 'root', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mid', {
+          employeeId: 'mid',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['root'],
+          primarySupervisorId: 'root',
+        }),
+        assignment('as-leaf', {
+          employeeId: 'leaf',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['root'],
+          primarySupervisorId: 'root',
+        }),
+      ],
+    });
+
+    const m = byKey(compareOrgHealth(base, draft));
+    expect(m.maxDepth.before).toBe(3);
+    expect(m.maxDepth.after).toBe(2);
+    expect(m.maxDepth.delta).toBe(-1);
+    expect(m.maxDepth.direction).toBe('improved'); // 越小越好
+  });
+
+  it('空資料 base/draft → 4 指標全 0、direction unchanged、hasChanges false', () => {
+    const result = compareOrgHealth(makeOrgData(), makeOrgData());
+    expect(result.metrics.map((m) => [m.before, m.after, m.delta])).toEqual([
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+      // 空資料 readiness：無 findings → total 100
+      [100, 100, 0],
+    ]);
+    expect(result.metrics.every((m) => m.direction === 'unchanged')).toBe(true);
+    expect(result.hasChanges).toBe(false);
   });
 });
