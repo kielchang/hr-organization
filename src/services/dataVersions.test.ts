@@ -2,6 +2,7 @@ import {
   apiVersionToInfo,
   loadDataVersions,
   pickDefaultVersionId,
+  pickLatestRemoteVersionId,
   publishedVersionToInfo,
   type DataVersionInfo,
 } from './dataVersions';
@@ -111,5 +112,65 @@ describe('apiVersionToInfo', () => {
     expect(out.source).toBe('published');
     expect(out.data.schemaVersion).toBeGreaterThanOrEqual(1);
     expect(out.valid).toBe(true);
+  });
+});
+
+describe('pickLatestRemoteVersionId', () => {
+  it('多筆時依 exportedAt 取最新（最大時間）', () => {
+    const list = [
+      info({ id: 'a', exportedAt: '2026-01-01T00:00:00.000Z' }),
+      info({ id: 'c', exportedAt: '2026-03-03T00:00:00.000Z' }),
+      info({ id: 'b', exportedAt: '2026-02-02T00:00:00.000Z' }),
+    ];
+    expect(pickLatestRemoteVersionId(list)).toBe('c');
+  });
+
+  it('最新筆不在清單尾端時仍正確選出（不只看最後一筆）', () => {
+    const list = [
+      info({ id: 'newest', exportedAt: '2026-12-31T00:00:00.000Z' }),
+      info({ id: 'old', exportedAt: '2026-01-01T00:00:00.000Z' }),
+    ];
+    expect(pickLatestRemoteVersionId(list)).toBe('newest');
+  });
+
+  it('exportedAt 相同時以 id 由大到小作為穩定 tiebreak', () => {
+    const list = [
+      info({ id: 'aaa', exportedAt: '2026-05-05T00:00:00.000Z' }),
+      info({ id: 'zzz', exportedAt: '2026-05-05T00:00:00.000Z' }),
+      info({ id: 'mmm', exportedAt: '2026-05-05T00:00:00.000Z' }),
+    ];
+    expect(pickLatestRemoteVersionId(list)).toBe('zzz');
+  });
+
+  it('tiebreak 不受清單順序影響（id 較大者恆勝）', () => {
+    const ascending = [
+      info({ id: 'aaa', exportedAt: '2026-05-05T00:00:00.000Z' }),
+      info({ id: 'zzz', exportedAt: '2026-05-05T00:00:00.000Z' }),
+    ];
+    const descending = [
+      info({ id: 'zzz', exportedAt: '2026-05-05T00:00:00.000Z' }),
+      info({ id: 'aaa', exportedAt: '2026-05-05T00:00:00.000Z' }),
+    ];
+    expect(pickLatestRemoteVersionId(ascending)).toBe('zzz');
+    expect(pickLatestRemoteVersionId(descending)).toBe('zzz');
+  });
+
+  it('單筆直接回傳該筆 id', () => {
+    expect(pickLatestRemoteVersionId([info({ id: 'only', exportedAt: '2026-01-01T00:00:00.000Z' })])).toBe('only');
+  });
+
+  it('空清單回 null', () => {
+    expect(pickLatestRemoteVersionId([])).toBeNull();
+  });
+
+  it('不就地排序（不更動入參順序）', () => {
+    const list = [
+      info({ id: 'a', exportedAt: '2026-01-01T00:00:00.000Z' }),
+      info({ id: 'c', exportedAt: '2026-03-03T00:00:00.000Z' }),
+      info({ id: 'b', exportedAt: '2026-02-02T00:00:00.000Z' }),
+    ];
+    const orderBefore = list.map((v) => v.id);
+    pickLatestRemoteVersionId(list);
+    expect(list.map((v) => v.id)).toEqual(orderBefore);
   });
 });

@@ -155,3 +155,159 @@ describe('OrgProvider（啟用後端 API）', () => {
     );
   });
 });
+
+describe('OrgProvider 自動「預設最新雲端版」（草稿優先，否則最新雲端）', () => {
+  const cloudOrg = () => ({ ...makeOrgData(), employees: [] });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  /** 後端啟用 + 自訂雲端版本清單（可多筆，含 publishedAt）。 */
+  function setupFetchWithVersions(
+    versions: { id: string; label: string; publishedAt: string }[],
+  ) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.endsWith('/api/versions')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            versions.map((v) => ({ ...v, data: cloudOrg() })),
+        } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+    vi.stubEnv('VITE_API_URL', 'http://api.test');
+    vi.stubGlobal('fetch', fetchMock);
+  }
+
+  /** 後端啟用但 listVersions reject（雲端載入失敗）。 */
+  function setupFetchRejecting() {
+    const fetchMock = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    vi.stubEnv('VITE_API_URL', 'http://api.test');
+    vi.stubGlobal('fetch', fetchMock);
+  }
+
+  it('無髒草稿 + 雲端有版本 → 載入後 active 切到最新雲端版 id', async () => {
+    setupFetchWithVersions([
+      { id: 'ver-old', label: '雲端舊', publishedAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'ver-latest', label: '雲端新', publishedAt: '2026-05-05T00:00:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 初始為本機 seed 預設
+    expect(result.current.activeVersionId).toBe('org-data');
+    // 雲端載入後自動切到最新雲端版
+    await waitFor(() =>
+      expect(result.current.activeVersionId).toBe('ver-latest'),
+    );
+    expect(localStorage.getItem('hr-org-active-version')).toBe('ver-latest');
+  });
+
+  it('有髒草稿 → 停在草稿，不被切到雲端', async () => {
+    // 預置：active 版本＝seed org-data，且草稿相對 seed 有未發布變更（髒草稿）。
+    localStorage.setItem('hr-org-active-version', 'org-data');
+    localStorage.setItem(
+      'hr-org-draft',
+      JSON.stringify(
+        makeOrgData({ employees: [emp('dirty-1', 'DIRTY1')] }),
+      ),
+    );
+    setupFetchWithVersions([
+      { id: 'ver-latest', label: '雲端新', publishedAt: '2026-05-05T00:00:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 仍停在 seed（草稿所屬版本），不被自動切到雲端
+    expect(result.current.activeVersionId).toBe('org-data');
+    // 等雲端載入併入下拉後，仍未切走
+    await waitFor(() =>
+      expect(result.current.dataVersions.some((v) => v.id === 'ver-latest')).toBe(true),
+    );
+    expect(result.current.activeVersionId).toBe('org-data');
+    expect(result.current.data.employees.some((e) => e.employeeNo === 'DIRTY1')).toBe(true);
+  });
+
+  it('雲端清單為空 → 維持本機預設（不切換、不報錯）', async () => {
+    setupFetchWithVersions([]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(result.current.dataVersions.length).toBeGreaterThan(0));
+    // 給雲端 effect 跑完的機會後仍維持 seed
+    await Promise.resolve();
+    expect(result.current.activeVersionId).toBe('org-data');
+  });
+
+  it('listVersions reject → 維持本機預設（不報錯、不切換）', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    setupFetchRejecting();
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    expect(result.current.activeVersionId).toBe('org-data');
+    warnSpy.mockRestore();
+  });
+
+  it('後端停用（未設 VITE_API_URL）→ 維持本機預設，不打雲端', () => {
+    // 不 stubEnv VITE_API_URL → isApiEnabled() 為 false
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    expect(result.current.activeVersionId).toBe('org-data');
+    expect(result.current.dataVersions.some((v) => v.id.startsWith('ver-'))).toBe(false);
+  });
+
+  it('使用者手動選版後 → 後續雲端載入不覆蓋手動選擇', async () => {
+    setupFetchWithVersions([
+      { id: 'ver-latest', label: '雲端新', publishedAt: '2026-05-05T00:00:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 在雲端 effect 解析前先手動選回本機 seed（標記手動）
+    act(() => {
+      result.current.selectDataVersion('org-data');
+    });
+    // 等雲端版本載入併入下拉
+    await waitFor(() =>
+      expect(result.current.dataVersions.some((v) => v.id === 'ver-latest')).toBe(true),
+    );
+    // 手動選擇不被自動切換覆蓋
+    expect(result.current.activeVersionId).toBe('org-data');
+  });
+
+  it('雲端 resolve 前 loadFromFile 匯入 → 載入後仍保留匯入資料，不被切到雲端', async () => {
+    setupFetchWithVersions([
+      { id: 'ver-latest', label: '雲端新', publishedAt: '2026-05-05T00:00:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 在雲端 listVersions resolve（微任務）前匯入一份檔案資料
+    act(() => {
+      result.current.loadFromFile(
+        makeOrgData({ employees: [emp('imported-1', 'IMPORTED1')] }),
+      );
+    });
+    expect(result.current.data.employees.some((e) => e.employeeNo === 'IMPORTED1')).toBe(true);
+    // 等雲端版本載入併入下拉後，仍保留匯入資料、未被自動切到雲端
+    await waitFor(() =>
+      expect(result.current.dataVersions.some((v) => v.id === 'ver-latest')).toBe(true),
+    );
+    expect(result.current.activeVersionId).toBe('org-data');
+    expect(result.current.data.employees.some((e) => e.employeeNo === 'IMPORTED1')).toBe(true);
+  });
+
+  it('雲端 resolve 前發生一次編輯（saveEmployee）→ 不被自動切到雲端', async () => {
+    setupFetchWithVersions([
+      { id: 'ver-latest', label: '雲端新', publishedAt: '2026-05-05T00:00:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useOrg(), { wrapper });
+    // 在雲端 listVersions resolve 前發生一次編輯（走 commit）
+    act(() => {
+      const err = result.current.saveEmployee(emp('edit-1', 'EDIT1'), true);
+      expect(err).toBeNull();
+    });
+    // 等雲端版本載入併入下拉後，仍未被自動切走、編輯仍在
+    await waitFor(() =>
+      expect(result.current.dataVersions.some((v) => v.id === 'ver-latest')).toBe(true),
+    );
+    expect(result.current.activeVersionId).toBe('org-data');
+    expect(result.current.data.employees.some((e) => e.employeeNo === 'EDIT1')).toBe(true);
+  });
+});

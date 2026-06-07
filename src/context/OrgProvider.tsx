@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { downloadOrgData, downloadJson } from '../services/exportImport';
 import {
   createEmptyAssignment,
@@ -16,6 +23,7 @@ import {
   apiVersionToInfo,
   loadDataVersions,
   pickDefaultVersionId,
+  pickLatestRemoteVersionId,
   publishedVersionToInfo,
   type DataVersionInfo,
 } from '../services/dataVersions';
@@ -59,6 +67,24 @@ function loadDraft(): OrgData | null {
   }
 }
 
+/**
+ * 序列化 OrgData 以做「有無未發布變更」比較，排除易變欄位：
+ * - `exportedAt`：每次 clone/匯出都會變動，比對意義不大。
+ * - `changeLog`：含時間戳的稽核紀錄，易因非實質變更而誤判。
+ * 兩邊都先 `cloneOrgData` 再剔除欄位，確保比較對稱且不更動原資料。
+ */
+function fingerprintOrgData(data: OrgData): string {
+  const clone = cloneOrgData(data) as Partial<OrgData>;
+  delete clone.exportedAt;
+  delete clone.changeLog;
+  return JSON.stringify(clone);
+}
+
+/** 草稿是否相對某版本資料「有未發布變更」（髒草稿）。 */
+function isDirtyDraft(draft: OrgData, versionData: OrgData): boolean {
+  return fingerprintOrgData(draft) !== fingerprintOrgData(versionData);
+}
+
 function saveActiveVersionId(id: string) {
   safeSetItem(ACTIVE_VERSION_KEY, id);
 }
@@ -82,6 +108,8 @@ function createInitialState(): {
   dataVersions: DataVersionInfo[];
   activeVersionId: string;
   data: OrgData;
+  /** 進 App 時是否有「屬於 active 版本且有未發布變更」的草稿。 */
+  hadDirtyDraft: boolean;
 } {
   const dataVersions = loadAllVersions();
   // 還原上次選擇的版本（若仍存在），否則用預設（初始）。
@@ -96,12 +124,16 @@ function createInitialState(): {
   // 避免下拉顯示 A 版本卻載入 B 版本內容的不一致。
   const draft = loadDraft();
   const draftBelongsToActive = savedId === activeVersionId && draft != null;
+  // 髒草稿＝屬於 active 版本且相對版本資料有未發布變更；只有沿用的草稿才納入判斷，
+  // 不屬於 active 的草稿會被丟棄、視為無髒草稿，允許後續自動切到最新雲端版。
+  const hadDirtyDraft = draftBelongsToActive && isDirtyDraft(draft, versionData);
   // 確立 active 版本，讓後續手動編輯存入的 draft 能在重整後被視為屬於此版本
   saveActiveVersionId(activeVersionId);
   return {
     dataVersions,
     activeVersionId,
     data: draftBelongsToActive ? draft : versionData,
+    hadDirtyDraft,
   };
 }
 
@@ -116,6 +148,13 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // 雲端（後端 API）版本：啟用 VITE_API_URL 時載入並併入下拉。與本機版本分開保存，
   // 避免本機重新整理（loadAllVersions）覆寫掉雲端清單。
   const [remoteVersions, setRemoteVersions] = useState<DataVersionInfo[]>([]);
+  // 自動「預設最新雲端版」相關旗標（契約：草稿優先，否則最新雲端版）。
+  // hadDirtyDraft：進 App 時有未發布草稿 → 不自動切走。
+  const hadDirtyDraftRef = useRef(initial.hadDirtyDraft);
+  // autoDefaultLocked：自動切換最多執行一次，之後不再覆蓋任何選擇。
+  const autoDefaultLockedRef = useRef(false);
+  // userHasManuallySelected：使用者經 VersionSelector 手動選版後，禁止自動切換。
+  const userHasManuallySelectedRef = useRef(false);
 
   // 下拉顯示的完整版本清單 = 本機（內建 + 發布）＋ 雲端（依 id 去重）。
   const allVersions = useMemo(() => {
@@ -123,27 +162,61 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     return [...dataVersions, ...remoteVersions.filter((v) => !ids.has(v.id))];
   }, [dataVersions, remoteVersions]);
 
+  // 自動「預設最新雲端版」決策（在雲端載入成功的非同步 callback 中呼叫一次）。
+  // 條件：無髒草稿、使用者未手動選版、尚未自動切過、雲端有版本。
+  // 直接用剛載入的 remoteInfos 取版本資料套用（此刻 allVersions 尚未含 remote），
+  // 且不標記為「使用者手動」。此 callback 僅在掛載後的雲端載入回呼中執行一次，
+  // 期間若使用者已手動選版會被上面的 guard 擋下，故以 initial.activeVersionId
+  // （初始自動挑的本機預設 id）作為比較基準即可，無需鏡像 ref。
+  const autoDefaultToLatestRemote = useCallback(
+    (remoteInfos: DataVersionInfo[]) => {
+      if (autoDefaultLockedRef.current) return;
+      if (hadDirtyDraftRef.current) return;
+      if (userHasManuallySelectedRef.current) return;
+      const latestId = pickLatestRemoteVersionId(remoteInfos);
+      if (!latestId) return;
+      // 首次雲端載入後即鎖定，之後 remoteVersions 變動皆不再自動覆蓋。
+      autoDefaultLockedRef.current = true;
+      if (latestId === initial.activeVersionId) return;
+      const latest = remoteInfos.find((v) => v.id === latestId);
+      if (!latest) return;
+      const next = cloneOrgData(latest.data);
+      setActiveVersionId(latestId);
+      setData(next);
+      saveDraft(next);
+      saveActiveVersionId(latestId);
+    },
+    [initial.activeVersionId],
+  );
+
   // 啟用後端時，載入雲端版本併入下拉（best-effort，失敗則維持本機清單）。
+  // 載入成功後執行「預設最新雲端版」：契約 §2 草稿優先，否則切到最新雲端版。
+  // setState 都在非同步 callback 內，避免 effect body 同步 setState 造成連鎖渲染。
   useEffect(() => {
     if (!isApiEnabled()) return;
     let cancelled = false;
     apiClient
       .listVersions()
       .then((remote) => {
-        if (!cancelled) setRemoteVersions(remote.map(apiVersionToInfo));
+        if (cancelled) return;
+        const remoteInfos = remote.map(apiVersionToInfo);
+        setRemoteVersions(remoteInfos);
+        autoDefaultToLatestRemote(remoteInfos);
       })
       .catch((err) => console.warn('載入雲端版本失敗', err));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [autoDefaultToLatestRemote]);
 
   const activeVersion = useMemo(
     () => allVersions.find((v) => v.id === activeVersionId),
     [allVersions, activeVersionId],
   );
 
-  const selectDataVersion = useCallback(
+  // 切換 active 版本的核心邏輯（不區分來源）。自動「預設最新雲端版」與其他
+  // 程式內部流程都走這裡，避免被誤標記為「使用者手動選版」。
+  const applyVersionSelection = useCallback(
     (id: string) => {
       const version = allVersions.find((v) => v.id === id);
       if (!version) return;
@@ -155,6 +228,15 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       saveActiveVersionId(id);
     },
     [allVersions],
+  );
+
+  // 對外（VersionSelector）使用者手動選版入口：標記手動以鎖住自動切換。
+  const selectDataVersion = useCallback(
+    (id: string) => {
+      userHasManuallySelectedRef.current = true;
+      applyVersionSelection(id);
+    },
+    [applyVersionSelection],
   );
 
   /**
@@ -249,6 +331,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const commit = useCallback(
     (next: OrgData) => {
+      // 使用者編輯資料即視為「已主動指定」，擋下背景雲端自動切換（避免在
+      // 掛載→listVersions resolve 視窗內的編輯被靜默覆蓋）。
+      userHasManuallySelectedRef.current = true;
       setData(next);
       saveDraft(next);
     },
@@ -312,6 +397,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const loadFromFile = useCallback(
     (incoming: OrgData) => {
+      // 匯入檔案即視為「已主動指定」，擋下背景雲端自動切換（避免在
+      // 掛載→listVersions resolve 視窗內匯入的資料被靜默覆蓋）。
+      userHasManuallySelectedRef.current = true;
       const next = importOrgData(incoming, operator);
       setData(next);
       saveDraft(next);

@@ -167,3 +167,26 @@ export function pickDefaultVersionId(versions: DataVersionInfo[]): string {
   if (versions.length > 0) return versions[0].id;
   return '';
 }
+
+/**
+ * 從雲端版本清單挑出「最新」一筆的 id：依 `exportedAt`（＝後端 publishedAt）
+ * 由新到舊；時間相同時以 id 由大到小作為穩定 tiebreak。空清單回 null。
+ * 不就地排序（不可變），供 OrgProvider 自動預設選版與 QA 單元測試使用。
+ */
+export function pickLatestRemoteVersionId(
+  remoteVersions: DataVersionInfo[],
+): string | null {
+  if (remoteVersions.length === 0) return null;
+  let latest = remoteVersions[0];
+  for (let i = 1; i < remoteVersions.length; i += 1) {
+    const candidate = remoteVersions[i];
+    if (isNewerVersion(candidate, latest)) latest = candidate;
+  }
+  return latest.id;
+}
+
+/** a 是否比 b 新：先比 exportedAt（字串 ISO 可直接比較），再以 id 由大到小 tiebreak。 */
+function isNewerVersion(a: DataVersionInfo, b: DataVersionInfo): boolean {
+  if (a.exportedAt !== b.exportedAt) return a.exportedAt > b.exportedAt;
+  return a.id > b.id;
+}
