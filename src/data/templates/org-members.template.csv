@@ -1,5 +1,8 @@
 # 成員歸屬 CSV 範本（# 開頭為說明列，匯入時會略過）
-# 一列 = 一筆「員工在某組別的歸屬」；主管工號以 | 分隔
-employeeNo,employeeName,employeeStatus,groupCode,groupName,parentGroupCode,groupStatus,jobLevelCode,jobLevelName,jobLevelRank,supervisorEmployeeNos,primarySupervisorEmployeeNo,isPrimaryGroup
+# 一列 = 一筆「員工在某組別的歸屬」。欄名以中文為主，仍相容舊版英文欄名。
+# 主管工號：可填多筆，以 | 分隔（例：E003|E004）；直屬主管工號填單一工號。
+# 是否主要組別：填 1（是）/ 0（否）。
+# 在職狀態 / 組別狀態：填 active / inactive，或 在職 / 停用。
+員工工號,員工姓名,在職狀態,組別代碼,組別名稱,上層組別代碼,組別狀態,職級代碼,職級名稱,職級層級,主管工號,直屬主管工號,是否主要組別
 E001,王大明,active,CEO,總經理室,,active,DIR,總監,50,,,1
 E002,李小華,active,HR,人資部,CEO,active,DIR,總監,50,E001,E001,1

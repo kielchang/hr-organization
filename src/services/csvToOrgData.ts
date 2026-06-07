@@ -22,6 +22,52 @@ export const CSV_MEMBER_COLUMNS = [
 
 export type CsvMemberColumn = (typeof CSV_MEMBER_COLUMNS)[number];
 
+/**
+ * 欄位中文對應（R5.3 單一事實來源）。
+ * - key：既有英文 const，型別／匯出／UI 多處沿用，不變。
+ * - zh：中文主名，用於匯出 header、範本、缺欄位錯誤訊息。
+ * - aliases：可被 header 接受的其他寫法（至少含英文 key；英文比對採 lowercase）。
+ * 原則：中文為主、英文向後相容。中文欄名不得含逗號（避免 CSV 欄位歧義）。
+ */
+export interface CsvColumnDef {
+  key: CsvMemberColumn;
+  zh: string;
+  aliases: string[];
+}
+
+export const CSV_MEMBER_COLUMN_DEFS: CsvColumnDef[] = [
+  { key: 'employeeNo', zh: '員工工號', aliases: ['employeeNo'] },
+  { key: 'employeeName', zh: '員工姓名', aliases: ['employeeName'] },
+  { key: 'employeeStatus', zh: '在職狀態', aliases: ['employeeStatus'] },
+  { key: 'groupCode', zh: '組別代碼', aliases: ['groupCode'] },
+  { key: 'groupName', zh: '組別名稱', aliases: ['groupName'] },
+  { key: 'parentGroupCode', zh: '上層組別代碼', aliases: ['parentGroupCode'] },
+  { key: 'groupStatus', zh: '組別狀態', aliases: ['groupStatus'] },
+  { key: 'jobLevelCode', zh: '職級代碼', aliases: ['jobLevelCode'] },
+  { key: 'jobLevelName', zh: '職級名稱', aliases: ['jobLevelName'] },
+  { key: 'jobLevelRank', zh: '職級層級', aliases: ['jobLevelRank'] },
+  { key: 'supervisorEmployeeNos', zh: '主管工號', aliases: ['supervisorEmployeeNos'] },
+  {
+    key: 'primarySupervisorEmployeeNo',
+    zh: '直屬主管工號',
+    aliases: ['primarySupervisorEmployeeNo'],
+  },
+  { key: 'isPrimaryGroup', zh: '是否主要組別', aliases: ['isPrimaryGroup'] },
+];
+
+/** 依 CSV_MEMBER_COLUMNS 的順序回傳中文主名。 */
+const CSV_COLUMN_DEF_BY_KEY = new Map(
+  CSV_MEMBER_COLUMN_DEFS.map((def) => [def.key, def]),
+);
+
+/** 取某欄位的中文主名（匯出 header／錯誤訊息用）。 */
+export function csvColumnZh(key: CsvMemberColumn): string {
+  return CSV_COLUMN_DEF_BY_KEY.get(key)?.zh ?? key;
+}
+
+/** 匯出／範本用的中文 header 陣列，順序與 CSV_MEMBER_COLUMNS 一致。 */
+export const CSV_MEMBER_COLUMNS_ZH: string[] = CSV_MEMBER_COLUMNS.map(csvColumnZh);
+
 export interface CsvToOrgResult {
   data: OrgData;
   parseErrors: string[];
@@ -107,19 +153,27 @@ export function matrixToOrgData(
     };
   }
 
+  // header 每欄 trim；英文比對採 lowercase、中文 trim 即可。
   const header = matrix[0].map((h) => h.trim());
   const headerLower = header.map((h) => h.toLowerCase());
-  const colIndex = new Map<string, number>();
-  for (const col of CSV_MEMBER_COLUMNS) {
-    const idx = headerLower.indexOf(col.toLowerCase());
-    if (idx >= 0) colIndex.set(col, idx);
+  const colIndex = new Map<CsvMemberColumn, number>();
+  for (const def of CSV_MEMBER_COLUMN_DEFS) {
+    // 依序找「中文主名 → 英文 key → 其他 alias」第一個命中的欄位 index。
+    let idx = header.indexOf(def.zh);
+    if (idx < 0) {
+      for (const alias of def.aliases) {
+        idx = headerLower.indexOf(alias.toLowerCase());
+        if (idx >= 0) break;
+      }
+    }
+    if (idx >= 0) colIndex.set(def.key, idx);
   }
 
   const missing = CSV_MEMBER_COLUMNS.filter((c) => !colIndex.has(c));
   if (missing.length > 0) {
     return {
       data: emptyOrgData(options),
-      parseErrors: [`缺少必要欄位：${missing.join(', ')}`],
+      parseErrors: [`缺少必要欄位：${missing.map(csvColumnZh).join(', ')}`],
       validationErrors: [],
       valid: false,
       rowCount: 0,
@@ -338,7 +392,8 @@ export function orgDataToCsvMemberRows(data: OrgData): string {
   const parentCode = (parentId: string | null) =>
     parentId ? (groupCodeById.get(parentId) ?? '') : '';
 
-  const lines = [CSV_MEMBER_COLUMNS.join(',')];
+  // 匯出 header 用中文主名（HR 友善；雙認故匯出→再匯入仍 OK）。
+  const lines = [CSV_MEMBER_COLUMNS_ZH.map(csvEscape).join(',')];
 
   for (const a of data.assignments) {
     const emp = employeeById.get(a.employeeId);

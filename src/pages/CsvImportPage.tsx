@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  CSV_MEMBER_COLUMNS,
+  CSV_MEMBER_COLUMNS_ZH,
   csvMemberRowsToOrgData,
   orgDataToCsvMemberRows,
 } from '../services/csvToOrgData';
@@ -69,9 +69,10 @@ export function CsvImportPage() {
   };
 
   const downloadTemplate = () => {
-    const header = CSV_MEMBER_COLUMNS.join(',');
+    const header = CSV_MEMBER_COLUMNS_ZH.join(',');
     const content = [
-      '# 成員歸屬 CSV 範本',
+      '# 成員歸屬 CSV 範本（# 開頭為說明列，匯入時會略過）',
+      '# 主管工號可多筆以 | 分隔；是否主要組別填 1/0；在職狀態填 active/inactive 或 在職/停用',
       header,
       'E001,範例員工,active,RD,研發部,CEO,active,ST,專員,10,,,1',
     ].join('\n');
@@ -133,7 +134,7 @@ export function CsvImportPage() {
             />
           </div>
           <CardDescription className="break-all">
-            必要欄位：{CSV_MEMBER_COLUMNS.join(', ')}
+            必要欄位：{CSV_MEMBER_COLUMNS_ZH.join(', ')}
           </CardDescription>
         </CardContent>
       </Card>

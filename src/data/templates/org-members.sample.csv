@@ -1,7 +1,8 @@
-# 成員歸屬 CSV：一列一筆 assignment
-# 主管工號以 | 分隔；isPrimaryGroup 填 1/0
+﻿# 成員歸屬 CSV：一列一筆 assignment（欄名中文為主，相容舊版英文欄名）
+# 主管工號可多筆以 | 分隔；是否主要組別填 1/0
+# 在職狀態 / 組別狀態填 active/inactive 或 在職/停用
 #
-employeeNo,employeeName,employeeStatus,groupCode,groupName,parentGroupCode,groupStatus,jobLevelCode,jobLevelName,jobLevelRank,supervisorEmployeeNos,primarySupervisorEmployeeNo,isPrimaryGroup
+員工工號,員工姓名,在職狀態,組別代碼,組別名稱,上層組別代碼,組別狀態,職級代碼,職級名稱,職級層級,主管工號,直屬主管工號,是否主要組別
 E001,王大明,active,CEO,總經理室,,active,DIR,總監,50,,,1
 E002,李小華,active,HR,人資部,CEO,active,DIR,總監,50,E001,E001,1
 E011,蔡淑芬,active,HR,人資部,CEO,active,ST,專員,10,E002,E002,1
@@ -16,3 +17,7 @@ E007,吳佳穎,active,MKT,行銷部,CEO,active,DIR,總監,50,E001,E001,1
 E010,劉俊傑,active,MKT,行銷部,CEO,active,MGR,經理,40,E007,E007,1
 E008,鄭浩然,active,PD,產品部,CEO,active,MGR,經理,40,E001,E001,1
 E009,許文雅,active,PD,產品部,CEO,active,SR,資深專員,20,E008,E008,1
+E004,陳志強,active,XFN-AI,AI 應用小組,,active,MGR,經理,40,E003,E003,0
+E007,吳佳穎,active,XFN-AI,AI 應用小組,,active,DIR,總監,50,E004,E004,0
+E002,李小華,active,XFN-OKR,OKR 推動小組,,active,DIR,總監,50,,,0
+E009,許文雅,active,XFN-OKR,OKR 推動小組,,active,SR,資深專員,20,,,0

@@ -11,8 +11,9 @@ const orgData = JSON.parse(
 ) as OrgData;
 
 const header = [
-  '# 成員歸屬 CSV：一列一筆 assignment',
-  '# 主管工號以 | 分隔；isPrimaryGroup 填 1/0',
+  '# 成員歸屬 CSV：一列一筆 assignment（欄名中文為主，相容舊版英文欄名）',
+  '# 主管工號可多筆以 | 分隔；是否主要組別填 1/0',
+  '# 在職狀態 / 組別狀態填 active/inactive 或 在職/停用',
   '#',
 ].join('\n');
 
