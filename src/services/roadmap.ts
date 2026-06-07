@@ -105,7 +105,7 @@ const PHASES: RoadmapPhase[] = [
     description:
       'PM 評估缺「編制／空位」概念——讓 HR 沒辦法表達「規劃中還沒到位的人」。',
     order: 5,
-    status: 'planned',
+    status: 'in-progress',
   },
   {
     id: 'phase-5',
@@ -389,9 +389,12 @@ const ITEMS: RoadmapItem[] = [
   {
     id: 'R4.3',
     title: '變更理由（rationale）+ 歷史方案命名',
-    description: '版本／changelog 加結構化欄位，記錄方案 why。',
-    status: 'planned',
-    sources: ['pm'],
+    description:
+      '發布版本可填自訂名稱與調整理由（版本層級 metadata），記錄方案 why；VersionSelector 顯示。',
+    status: 'done',
+    commitHash: 'e0b3636',
+    completedAt: '2026-06-07',
+    sources: ['pm', 'uxr'],
     size: 'small',
     phaseId: 'phase-4',
   },

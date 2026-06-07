@@ -55,7 +55,7 @@ PM 評估缺「編制／空位」概念——讓 HR 沒辦法表達「規劃中�
 
 - [ ] `R4.1` **編制（target headcount）**：group 新增目標人數，健檢能算「**編制缺口**」
 - [ ] `R4.2` **規劃中虛擬員工**（planned status）：員工 status 加 `planned`，視覺以虛線框／灰底節點呈現
-- [ ] `R4.3` **變更理由（rationale）+ 歷史方案命名**：版本／changelog 加結構化欄位
+- [x] `R4.3` **變更理由（rationale）+ 歷史方案命名**：發布版本可填自訂名稱與調整理由（版本層級 metadata，純前端）（✅ 完成 commit `e0b3636`）
 
 ## 6. Phase 5 — 體驗摩擦消除（UXR 視角）
 
