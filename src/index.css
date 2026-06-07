@@ -64,6 +64,26 @@ body,
   border-radius: 4px;
 }
 
+/* 組別框內層級輔助線：水平虛線橫跨框寬 + 左側「第N層」小字（沿用匯報層帶風格、
+   但相對各組框絕對定位、純背景裝飾） */
+.group-org-level-line {
+  height: 0;
+  border-top: 1px dashed color-mix(in oklab, var(--border) 80%, transparent);
+  pointer-events: none;
+}
+
+.group-org-level-label {
+  position: absolute;
+  left: 0.25rem;
+  top: -1.4rem;
+  padding: 0 0.375rem;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--background) 85%, transparent);
+  border-radius: 4px;
+}
+
 .react-flow__panel.org-flow-chrome-panel {
   pointer-events: all;
   z-index: 10;

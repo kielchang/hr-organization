@@ -46,6 +46,12 @@ export interface GroupBoxNodeData extends Record<string, unknown> {
   /** 框尺寸（佈局算出；供元件決定外框大小）。 */
   width: number;
   height: number;
+  /**
+   * 組內層級輔助線（框內相對座標）：沿用匯報視圖層帶概念但相對「各組框」。
+   * `y` 為框內相對 Y（與成員子節點同一套位移：扣 minY + 標題列 + 內距），
+   * `label` 為「第N層」（組內相對、組長層起算）。純佈局資料、不含姓名。
+   */
+  levelLines: { level: number; y: number; label: string }[];
 }
 
 export interface GroupOrgGraphResult {
@@ -80,6 +86,8 @@ interface IntraGroupLayout {
   memberNodes: Node<EmployeeNodeData>[];
   /** 組內成員間的匯報邊（主管也在本組者）。 */
   edges: Edge[];
+  /** 組內層級輔助線（框內相對 Y，與成員節點同一套位移）。 */
+  levelLines: { level: number; y: number; label: string }[];
   width: number;
   height: number;
 }
@@ -225,7 +233,7 @@ function layoutIntraGroup(
     scopedLevelMap.set(memberNodeId(group.id, eid), lv);
   }
 
-  const { nodes: laidOut, bounds } = layoutReportingSubgraph(
+  const { nodes: laidOut, levels, bounds } = layoutReportingSubgraph(
     nodes,
     edges,
     scopedLevelMap,
@@ -255,13 +263,22 @@ function layoutIntraGroup(
     },
   }));
 
+  // 組內層級輔助線：把 layoutReportingSubgraph 回傳的層帶中心 y（lv.y，= 該層
+  // 節點 topY + NODE_HEIGHT/2）轉成框內相對座標，與成員節點用同一套位移
+  // （扣 minY、加標題列+內距），使輔助線正好穿過該層成員中心。
+  const levelLines = levels.map((lv) => ({
+    level: lv.level,
+    y: lv.y - minY + BOX_TITLE_HEIGHT + BOX_PADDING,
+    label: lv.label,
+  }));
+
   const width = Math.max(MIN_BOX_WIDTH, innerWidth + BOX_PADDING * 2);
   const height = Math.max(
     MIN_BOX_HEIGHT,
     maxRelY + BOX_TITLE_HEIGHT + BOX_PADDING * 2,
   );
 
-  return { group, leadership, memberNodes, edges, width, height };
+  return { group, leadership, memberNodes, edges, levelLines, width, height };
 }
 
 /**
@@ -405,6 +422,7 @@ export function buildGroupOrgGraph(
         coLeaderIds: lead.coLeaderIds,
         width: layout.width,
         height: layout.height,
+        levelLines: layout.levelLines,
       },
     };
     nodes.push(boxNode);
@@ -429,7 +447,15 @@ export function buildGroupOrgGraph(
         source: groupBoxId(parentId),
         target: groupBoxId(g.id),
         type: 'default',
-        markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 18,
+          height: 18,
+          // 中性色箭頭，與組內 reporting 邊（白底標籤）視覺區隔。
+          color: 'var(--muted-foreground)',
+        },
+        // 部門階層線：實線、稍粗、中性色，明確標示「組間上下層關係」。
+        style: { stroke: 'var(--muted-foreground)', strokeWidth: 2 },
       });
     }
   }

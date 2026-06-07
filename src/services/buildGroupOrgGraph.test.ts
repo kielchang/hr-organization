@@ -5,6 +5,7 @@ import {
   type GroupBoxNodeData,
 } from './buildGroupOrgGraph';
 import {
+  ORG_FLOW_LEVEL_GAP,
   ORG_FLOW_NODE_HEIGHT,
   ORG_FLOW_NODE_WIDTH,
 } from './buildOrgFlowGraph';
@@ -796,5 +797,240 @@ describe('buildGroupOrgGraph 框尺寸與相對座標', () => {
     const lead = r.leadership.get('g1')!;
     expect(lead.leaderId).toBe('boss');
     expect(lead.coLeaderIds).toEqual([]);
+  });
+});
+
+/**
+ * 組內層級輔助線（data.levelLines）：補強 #1。
+ *
+ * `layoutIntraGroup` 把 `layoutReportingSubgraph` 回傳的層帶（`levels`，y = 該層
+ * 節點中心 Y）轉成「框內相對座標」帶進 groupBox 的 `data.levelLines`：
+ *   y = lv.y − minY + BOX_TITLE_HEIGHT + BOX_PADDING（與成員子節點同一套位移）。
+ *
+ * 斷言聚焦結構性不變式（非絕對像素）：
+ * - 每條 levelLine 的 y 落在框內合理範圍（≥ 標題列+內距、≤ 框高）。
+ * - label 為「第N層」字樣、含 level 數字；level 沿組內相對層級遞增。
+ * - 多層匯報 → 多條 levelLine（層數 == 框內出現的相異層級數）。
+ * - levelLine.y 與同層成員「節點中心」對齊（memberY + NODE_HEIGHT/2 ≈ 某條 line.y）。
+ * - 組間 link 邊 `go-link-*` 帶 style（stroke + strokeWidth）。
+ *
+ * 常數與實作同源（避免硬編魔數漂移）。
+ */
+describe('buildGroupOrgGraph 組內層級輔助線 data.levelLines', () => {
+  // 與實作一致的框內位移常數（buildGroupOrgGraph 私有，不導出 → 此處鏡像）。
+  const BOX_TITLE_HEIGHT = 56;
+  const BOX_PADDING = 24;
+  /** 框內相對位移基準：成員/輔助線皆 +（標題列 + 內距）。 */
+  const INNER_OFFSET = BOX_TITLE_HEIGHT + BOX_PADDING;
+
+  /** boss ← mid ← low：三層單鏈（產生三條層線）。 */
+  function threeLevelOrg() {
+    return makeOrgData({
+      employees: [emp('boss'), emp('mid'), emp('low')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('a-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-low', {
+          employeeId: 'low',
+          groupId: 'g1',
+          supervisorIds: ['mid'],
+          primarySupervisorId: 'mid',
+        }),
+      ],
+    });
+  }
+
+  it('groupBox.data.levelLines 存在且為陣列、每條帶 level/y/label', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    expect(Array.isArray(box.data.levelLines)).toBe(true);
+    expect(box.data.levelLines.length).toBeGreaterThan(0);
+    for (const line of box.data.levelLines) {
+      expect(typeof line.level).toBe('number');
+      expect(typeof line.y).toBe('number');
+      expect(typeof line.label).toBe('string');
+    }
+  });
+
+  it('每條 level line 的 y 落在框內合理範圍（≥ 標題列+內距、≤ 框高）', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    const { height } = box.data;
+    for (const line of box.data.levelLines) {
+      // 層線中心至少落在「標題列 + 內距」之下（不會壓在標題列上）。
+      expect(line.y).toBeGreaterThanOrEqual(INNER_OFFSET);
+      // 不溢出框高。
+      expect(line.y).toBeLessThanOrEqual(height);
+    }
+  });
+
+  it('label 為「第N層」字樣、含對應 level 數字；level 嚴格遞增', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    const lines = box.data.levelLines;
+    for (const line of lines) {
+      // 「第 N 層」（容許數字前後有空白；只認結構不認固定間距）。
+      expect(line.label).toMatch(/^第\s*\d+\s*層$/);
+      // label 的數字 == 該條 level（標籤用實際 level 值、不重新編號）。
+      const num = Number(line.label.replace(/[^\d]/g, ''));
+      expect(num).toBe(line.level);
+    }
+    // level 沿組內相對層級遞增（applyLevelBands 由 minLevel→maxLevel 連續填）。
+    const levels = lines.map((l) => l.level);
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i]).toBeGreaterThan(levels[i - 1]);
+    }
+  });
+
+  it('多層匯報的組 → 多條 level line（三層鏈 → 三條相異層線）', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    const lines = box.data.levelLines;
+    // boss/mid/low 三層 → 三個相異層級 → 三條層線。
+    expect(lines.length).toBe(3);
+    expect(new Set(lines.map((l) => l.level)).size).toBe(3);
+  });
+
+  it('單人組 → 僅一條 level line', () => {
+    const data = makeOrgData({
+      employees: [emp('solo')],
+      groups: [group('g1')],
+      assignments: [assignment('a-solo', { employeeId: 'solo', groupId: 'g1' })],
+    });
+    const r = buildGroupOrgGraph(data, 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    expect(box.data.levelLines.length).toBe(1);
+  });
+
+  it('空組（無成員）→ 無 level line（layoutReportingSubgraph 空輸入）', () => {
+    const data = makeOrgData({ groups: [group('g1')] });
+    const r = buildGroupOrgGraph(data, 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    expect(box.data.levelLines).toEqual([]);
+  });
+
+  it('level line 的 y 與同層成員「節點中心」對齊（memberY + NODE_HEIGHT/2 ≈ 某條 line.y）', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    const lines = box.data.levelLines;
+    // 每位成員的節點中心 Y 應落在「某條與其 level 相符的層線」上（同一套框內位移）。
+    for (const m of membersOf(r.nodes, 'g1')) {
+      const memberLevel = (m.data as { level: number }).level;
+      const centerY = m.position.y + ORG_FLOW_NODE_HEIGHT / 2;
+      const line = lines.find((l) => l.level === memberLevel);
+      expect(line).toBeDefined();
+      // 中心 Y 與層線 y 對齊（兩者皆由 lv.y / topY 推得 → 期望完全相等；
+      // 容微小浮點誤差）。
+      expect(Math.abs(centerY - line!.y)).toBeLessThan(1);
+    }
+  });
+
+  it('相鄰 level line 的 y 間距 == 一個層高（ORG_FLOW_LEVEL_GAP）', () => {
+    const r = buildGroupOrgGraph(threeLevelOrg(), 'g1');
+    const box = boxOf(r.nodes, 'g1')!;
+    const ys = box.data.levelLines.map((l) => l.y);
+    for (let i = 1; i < ys.length; i++) {
+      // 連續層 → topY 差一個 LEVEL_GAP；層線 y = topY + NODE_HEIGHT/2 → 同樣差 LEVEL_GAP。
+      expect(Math.abs(ys[i] - ys[i - 1] - ORG_FLOW_LEVEL_GAP)).toBeLessThan(1);
+    }
+  });
+
+  it('co-leader 平行同層共管：co-leader 與組長同 level → 不額外增生層線', () => {
+    // CEO/COO 案：sales leaderId=CEO（不在框）；s1/s2 直屬 CEO（最上層）、
+    // COO（co-leader）鉗到同層、s3/s4 落 COO 下一層 → 框內僅兩個相異層級。
+    const data = makeOrgData({
+      employees: [
+        emp('CEO'),
+        emp('COO'),
+        emp('s1'),
+        emp('s2'),
+        emp('s3'),
+        emp('s4'),
+      ],
+      groups: [
+        group('sales', { leaderId: 'CEO' }),
+        group('exec', { leaderId: 'COO' }),
+      ],
+      assignments: [
+        assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
+        assignment('x-coo', {
+          employeeId: 'COO',
+          groupId: 'exec',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-s1', {
+          employeeId: 's1',
+          groupId: 'sales',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-s2', {
+          employeeId: 's2',
+          groupId: 'sales',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-s3', {
+          employeeId: 's3',
+          groupId: 'sales',
+          supervisorIds: ['COO'],
+          primarySupervisorId: 'COO',
+        }),
+        assignment('x-s4', {
+          employeeId: 's4',
+          groupId: 'sales',
+          supervisorIds: ['COO'],
+          primarySupervisorId: 'COO',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'sales');
+    const box = boxOf(r.nodes, 'sales')!;
+    const lines = box.data.levelLines;
+    // 框內相異層級數（成員 level 集合）== 層線數。
+    const memberLevels = new Set(
+      membersOf(r.nodes, 'sales').map(
+        (n) => (n.data as { level: number }).level,
+      ),
+    );
+    expect(lines.length).toBe(memberLevels.size);
+    // 此案恰兩層（上層 s1/s2/COO；下層 s3/s4）。
+    expect(lines.length).toBe(2);
+    // 每位成員的 level 都有對應層線（無懸空層、無缺層）。
+    for (const lv of memberLevels) {
+      expect(lines.some((l) => l.level === lv)).toBe(true);
+    }
+  });
+
+  it('組間 link 邊（go-link-*）帶 style（stroke + strokeWidth）', () => {
+    const data = makeOrgData({
+      employees: [emp('p'), emp('c')],
+      groups: [
+        group('parent', { kind: 'department' }),
+        group('child', { kind: 'department', parentId: 'parent' }),
+      ],
+      assignments: [
+        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
+        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    const link = r.edges.find(
+      (e) => e.source === 'group:parent' && e.target === 'group:child',
+    );
+    expect(link).toBeDefined();
+    // edge id 以 go-link- 前綴。
+    expect(link!.id).toMatch(/^go-link-/);
+    // style 帶 stroke（中性色）與較粗 strokeWidth（區隔組內 reporting 邊）。
+    expect(link!.style).toBeDefined();
+    expect(link!.style!.stroke).toBeTruthy();
+    expect(Number(link!.style!.strokeWidth)).toBeGreaterThan(1);
   });
 });
