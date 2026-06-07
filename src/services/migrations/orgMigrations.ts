@@ -1,9 +1,9 @@
-import type { Group, OrgData } from '../../types/org';
+import type { Assignment, Group, OrgData } from '../../types/org';
 import { backfillAssignmentLevels } from '../assignmentLevels';
 import { runMigrations, type Migration } from './runMigrations';
 
 /** OrgData 目前的 schema 版本。新增結構性變更時 +1 並補一個 migration step。 */
-export const ORG_SCHEMA_VERSION = 2;
+export const ORG_SCHEMA_VERSION = 3;
 
 function asRecord(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
@@ -57,7 +57,24 @@ const toV2: Migration = {
   },
 };
 
-export const orgMigrations: Migration[] = [toV1, toV2];
+/**
+ * v2 → v3：清除所有 `assignment.level`（設為 `undefined`）。
+ * - 層級語意翻轉：預設改由「主匯報深度」自動計算，`level` 退為稀疏的「手動覆寫」。
+ * - 現存的 level 是佈局產物／職等殘值（含 v1 backfill 的回填值），**非使用者刻意覆寫**
+ *   → 一律清除後改走計算深度＝乾淨；之後使用者垂直拖曳才會產生真正的稀疏覆寫。
+ */
+const toV3: Migration = {
+  to: 3,
+  migrate: (raw) => {
+    const data = raw as OrgData;
+    const assignments: Assignment[] = asArray<Assignment>(data.assignments).map(
+      (a) => ({ ...a, level: undefined }),
+    );
+    return { ...data, schemaVersion: 3, assignments };
+  },
+};
+
+export const orgMigrations: Migration[] = [toV1, toV2, toV3];
 
 /** 將任意版本的組織資料升級到目前 schema 版本。 */
 export function migrateOrgData(raw: unknown): OrgData {

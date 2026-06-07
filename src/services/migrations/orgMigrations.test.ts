@@ -36,7 +36,48 @@ describe('migrateOrgData', () => {
     expect(out.contentVersion).toBe(1); // 預設內容版本
   });
 
-  it('以組內匯報深度回填缺漏的 assignment.level', () => {
+  it('v2→v3：清除所有 assignment.level（層級改由主匯報深度計算）', () => {
+    // 帶有顯式 level 的 v2 資料（level 為佈局產物／職等殘值，非使用者覆寫）。
+    const out = migrateOrgData({
+      schemaVersion: 2,
+      contentVersion: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      employees: [],
+      groups: [],
+      jobLevels: [],
+      changeLog: [],
+      assignments: [
+        {
+          id: 'a-boss',
+          employeeId: 'boss',
+          groupId: 'g1',
+          jobLevelId: 'j',
+          supervisorIds: [],
+          primarySupervisorId: null,
+          isPrimaryGroup: true,
+          level: 1,
+        },
+        {
+          id: 'a-staff',
+          employeeId: 'staff',
+          groupId: 'g1',
+          jobLevelId: 'j',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+          isPrimaryGroup: true,
+          level: 2,
+        },
+      ],
+    });
+    expect(out.schemaVersion).toBe(3);
+    expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
+    // 所有 assignment.level 一律清為 undefined（之後改走計算深度）。
+    expect(out.assignments.every((a) => a.level === undefined)).toBe(true);
+  });
+
+  it('無 schemaVersion 的舊匯出檔：經 v1 backfill 後仍被 v3 清掉 level（淨結果 undefined）', () => {
+    // 缺 schemaVersion → 走完整 v0→v1→v2→v3 路徑；
+    // v1 的 backfill 會回填 level，但 v3 再清掉 → 最終所有 level 為 undefined。
     const out = migrateOrgData({
       employees: [],
       groups: [],
@@ -61,10 +102,8 @@ describe('migrateOrgData', () => {
         },
       ],
     });
-    const boss = out.assignments.find((a) => a.id === 'a-boss');
-    const staff = out.assignments.find((a) => a.id === 'a-staff');
-    expect(boss?.level).toBe(1);
-    expect(staff?.level).toBe(2);
+    expect(out.schemaVersion).toBe(ORG_SCHEMA_VERSION);
+    expect(out.assignments.every((a) => a.level === undefined)).toBe(true);
   });
 
   it('v1→v2：缺 kind 的舊 group 回填為 department', () => {

@@ -214,6 +214,8 @@ export function importOrgData(
  * 行為：
  * - 設 `primarySupervisorId = newSupervisorId`；`supervisorIds` 去掉舊的主主管、確保含新主管、
  *   其餘 dotted（虛線）主管保留。
+ * - **清除該歸屬的 `level` 覆寫**（設為 `undefined`），讓被拖者跟隨新主管的計算深度
+ *   （換了主管、層級自然跟著走）。
  * - 走既有 `upsertAssignment`（內含 `validateAssignment`：擋自我指派、inactive、找不到員工/組別等）。
  * - 循環防護：套用後以 `detectReportingCycleFromAssignments` 檢查整體匯報關係；若偵測到循環，
  *   **不套用**並回 `error`（畫面端據此回滾節點位置）。
@@ -248,6 +250,8 @@ export function reassignSupervisor(
     ...assignment,
     supervisorIds: nextSupervisorIds,
     primarySupervisorId: newSupervisorId,
+    // 清除手動層級覆寫，跟隨新主管的計算深度。
+    level: undefined,
   };
 
   // 走既有 upsert（含 validateAssignment：自我/inactive/找不到主管等）。

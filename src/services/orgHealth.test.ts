@@ -252,9 +252,9 @@ describe('buildOrgHealth — span（管理幅度）', () => {
 });
 
 describe('buildOrgHealth — depth（層級深度）', () => {
-  it('maxDepth 與 perLevel 依各員工主歸屬 level 計數（含 backfill）', () => {
-    // 不顯式給 level，讓 backfillAssignmentLevels 由組內匯報深度推導：
-    // root level 1、mid level 2、leaf level 3
+  it('maxDepth 與 perLevel 依各員工主歸屬有效層級計數（缺 level → 計算深度）', () => {
+    // 不顯式給 level → effectiveLevel 退回 computePrimaryDepth（主匯報深度）：
+    // root 第1層、mid 第2層、leaf 第3層
     const data = makeOrgData({
       ...baseGroupsAndLevels(),
       employees: [emp('root'), emp('mid'), emp('leaf')],
@@ -286,7 +286,7 @@ describe('buildOrgHealth — depth（層級深度）', () => {
     expect(summary.maxDepth).toBe(3);
   });
 
-  it('已顯式給 level 時直接採用、同層多人正確累加', () => {
+  it('已顯式給 level（覆寫）時優先採用、同層多人正確累加', () => {
     const data = makeOrgData({
       ...baseGroupsAndLevels(),
       employees: [emp('a'), emp('b'), emp('c')],
@@ -344,6 +344,51 @@ describe('buildOrgHealth — depth（層級深度）', () => {
     const okHealth = buildOrgHealth(ok);
     expect(okHealth.depth.maxDepth).toBe(6);
     expect(okHealth.findings.some((f) => f.id === 'depth-deep')).toBe(false);
+  });
+
+  it('含虛線/次要 supervisorIds 且全無 level → depth 只沿主匯報，不被虛線污染', () => {
+    // 主匯報結構（primarySupervisorId）：root(第1) → mid(第2)；leaf 主匯報直接掛 root（第2）。
+    // 另給 leaf 一條「虛線」掛到 mid（次要 supervisorId）。
+    //
+    // 舊行為（被 backfillAssignmentLevels 污染、走 per-group/全部 supervisorIds）：
+    //   leaf 深度 = max(root=1, mid=2)+1 = 3 → backfill 把 level 補成 3，
+    //   effectiveLevel 的 ?? 短路在 level → depthMap 永不採用 → maxDepth=3（污染值）。
+    // 修補後（不 backfill、只走 primarySupervisorId）：
+    //   leaf 只看 primary=root → 第2層；root=第1層、mid=第2層 → maxDepth=2、第2層 2 人。
+    const data = makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('root'), emp('mid'), emp('leaf')],
+      assignments: [
+        assignment('as-root', { employeeId: 'root', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mid', {
+          employeeId: 'mid',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['root'],
+          primarySupervisorId: 'root',
+        }),
+        assignment('as-leaf', {
+          employeeId: 'leaf',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          // 主匯報＝root（→第2層）；虛線額外掛 mid（次要）→ 舊 max 路徑會被拉深到第3層。
+          supervisorIds: ['root', 'mid'],
+          primarySupervisorId: 'root',
+        }),
+      ],
+    });
+    // 健全性自證：fixtures 全無 level（證明走計算深度而非覆寫）。
+    expect(data.assignments.every((a) => a.level == null)).toBe(true);
+
+    const { depth, summary } = buildOrgHealth(data);
+    // 真實主匯報深度：root=第1層；mid 與 leaf 皆直屬 root → 同為第2層（共 2 人）。
+    // 若仍被舊 backfill 污染，leaf 會被虛線拉到第3層、maxDepth=3 → 本斷言會 fail。
+    expect(depth.perLevel).toEqual([
+      { level: 1, count: 1 },
+      { level: 2, count: 2 },
+    ]);
+    expect(depth.maxDepth).toBe(2);
+    expect(summary.maxDepth).toBe(2);
   });
 });
 

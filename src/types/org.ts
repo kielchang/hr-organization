@@ -35,7 +35,10 @@ export interface Assignment {
   supervisorIds: string[];
   primarySupervisorId: string | null;
   isPrimaryGroup: boolean;
-  /** 組織層級（1-indexed 匯報層）；組織圖以此判斷垂直層級，可拖拉改動 */
+  /**
+   * 可選的**層級覆寫**（1-indexed）；預設由主匯報深度自動計算
+   * （`reportingDepth.computePrimaryDepth`），僅使用者刻意垂直拖曳時才設值。
+   */
   level?: number;
 }
 

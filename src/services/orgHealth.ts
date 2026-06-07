@@ -1,9 +1,9 @@
 import type { Assignment, Employee, OrgData } from '../types/org';
-import { backfillAssignmentLevels } from './assignmentLevels';
 import {
   buildFunctionCoverage,
   type FunctionCoverage,
 } from './functionCoverage';
+import { computePrimaryDepth, effectiveLevel } from './reportingDepth';
 import { detectReportingCycleFromAssignments } from './validators';
 
 /** 姓名排序用中文 collation（繁中），對齊 functionCoverage 的排序語意。 */
@@ -38,7 +38,7 @@ export interface SpanOfControl {
   narrow: SpanEntry[];
 }
 
-/** 層級深度（depth）彙總，依各員工主歸屬的 Assignment.level。 */
+/** 層級深度（depth）彙總，依各員工主歸屬的有效層級（主匯報深度，可被 level 覆寫）。 */
 export interface DepthStat {
   maxDepth: number;
   /** 各層人數（依 level 升冪）。 */
@@ -316,7 +316,8 @@ function primaryAssignmentByEmployee(
  *
  * - span 以「主匯報線」計：員工直屬主管＝其主歸屬 assignment 的 primarySupervisorId；
  *   只計 active 員工與 active 主管。
- * - depth 取每位員工主歸屬的 Assignment.level（缺值先以 backfillAssignmentLevels 補齊）。
+ * - depth 取每位員工主歸屬的有效層級（effectiveLevel）：預設為主匯報深度
+ *   （computePrimaryDepth，根=第1層、只走主匯報），assignment.level 為手動覆寫。
  * - 職能覆蓋直接 buildFunctionCoverage(data)，並轉成 findings。
  * - 結構風險：chain（孤兒／懸空主管）、cycle（重用 validators）、spof（唯一主管）。
  */
@@ -327,8 +328,9 @@ export function buildOrgHealth(
   const wideSpanThreshold =
     options?.wideSpanThreshold ?? DEFAULT_WIDE_SPAN_THRESHOLD;
 
-  // level 可能缺值（拖拉前未回填）；先補齊再算 depth。
-  const normalized = backfillAssignmentLevels(data);
+  // depth 由主匯報深度自動計算（effectiveLevel 在缺 level 時 fall through 到
+  // computePrimaryDepth）；不再 backfill level，避免舊 per-group/含虛線深度污染。
+  const normalized = data;
 
   const employeeById = new Map(normalized.employees.map((e) => [e.id, e]));
   const isActive = (id: string | null | undefined): boolean =>
@@ -380,12 +382,15 @@ export function buildOrgHealth(
     narrow,
   };
 
-  // ---- 層級深度（depth）：取每位 active 員工主歸屬的 level ----
+  // ---- 層級深度（depth）：取每位 active 員工主歸屬的有效層級 ----
+  // 預設由主匯報深度自動計算（根 = 第 1 層、每階 +1，只走主匯報、忽略虛線），
+  // assignment.level 為稀疏的手動覆寫（effectiveLevel 覆寫優先）。
+  const depthMap = computePrimaryDepth(normalized.assignments);
   const countByLevel = new Map<number, number>();
   for (const emp of activeEmployees) {
     const primary = primaryByEmployee.get(emp.id);
     if (!primary) continue; // 孤兒由 chain finding 涵蓋
-    const level = primary.level ?? 1;
+    const level = effectiveLevel(primary, depthMap);
     countByLevel.set(level, (countByLevel.get(level) ?? 0) + 1);
   }
   const perLevel = [...countByLevel.entries()]

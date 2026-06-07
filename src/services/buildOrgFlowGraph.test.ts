@@ -238,10 +238,11 @@ describe('buildOrgFlowGraph 佈局結構不變式', () => {
     }
   });
 
-  it('缺 level 後備：全無顯式 level 時仍輸出真實節點、edge 與 Y 對齊層帶', () => {
-    // resolveLevels 缺 level → 純 dagre rank 後備路徑。
+  it('缺 level：層級改由主匯報深度計算（根=第1層、每階+1、同主管直屬同層）', () => {
+    // 全無顯式 level → effectiveLevel 退回 computePrimaryDepth：
+    // 根 r=L1；r 的直屬 a/b 同為 L2；a 的部屬 c=L3。
     const data = makeOrgData({
-      employees: [emp('r'), emp('a'), emp('b')],
+      employees: [emp('r'), emp('a'), emp('b'), emp('c')],
       groups: [group('g1')],
       assignments: [
         assignment('a-r', { employeeId: 'r', groupId: 'g1' }),
@@ -254,6 +255,12 @@ describe('buildOrgFlowGraph 佈局結構不變式', () => {
         assignment('a-b', {
           employeeId: 'b',
           groupId: 'g1',
+          supervisorIds: ['r'],
+          primarySupervisorId: 'r',
+        }),
+        assignment('a-c', {
+          employeeId: 'c',
+          groupId: 'g1',
           supervisorIds: ['a'],
           primarySupervisorId: 'a',
         }),
@@ -261,15 +268,59 @@ describe('buildOrgFlowGraph 佈局結構不變式', () => {
     });
     const r = buildOrgFlowGraph(data, 'g1');
     expect(r.error).toBeUndefined();
-    expect(r.nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'r']);
+    expect(r.nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'c', 'r']);
     expect(r.nodes.every((n) => !n.id.includes('__dummy__'))).toBe(true);
-    // 後備 rank 為 1/2/3，Y 對齊層帶。
+
+    const lv = (id: string) => r.nodes.find((n) => n.id === id)!.data.level!;
+    // 根 = 第 1 層。
+    expect(lv('r')).toBe(1);
+    // 同一主管（r）的直屬落在同層（第 2 層）。
+    expect(lv('a')).toBe(2);
+    expect(lv('b')).toBe(2);
+    // 主管恰在部屬上一層：c 的主管 a 在 L2、c 在 L3。
+    expect(lv('c')).toBe(3);
+    expect(lv('c') - lv('a')).toBe(1);
+
+    // Y 仍對齊層帶（level × LEVEL_GAP）。
     for (const n of r.nodes) {
       expect(n.position.y).toBe(n.data.level! * ORG_FLOW_LEVEL_GAP);
     }
-    // 後備 rank 對齊樹深：r=1 < a=2 < b=3。
+  });
+
+  it('level 覆寫優先於計算深度：顯式 level 蓋過主匯報深度', () => {
+    // r→a→b 計算深度為 1/2/3；但 a 被手動覆寫為 level 5 →
+    // a 應落在第 5 層（覆寫優先），驗證 effectiveLevel 在佈局端生效。
+    const data = makeOrgData({
+      employees: [emp('r'), emp('a'), emp('b')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-r', { employeeId: 'r', groupId: 'g1' }),
+        assignment('a-a', {
+          employeeId: 'a',
+          groupId: 'g1',
+          supervisorIds: ['r'],
+          primarySupervisorId: 'r',
+          level: 5,
+        }),
+        assignment('a-b', {
+          employeeId: 'b',
+          groupId: 'g1',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+    const r = buildOrgFlowGraph(data, 'g1');
     const lv = (id: string) => r.nodes.find((n) => n.id === id)!.data.level!;
-    expect(lv('r')).toBeLessThan(lv('a'));
-    expect(lv('a')).toBeLessThan(lv('b'));
+    expect(lv('r')).toBe(1); // 計算深度
+    expect(lv('a')).toBe(5); // 手動覆寫蓋過計算深度（原本 2）
+    // 覆寫「不向下傳遞」：computePrimaryDepth 只看結構（primarySupervisorId），
+    // 不讀 level → b 的計算深度仍為 3（不因 a 覆寫成 5 而變 6）。
+    expect(lv('b')).toBe(3);
+    // Y 對齊各自的有效層帶，且 dummy 不外洩。
+    expect(r.nodes.every((n) => !n.id.includes('__dummy__'))).toBe(true);
+    for (const n of r.nodes) {
+      expect(n.position.y).toBe(n.data.level! * ORG_FLOW_LEVEL_GAP);
+    }
   });
 });

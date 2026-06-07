@@ -8,9 +8,27 @@ import type {
   SimulationOrgContext,
   ApproverResolutionConfig,
 } from '../types/bpmn';
-import type { OrgData } from '../types/org';
+import type { Assignment, OrgData } from '../types/org';
+import { computePrimaryDepth, effectiveLevel } from './reportingDepth';
 
 // ─── condition evaluation ─────────────────────────────────────────────────────
+
+/**
+ * 取得「申請人主歸屬所在組」視角下的主匯報深度。
+ *
+ * 與組織圖單組檢視一致：以該組所有歸屬為範圍計算主匯報深度，
+ * 再由 effectiveLevel（覆寫優先）得出申請人的有效層級。
+ */
+function requesterEffectiveLevel(
+  primaryAssignment: Assignment,
+  orgData: OrgData,
+): number {
+  const groupAssignments = orgData.assignments.filter(
+    (a) => a.groupId === primaryAssignment.groupId,
+  );
+  const depthMap = computePrimaryDepth(groupAssignments);
+  return effectiveLevel(primaryAssignment, depthMap);
+}
 
 function evalCondition(cond: FlowCondition, vars: Record<string, unknown>): boolean {
   const actual = vars[cond.variable];
@@ -61,7 +79,7 @@ export function resolveOrgVars(
     requesterJobLevelRank: jobLevel?.rank ?? 0,
     requesterGroupId: primaryAssignment.groupId,
     requesterSupervisorId: primaryAssignment.primarySupervisorId ?? null,
-    requesterLevel: primaryAssignment.level ?? null,
+    requesterLevel: requesterEffectiveLevel(primaryAssignment, orgData),
     // group metadata
     _requesterGroupParentId: group?.parentId ?? null,
   };
@@ -100,7 +118,9 @@ export function buildOrgContext(
     requesterPrimaryGroupName: group?.name ?? '',
     requesterDirectSupervisorId: primaryAssignment?.primarySupervisorId ?? null,
     requesterDirectSupervisorName: supervisorEmp?.name ?? null,
-    requesterOrgLevel: primaryAssignment?.level ?? null,
+    requesterOrgLevel: primaryAssignment
+      ? requesterEffectiveLevel(primaryAssignment, orgData)
+      : null,
   };
 }
 

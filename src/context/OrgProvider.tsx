@@ -10,7 +10,6 @@ import {
   upsertGroup,
 } from '../services/orgOperations';
 import { cloneOrgData } from '../services/exportImport';
-import { backfillAssignmentLevels } from '../services/assignmentLevels';
 import { ORG_SCHEMA_VERSION, migrateOrgData } from '../services/migrations/orgMigrations';
 import { safeSetItem } from '../services/storage';
 import {
@@ -102,7 +101,7 @@ function createInitialState(): {
   return {
     dataVersions,
     activeVersionId,
-    data: backfillAssignmentLevels(draftBelongsToActive ? draft : versionData),
+    data: draftBelongsToActive ? draft : versionData,
   };
 }
 
@@ -148,7 +147,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const version = allVersions.find((v) => v.id === id);
       if (!version) return;
-      const next = backfillAssignmentLevels(cloneOrgData(version.data));
+      const next = cloneOrgData(version.data);
       setActiveVersionId(id);
       setData(next);
       // 同步 draft 與 active 版本，確保重整後一致
@@ -175,7 +174,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       );
       setDataVersions(loadAllVersions());
       setActiveVersionId(created.id);
-      const next = backfillAssignmentLevels(cloneOrgData(created.data));
+      const next = cloneOrgData(created.data);
       setData(next);
       saveDraft(next);
       saveActiveVersionId(created.id);
@@ -220,7 +219,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         setActiveVersionId(fallbackId);
         saveActiveVersionId(fallbackId);
         if (fallback) {
-          const next = backfillAssignmentLevels(cloneOrgData(fallback.data));
+          const next = cloneOrgData(fallback.data);
           setData(next);
           saveDraft(next);
         }
@@ -313,7 +312,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 
   const loadFromFile = useCallback(
     (incoming: OrgData) => {
-      const next = backfillAssignmentLevels(importOrgData(incoming, operator));
+      const next = importOrgData(incoming, operator);
       setData(next);
       saveDraft(next);
     },

@@ -8,6 +8,7 @@ import {
 import type { EmployeeNodeData } from '../components/orgFlow/EmployeeNode';
 import type { Assignment, OrgData } from '../types/org';
 import type { NodeDiffStatus } from '../types/editSession';
+import { computePrimaryDepth, effectiveLevel } from './reportingDepth';
 import {
   detectReportingCycle,
   detectReportingCycleFromAssignments,
@@ -51,9 +52,9 @@ export interface OrgFlowGraphResult {
 /**
  * 決定每個節點的「有效層級」（effective level）。
  *
- * - 有顯式 `data.level`（>= 1）者直接採用。
- * - 缺 level 者以「純 dagre 一次排版」得到的垂直 rank 為後備（與舊版
- *   applyLevelBands 的 dagreRank 後備等價，確保 seed 全 undefined 時行為不變）。
+ * 單一真實來源 = **主匯報深度**（`computePrimaryDepth`，根 = 第 1 層、每階 +1，
+ * 只走 `primarySupervisorId`、忽略虛線）。`assignment.level` 退為稀疏的「手動覆寫」，
+ * 由 `effectiveLevel` 套用（覆寫優先、否則用計算深度）。
  *
  * 此 map 同時供 (a) 帶 dummy 的主排版決定跨層邊的 dagre span，以及 (b) 後續
  * level band 覆寫 Y——三者用同一份層級，dagre rank 因此自然對齊 level，
@@ -61,33 +62,13 @@ export interface OrgFlowGraphResult {
  */
 function resolveLevels(
   nodes: Node<EmployeeNodeData>[],
-  edges: Edge[],
+  displayByNode: Map<string, Assignment>,
+  depthMap: Map<string, number>,
 ): Map<string, number> {
-  const explicit = new Map<string, number>();
-  const missing: Node<EmployeeNodeData>[] = [];
+  const result = new Map<string, number>();
   for (const n of nodes) {
-    const lv = n.data.level;
-    if (typeof lv === 'number' && lv >= 1) explicit.set(n.id, lv);
-    else missing.push(n);
-  }
-
-  const result = new Map(explicit);
-  if (missing.length === 0) return result;
-
-  // 後備：純 dagre 一次排版（無 dummy），取垂直排序為 rank。
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', nodesep: NODE_SEP, ranksep: RANK_SEP });
-  nodes.forEach((node) => g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
-  edges.forEach((edge) => g.setEdge(edge.source, edge.target));
-  dagre.layout(g);
-
-  const ys = [...new Set(nodes.map((n) => Math.round(g.node(n.id).y)))].sort(
-    (a, b) => a - b,
-  );
-  const rankOf = new Map(ys.map((y, i) => [y, i + 1]));
-  for (const n of missing) {
-    result.set(n.id, rankOf.get(Math.round(g.node(n.id).y)) ?? 1);
+    const display = displayByNode.get(n.id);
+    result.set(n.id, display ? effectiveLevel(display, depthMap) : 1);
   }
   return result;
 }
@@ -199,7 +180,7 @@ function centerParents(
 /**
  * 以「有效層級」決定垂直層帶：dagre 只負責水平排序（X），Y 一律對齊各層 band。
  *
- * 有效層級由 `resolveLevels` 預先算出（顯式 level，缺者用 dagre rank 後備），
+ * 有效層級由 `resolveLevels` 預先算出（主匯報深度為預設、assignment.level 為覆寫），
  * 與主排版插 dummy 時用的層級為同一份——確保 dagre rank、跨層通道與 band Y 三者一致。
  */
 function applyLevelBands(
@@ -314,9 +295,13 @@ export function buildOrgFlowGraph(
     : data.groups.find((g) => g.id === groupId)!;
   const employeeIds = new Set(groupAssignments.map((a) => a.employeeId));
 
+  // 每個節點（= employeeId）的顯示歸屬，供層級計算（effectiveLevel）共用。
+  const displayByNode = new Map<string, Assignment>();
+
   const nodes: Node<EmployeeNodeData>[] = [...employeeIds].map((eid) => {
     const employee = data.employees.find((e) => e.id === eid)!;
     const assignment = pickDisplayAssignment(groupAssignments, eid)!;
+    displayByNode.set(eid, assignment);
     const jobLevel = data.jobLevels.find((j) => j.id === assignment.jobLevelId);
     const displayGroup = data.groups.find((g) => g.id === assignment.groupId);
     return {
@@ -377,9 +362,10 @@ export function buildOrgFlowGraph(
     edges.push(edge);
   }
 
-  // (a) 先定每個節點的有效層級（顯式 level / dagre rank 後備），供帶 dummy 的
-  //     主排版與 level band 共用 → dagre rank 對齊 level，跨層邊留水平通道。
-  const levelMap = resolveLevels(nodes, edges);
+  // (a) 先定每個節點的有效層級：主匯報深度為預設、assignment.level 為覆寫。
+  //     供帶 dummy 的主排版與 level band 共用 → dagre rank 對齊 level，跨層邊留水平通道。
+  const depthMap = computePrimaryDepth(groupAssignments);
+  const levelMap = resolveLevels(nodes, displayByNode, depthMap);
   const laidOut = layoutWithDagre(nodes, edges, levelMap);
   // (b) 父置中於直接（主匯報）子女。
   const centered = centerParents(laidOut, edges, levelMap);

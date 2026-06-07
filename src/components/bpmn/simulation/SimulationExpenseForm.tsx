@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import type { ExpenseFormData } from '../../../types/bpmn';
 import type { Employee, Assignment, JobLevel, Group } from '../../../types/org';
 import { fmtAmount } from '../../../services/bpmnSimulator';
+import { computePrimaryDepth, effectiveLevel } from '../../../services/reportingDepth';
 
 const CATEGORIES = ['差旅費', '餐費', '設備費', '辦公耗材', '教育訓練', '行銷推廣', '其他'];
 
@@ -39,7 +40,16 @@ function useRequesterContext(requesterId: string, lookup: OrgLookup) {
   const supervisor = primaryAssignment?.primarySupervisorId
     ? lookup.employees.find((e) => e.id === primaryAssignment.primarySupervisorId)
     : undefined;
-  return { primaryAssignment, jobLevel, group, supervisor };
+  // 組內層級：與模擬器一致，預設由主歸屬所在組的主匯報深度計算（覆寫優先）。
+  const orgLevel = primaryAssignment
+    ? effectiveLevel(
+        primaryAssignment,
+        computePrimaryDepth(
+          lookup.assignments.filter((a) => a.groupId === primaryAssignment.groupId),
+        ),
+      )
+    : null;
+  return { primaryAssignment, jobLevel, group, supervisor, orgLevel };
 }
 
 export function SimulationExpenseForm({ employees, orgLookup, onSubmit, onCancel, thresholdHints }: Props) {
@@ -93,9 +103,9 @@ export function SimulationExpenseForm({ employees, orgLookup, onSubmit, onCancel
                 : <span className="italic">（無）</span>
               }
             </div>
-            {ctx.primaryAssignment?.level != null && (
+            {ctx.orgLevel != null && (
               <div className="text-muted-foreground">
-                組內層級：<span className="font-medium text-foreground">第 {ctx.primaryAssignment.level} 層</span>
+                組內層級：<span className="font-medium text-foreground">第 {ctx.orgLevel} 層</span>
               </div>
             )}
           </div>
