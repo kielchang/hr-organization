@@ -48,6 +48,7 @@ export default defineConfig({
         'src/services/**',
         'src/context/**',
         'src/components/**',
+        'src/hooks/**',
         'src/pages/**',
       ],
       // 回歸防護閾值（設於目前覆蓋率下方數個百分點）：避免新增程式未測時倒退。

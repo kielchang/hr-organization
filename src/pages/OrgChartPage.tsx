@@ -1,5 +1,5 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
 import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCoveragePanel';
@@ -7,12 +7,9 @@ import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
 import { EditImpactBar } from '../components/orgFlow/EditImpactBar';
 import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
-import { computeOrgDiff } from '../services/computeOrgDiff';
-import { buildHealthDelta, buildOrgHealth } from '../services/orgHealth';
 import { useOrg } from '../context/useOrg';
-import { useEditSession } from '../hooks/useEditSession';
-import { cloneOrgData } from '../services/exportImport';
-import type { GroupKind, OrgData } from '../types/org';
+import { useOrgFlowEditing } from '../hooks/useOrgFlowEditing';
+import type { GroupKind } from '../types/org';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X } from 'lucide-react';
 
@@ -47,7 +44,7 @@ const chartDescriptions: Record<ChartMode, string> = {
 };
 
 export function OrgChartPage() {
-  const { data, publishVersion } = useOrg();
+  const { data } = useOrg();
 
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
   const [membershipKind, setMembershipKind] =
@@ -55,88 +52,33 @@ export function OrgChartPage() {
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
-  const [staleDataWarning, setStaleDataWarning] = useState(false);
 
-  const editSession = useEditSession();
-  const prevPublishedRef = useRef<OrgData>(data);
-
-  // Detect if published data changes while in edit mode
-  useEffect(() => {
-    if (editSession.isEditMode && data !== prevPublishedRef.current) {
-      setStaleDataWarning(true);
-    }
-    prevPublishedRef.current = data;
-  }, [data, editSession.isEditMode]);
+  const editing = useOrgFlowEditing();
+  const {
+    isEditMode,
+    session,
+    orgData,
+    impactDelta,
+    diffResult,
+    staleDataWarning,
+  } = editing;
 
   const resolvedGroupId = useMemo(
-    () => {
-      const sourceData = editSession.isEditMode && editSession.session
-        ? editSession.session.draftData
-        : data;
-      return resolveGroupId(groupId, sourceData.groups);
-    },
-    [groupId, data, editSession.isEditMode, editSession.session],
+    () => resolveGroupId(groupId, orgData.groups),
+    [groupId, orgData],
   );
 
-  // The data source depends on mode
-  const orgData = useMemo((): OrgData => {
-    if (editSession.isEditMode && editSession.session) {
-      return editSession.session.draftData;
-    }
-    return data;
-  }, [data, editSession.isEditMode, editSession.session]);
-
-  // Compute diff result when previewing a snapshot:
-  // Compare original base data (when edit mode was entered) vs the previewed snapshot,
-  // so users can see what changed from the original state to that checkpoint.
-  const diffResult = useMemo(() => {
-    if (!editSession.session?.previewingSnapshotId || !editSession.session) return null;
-    const snapshot = editSession.session.snapshots.find(
-      (s) => s.id === editSession.session!.previewingSnapshotId,
-    );
-    if (!snapshot) return null;
-    return computeOrgDiff(editSession.session.baseData, snapshot.orgData);
-  }, [editSession.session]);
-
-  // 編輯態 before→after 指標（R5.2）：以進編輯前快照 vs 當前草稿比較。
-  // 效能：base 端 health 在整個編輯 session 內不變（baseData 穩定），故獨立 memo
-  // 在 [baseData]，避免每次草稿 mutate 都連 base 一起重算 buildOrgHealth/buildReadiness。
-  const baseHealth = useMemo(() => {
-    if (!editSession.isEditMode || !editSession.session) return null;
-    return buildOrgHealth(editSession.session.baseData);
-    // 刻意只依賴 baseData（session 內穩定）：依賴整個 session 會在每次草稿 mutate
-    // 時白白重算 base 端，違背此優化目的。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSession.isEditMode, editSession.session?.baseData]);
-
-  // draft 端 health：僅在草稿資料變動時重算。
-  const draftHealth = useMemo(() => {
-    if (!editSession.isEditMode || !editSession.session) return null;
-    return buildOrgHealth(editSession.session.draftData);
-    // 刻意只依賴 draftData，避免被 session 其他欄位（如快照、預覽狀態）變動牽連重算。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSession.isEditMode, editSession.session?.draftData]);
-
-  // 注意：此 useMemo 僅以 isEditMode 把關，不含 chartMode 限制；
-  // 「只在匯報組織圖顯示」由下方 JSX 的 chartMode === 'reporting' 條件負責。
-  const impactDelta = useMemo(() => {
-    if (!baseHealth || !draftHealth) return null;
-    return buildHealthDelta(baseHealth, draftHealth);
-  }, [baseHealth, draftHealth]);
-
   const handleEnterEditMode = () => {
-    editSession.enterEditMode(data);
-    setStaleDataWarning(false);
+    editing.enterEditMode();
   };
 
   const handleExitEditMode = () => {
-    editSession.exitEditMode();
+    editing.exitEditMode();
     setShowSnapshotPanel(false);
-    setStaleDataWarning(false);
   };
 
   const handleSaveCheckpoint = (description: string) => {
-    editSession.saveCheckpoint(description);
+    editing.saveCheckpoint(description);
     setShowSnapshotPanel(true);
   };
 
@@ -145,16 +87,8 @@ export function OrgChartPage() {
     note?: string;
     effectiveDate?: string;
   }) => {
-    const draft = editSession.getDraftData();
-    if (!draft) return;
-    publishVersion(cloneOrgData(draft), opts);
-    editSession.exitEditMode();
+    editing.publish(opts);
     setShowSnapshotPanel(false);
-    setStaleDataWarning(false);
-  };
-
-  const handleDraftChange = (next: OrgData) => {
-    editSession.mutateDraft(() => next);
   };
 
   const chartProps = {
@@ -162,10 +96,10 @@ export function OrgChartPage() {
     onGroupChange: setGroupId,
     selectedEmployeeId,
     onNodeSelect: setSelectedEmployeeId,
-    isEditMode: editSession.isEditMode,
+    isEditMode,
     orgData,
     diffResult,
-    onDraftChange: handleDraftChange,
+    onDraftChange: editing.onDraftChange,
   };
 
   return (
@@ -183,7 +117,7 @@ export function OrgChartPage() {
             <span>底層資料已在外部變更。建議捨棄目前草稿後重新進入編輯模式。</span>
             <button
               type="button"
-              onClick={() => setStaleDataWarning(false)}
+              onClick={editing.dismissStaleWarning}
               className="shrink-0 text-amber-600 hover:text-amber-900"
             >
               <X className="size-4" />
@@ -208,8 +142,8 @@ export function OrgChartPage() {
       {/* Edit mode toolbar — only for reporting chart */}
       {chartMode === 'reporting' && (
         <EditModeToolbar
-          isEditMode={editSession.isEditMode}
-          session={editSession.session}
+          isEditMode={isEditMode}
+          session={session}
           showSnapshotPanel={showSnapshotPanel}
           onEnterEditMode={handleEnterEditMode}
           onExitEditMode={handleExitEditMode}
@@ -221,7 +155,7 @@ export function OrgChartPage() {
 
       {/* 編輯態 before→after 指標浮層（R5.2）：僅匯報組織圖編輯模式顯示 */}
       {chartMode === 'reporting' &&
-        editSession.isEditMode &&
+        isEditMode &&
         impactDelta && <EditImpactBar delta={impactDelta} />}
 
       {/* 組別歸屬視角：種類過濾切換（全部／部門／職能） */}
@@ -267,12 +201,12 @@ export function OrgChartPage() {
           )}
         </div>
 
-        {chartMode === 'reporting' && editSession.isEditMode && showSnapshotPanel && editSession.session && (
+        {chartMode === 'reporting' && isEditMode && showSnapshotPanel && session && (
           <SnapshotPanel
-            snapshots={editSession.session.snapshots}
-            previewingSnapshotId={editSession.session.previewingSnapshotId}
-            onPreview={editSession.previewSnapshot}
-            onRollback={editSession.rollbackToSnapshot}
+            snapshots={session.snapshots}
+            previewingSnapshotId={session.previewingSnapshotId}
+            onPreview={editing.previewSnapshot}
+            onRollback={editing.rollbackToSnapshot}
             onClose={() => setShowSnapshotPanel(false)}
           />
         )}

@@ -10,6 +10,7 @@ import { Layout } from './components/Layout';
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })));
 const PeoplePage = lazy(() => import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })));
 const GroupsPage = lazy(() => import('./pages/GroupsPage').then((m) => ({ default: m.GroupsPage })));
+const WorkbenchPage = lazy(() => import('./pages/WorkbenchPage').then((m) => ({ default: m.WorkbenchPage })));
 const OrgChartPage = lazy(() => import('./pages/OrgChartPage').then((m) => ({ default: m.OrgChartPage })));
 const OrgHealthPage = lazy(() => import('./pages/OrgHealthPage').then((m) => ({ default: m.OrgHealthPage })));
 const ScenarioComparePage = lazy(() => import('./pages/ScenarioComparePage').then((m) => ({ default: m.ScenarioComparePage })));
@@ -40,6 +41,7 @@ function App() {
                 <Route index element={<OverviewPage />} />
                 <Route path="people" element={<PeoplePage />} />
                 <Route path="groups" element={<GroupsPage />} />
+                <Route path="workbench" element={<WorkbenchPage />} />
                 <Route path="org-chart" element={<OrgChartPage />} />
                 <Route path="health" element={<OrgHealthPage />} />
                 <Route path="compare" element={<ScenarioComparePage />} />
