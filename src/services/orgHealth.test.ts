@@ -1,4 +1,5 @@
 import {
+  buildHealthDelta,
   buildOrgHealth,
   buildReadiness,
   compareOrgHealth,
@@ -1378,5 +1379,152 @@ describe('compareOrgHealth（編輯態 before→after 指標比較）', () => {
     ]);
     expect(result.metrics.every((m) => m.direction === 'unchanged')).toBe(true);
     expect(result.hasChanges).toBe(false);
+  });
+});
+
+describe('buildHealthDelta（已算好的 OrgHealth → 4 指標 delta，純函式）', () => {
+  /**
+   * buildHealthDelta 是效能優化抽出的 export 純函式：吃「已算好的」base/draft
+   * OrgHealth 直接組 delta，讓呼叫端能快取 buildOrgHealth 結果（base 在編輯 session
+   * 內只算一次）。compareOrgHealth 現為其薄包裝＝先 buildOrgHealth 兩次再呼叫本函式。
+   *
+   * 本區塊直接守護 buildHealthDelta，並以「兩路徑一致」斷言優化未改變語意：
+   *   buildHealthDelta(buildOrgHealth(base), buildOrgHealth(draft))
+   *     === compareOrgHealth(base, draft)
+   * 既有 compareOrgHealth 區塊（avgSpan round 回歸、方向、空資料等）仍是端到端守護，
+   * 兩者互補：此處直接守 buildHealthDelta 本身、那邊守整條鏈。
+   */
+
+  /** 造一份「sup 帶 n 名部屬」的 OrgData（n>=9 會觸發 span-wide warning）。 */
+  function spanData(reportCount: number) {
+    const reports = Array.from({ length: reportCount }, (_, i) => `r${i}`);
+    return makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('sup'), ...reports.map((id) => emp(id))],
+      assignments: [
+        assignment('as-sup', { employeeId: 'sup', groupId: 'dept', jobLevelId: 'j1' }),
+        ...reports.map((id) =>
+          assignment(`as-${id}`, {
+            employeeId: id,
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['sup'],
+            primarySupervisorId: 'sup',
+          }),
+        ),
+      ],
+    });
+  }
+
+  /** root→mid→leaf 線性鏈（maxDepth 3），用來與淺層資料對照 depth/readiness 變化。 */
+  function deepChainData() {
+    return makeOrgData({
+      ...baseGroupsAndLevels(),
+      employees: [emp('root'), emp('mid'), emp('leaf')],
+      assignments: [
+        assignment('as-root', { employeeId: 'root', groupId: 'dept', jobLevelId: 'j1' }),
+        assignment('as-mid', {
+          employeeId: 'mid',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['root'],
+          primarySupervisorId: 'root',
+        }),
+        assignment('as-leaf', {
+          employeeId: 'leaf',
+          groupId: 'dept',
+          jobLevelId: 'j1',
+          supervisorIds: ['mid'],
+          primarySupervisorId: 'mid',
+        }),
+      ],
+    });
+  }
+
+  /** metric key → 該筆 delta，便於斷言。 */
+  function byKey(delta: ReturnType<typeof buildHealthDelta>) {
+    return Object.fromEntries(delta.metrics.map((m) => [m.key, m]));
+  }
+
+  it('同一份 OrgHealth（health, health）→ 4 指標 delta 全 0、direction 全 unchanged、hasChanges false', () => {
+    // 內容含 span-wide + spof warning，刻意非空——「同一份即無變化」與資料內容無關。
+    const health = buildOrgHealth(spanData(9));
+    const result = buildHealthDelta(health, health);
+
+    expect(result.metrics).toHaveLength(4);
+    expect(result.metrics.map((m) => m.key)).toEqual([
+      'avgSpan',
+      'maxDepth',
+      'warningCount',
+      'readiness',
+    ]);
+    expect(result.metrics.every((m) => m.delta === 0)).toBe(true);
+    expect(result.metrics.every((m) => m.direction === 'unchanged')).toBe(true);
+    expect(result.metrics.every((m) => m.before === m.after)).toBe(true);
+    expect(result.hasChanges).toBe(false);
+  });
+
+  it('空 OrgHealth（同一份）→ 全 unchanged、readiness 100、hasChanges false', () => {
+    const empty = buildOrgHealth(makeOrgData());
+    const m = byKey(buildHealthDelta(empty, empty));
+    expect([m.avgSpan, m.maxDepth, m.warningCount].every((x) => x.before === 0)).toBe(true);
+    expect(m.readiness.before).toBe(100); // 無 findings → 結構面就緒度 100
+    expect(buildHealthDelta(empty, empty).hasChanges).toBe(false);
+  });
+
+  /**
+   * 核心守護：兩條路徑結果必須完全一致（優化未改變語意）。
+   * 對多組「不同形狀」的 base/draft 構造，斷言
+   *   buildHealthDelta(buildOrgHealth(base), buildOrgHealth(draft))
+   * 深度相等於
+   *   compareOrgHealth(base, draft)
+   * 涵蓋：warningCount 升降、readiness 反向、avgSpan 多位小數 round、maxDepth 變化、空資料。
+   */
+  it.each([
+    ['warningCount 下降（9→8 名部屬，抽掉 span-wide）', spanData(9), spanData(8)],
+    ['warningCount 上升（8→9 名部屬，新增 span-wide）', spanData(8), spanData(9)],
+    ['maxDepth 變化（深鏈 vs 同一份淺資料）', deepChainData(), spanData(2)],
+    ['avgSpan 多位小數需 round（13/3 vs 9 名部屬）', spanData(2), spanData(9)],
+    ['空 base / 非空 draft', makeOrgData(), spanData(9)],
+    ['空 base / 空 draft', makeOrgData(), makeOrgData()],
+  ])(
+    '兩路徑一致：buildHealthDelta(build,build) === compareOrgHealth — %s',
+    (_label, base, draft) => {
+      const viaDelta = buildHealthDelta(buildOrgHealth(base), buildOrgHealth(draft));
+      const viaCompare = compareOrgHealth(base, draft);
+      // 深度相等：metrics 全欄位（key/label/before/after/delta/direction）與 hasChanges 一致。
+      expect(viaDelta).toEqual(viaCompare);
+    },
+  );
+
+  it('兩路徑一致同時非平凡：選一組會「改善」的 base/draft，確認 delta 確有變化且兩路徑相同', () => {
+    // 防「兩路徑都回全 0 才剛好相等」的偽守護：此組確有 warningCount/readiness 變化。
+    const base = spanData(9); // span-wide + spof → warning
+    const draft = spanData(8); // 不再過寬 → 少一筆 warning
+
+    const viaDelta = buildHealthDelta(buildOrgHealth(base), buildOrgHealth(draft));
+    const viaCompare = compareOrgHealth(base, draft);
+
+    expect(viaDelta).toEqual(viaCompare);
+    // 確認此 case 非平凡（有真正的變化，守護才有意義）
+    expect(viaDelta.hasChanges).toBe(true);
+    const m = byKey(viaDelta);
+    expect(m.warningCount.direction).toBe('improved');
+    expect(m.readiness.direction).toBe('improved');
+  });
+
+  it('readiness 取自各自 OrgHealth 的 buildReadiness().total（before/after 對齊獨立計算）', () => {
+    // buildHealthDelta 內部對 base/draft 各自呼叫 buildReadiness；驗證取的是各自的 total。
+    const base = spanData(9);
+    const draft = spanData(8);
+    const baseHealth = buildOrgHealth(base);
+    const draftHealth = buildOrgHealth(draft);
+
+    const m = byKey(buildHealthDelta(baseHealth, draftHealth));
+    expect(m.readiness.before).toBe(buildReadiness(baseHealth).total);
+    expect(m.readiness.after).toBe(buildReadiness(draftHealth).total);
+    expect(m.readiness.delta).toBe(
+      buildReadiness(draftHealth).total - buildReadiness(baseHealth).total,
+    );
   });
 });

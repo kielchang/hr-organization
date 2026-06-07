@@ -2,7 +2,7 @@
 
 > **HR 用來規劃組織結構的試算工具**——沿**匯報線（階層部門）× 專案職能（跨部門）**雙維度，建立、試算、健檢、比較多個組織方案後，選一個發布生效。前端優先（localStorage），後端為 opt-in。
 
-[![整合分支驗證](https://img.shields.io/badge/integration-pre--push%20verify-brightgreen)](docs/工作流程-integration分支.md) [![測試](https://img.shields.io/badge/tests-375%20passing-brightgreen)](#測試) [![部署](https://img.shields.io/badge/deploy-GitHub%20Pages-blue)](#部署)
+[![整合分支驗證](https://img.shields.io/badge/integration-pre--push%20verify-brightgreen)](docs/工作流程-integration分支.md) [![測試](https://img.shields.io/badge/tests-463%20passing-brightgreen)](#測試) [![部署](https://img.shields.io/badge/deploy-GitHub%20Pages-blue)](#部署)
 
 ---
 
@@ -250,7 +250,7 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 
 以 [Vitest](https://vitest.dev/)（jsdom 環境）撰寫，測試檔與來源並列（`*.test.ts`）。
 
-- 前端 **375 個測試（52 檔）**：schema migration、核心 services（org 操作、圖形建構、orgHealth、scenarioCompare、functionCoverage、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client、overviewStatus）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
+- 前端 **463 個測試（57 檔）**：schema migration、核心 services（org 操作、圖形建構、orgHealth、scenarioCompare、functionCoverage、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client、overviewStatus）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
 - 後端（`server/`）有自己的 Vitest 設定，含路由與 Prisma 整合測試（CI 起真實 Postgres）。
 - CI（`.github/workflows/test.yml`）於 push / PR 跑前端 lint + 型別檢查 + 覆蓋率門檻，以及後端測試。
 
@@ -288,7 +288,7 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 - opt-in 後端 API + 持久層 P1–P3（JSONB 版本持久化、前端寫穿、docker compose 一鍵起整套）
 - Excel 匯入（`xlsxToOrgData`，懶載入）
 - 版本生效日（`effectiveDate`，排程／已生效徽章）
-- 自動化測試與覆蓋率門檻（前端 375 測試、後端路由 + Prisma 整合測試）
+- 自動化測試與覆蓋率門檻（前端 463 測試、後端路由 + Prisma 整合測試）
 - 雙視角組織圖、變更歷程、CSV 匯入、版本管理、localStorage 草稿
 
 ### 已降級（非定位核心）

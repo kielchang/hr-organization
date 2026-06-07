@@ -202,9 +202,13 @@ function higherIsBetter(before: number, after: number): HealthMetricDelta['direc
 }
 
 /**
- * 比較兩份 OrgData 的高層健檢指標（純函式），供編輯態 before→after 浮層使用。
+ * 由「已算好的」base/draft OrgHealth 推導 4 指標 delta（純函式）。
  *
- * - 重用 buildOrgHealth / buildReadiness，不重造演算法。
+ * 抽出此函式以利呼叫端快取 base/draft 的 buildOrgHealth 結果（base 在編輯 session 內
+ * 不變，可只算一次）；演算法與 compareOrgHealth 完全一致——後者即為「先 buildOrgHealth
+ * 兩次再呼叫本函式」的薄包裝，行為與輸出不變。
+ *
+ * - readiness 由本函式內部 buildReadiness(health).total 取得（與舊實作一致）。
  * - 4 指標固定順序：avgSpan, maxDepth, warningCount, readiness。
  * - avgSpan/maxDepth/warningCount 越小越好；readiness 越大越好（見 direction 規則）。
  * - avgSpan「越小越好」為 v1 簡化假設（過小亦非理想，但主訊號是警示減少）。
@@ -212,9 +216,10 @@ function higherIsBetter(before: number, after: number): HealthMetricDelta['direc
  *   與 UI 顯示精度（toFixed(1)）一致，避免「4.8→4.8 卻標改善 −0.1」的矛盾；
  *   maxDepth/warningCount/readiness 為整數，沿用原值。
  */
-export function compareOrgHealth(base: OrgData, draft: OrgData): OrgHealthDelta {
-  const baseHealth = buildOrgHealth(base);
-  const draftHealth = buildOrgHealth(draft);
+export function buildHealthDelta(
+  baseHealth: OrgHealth,
+  draftHealth: OrgHealth,
+): OrgHealthDelta {
   const baseReadiness = buildReadiness(baseHealth).total;
   const draftReadiness = buildReadiness(draftHealth).total;
 
@@ -268,6 +273,16 @@ export function compareOrgHealth(base: OrgData, draft: OrgData): OrgHealthDelta 
     metrics,
     hasChanges: metrics.some((m) => m.delta !== 0),
   };
+}
+
+/**
+ * 比較兩份 OrgData 的高層健檢指標（純函式），供編輯態 before→after 浮層使用。
+ *
+ * - 重用 buildOrgHealth / buildReadiness，不重造演算法；delta 計算委派 buildHealthDelta。
+ * - 簽章與輸出與既有契約完全一致（見 buildHealthDelta 的指標規則）。
+ */
+export function compareOrgHealth(base: OrgData, draft: OrgData): OrgHealthDelta {
+  return buildHealthDelta(buildOrgHealth(base), buildOrgHealth(draft));
 }
 
 /** 取每位員工的主歸屬（isPrimaryGroup===true）那筆 assignment。 */

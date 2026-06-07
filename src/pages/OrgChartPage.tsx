@@ -8,7 +8,7 @@ import { EditImpactBar } from '../components/orgFlow/EditImpactBar';
 import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
 import { computeOrgDiff } from '../services/computeOrgDiff';
-import { compareOrgHealth } from '../services/orgHealth';
+import { buildHealthDelta, buildOrgHealth } from '../services/orgHealth';
 import { useOrg } from '../context/useOrg';
 import { useEditSession } from '../hooks/useEditSession';
 import { cloneOrgData } from '../services/exportImport';
@@ -99,15 +99,30 @@ export function OrgChartPage() {
   }, [editSession.session]);
 
   // 編輯態 before→after 指標（R5.2）：以進編輯前快照 vs 當前草稿比較。
+  // 效能：base 端 health 在整個編輯 session 內不變（baseData 穩定），故獨立 memo
+  // 在 [baseData]，避免每次草稿 mutate 都連 base 一起重算 buildOrgHealth/buildReadiness。
+  const baseHealth = useMemo(() => {
+    if (!editSession.isEditMode || !editSession.session) return null;
+    return buildOrgHealth(editSession.session.baseData);
+    // 刻意只依賴 baseData（session 內穩定）：依賴整個 session 會在每次草稿 mutate
+    // 時白白重算 base 端，違背此優化目的。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSession.isEditMode, editSession.session?.baseData]);
+
+  // draft 端 health：僅在草稿資料變動時重算。
+  const draftHealth = useMemo(() => {
+    if (!editSession.isEditMode || !editSession.session) return null;
+    return buildOrgHealth(editSession.session.draftData);
+    // 刻意只依賴 draftData，避免被 session 其他欄位（如快照、預覽狀態）變動牽連重算。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSession.isEditMode, editSession.session?.draftData]);
+
   // 注意：此 useMemo 僅以 isEditMode 把關，不含 chartMode 限制；
   // 「只在匯報組織圖顯示」由下方 JSX 的 chartMode === 'reporting' 條件負責。
   const impactDelta = useMemo(() => {
-    if (!editSession.isEditMode || !editSession.session) return null;
-    return compareOrgHealth(
-      editSession.session.baseData,
-      editSession.session.draftData,
-    );
-  }, [editSession.isEditMode, editSession.session]);
+    if (!baseHealth || !draftHealth) return null;
+    return buildHealthDelta(baseHealth, draftHealth);
+  }, [baseHealth, draftHealth]);
 
   const handleEnterEditMode = () => {
     editSession.enterEditMode(data);
