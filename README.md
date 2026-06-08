@@ -21,18 +21,18 @@
 
 ## 規劃旅程 walkthrough
 
-從打開應用到發布一份組織方案，標準動線是這 6 步。首頁 `/`（總覽）會根據目前狀態，**自動推薦下一步**——你不需要記住流程。
+從打開應用到發布一份組織方案，常見動線是這 6 步。**旅程是建議、不是強制——你可以任選一步開始**。首頁 `/`（總覽）會根據目前狀態，**自動推薦下一步**——你不需要記住流程。
 
 | # | 步驟 | 在做什麼 | 對應頁面 | 一句話例子 |
 |---|---|---|---|---|
 | 1 | **載入現況** | 取得基礎組織資料（員工、組別、主管關係） | `/csv-import` 或內建範本（首頁工具列） | 「從 HRIS 匯出員工 × 組別 CSV 進來」 |
-| 2 | **編輯人員與組別** | 維護員工歸屬、主管關係、組別結構；可區分階層部門與跨部門職能 | `/people`、`/groups`、`/org-chart` | 「把新 AI 小組標為跨部門職能，加入三位來自不同部門的成員」 |
+| 2 | **編輯人員與組別** | 維護員工歸屬、主管關係、組別結構；可區分階層部門與跨部門職能 | `/people`、`/groups`、`/workbench`（組織圖中心） | 「把新 AI 小組標為跨部門職能，加入三位來自不同部門的成員」 |
 | 3 | **規劃健檢** | 量化評估這個結構好不好 | `/health` | 「看哪個主管管理幅度過寬、有沒有單點風險（SPOF）、哪些職能沒人帶」 |
 | 4 | **情境比較** | 並排試算多個方案，比 diff + 指標 | `/compare` | 「A 案扁平化 vs B 案強化矩陣，最多 4 案並排對照」 |
 | 5 | **變更影響** | 看結構調整動到哪些作業／決策流程的核准路徑 | `/bpmn/impact` | 「設定基準後對照——改完之後哪些核准會找不到主管？」 |
 | 6 | **發布版本** | 設定生效日並發布，下拉徽章顯示「排程／已生效」 | `/people` 工具列（DataToolbar） | 「6/30 公告、7/1 生效」 |
 
-> 6 步是**固定順序**，但每步都可獨立回頭使用。首頁 `OverviewPage` 會把每步顯示為 `done`／`ready`，並用智慧 CTA 卡片建議「現在最該做什麼」。
+> 這 6 步是**建議路徑（可任選一步開始）**，不是強制順序——每步都可獨立進入或回頭使用。首頁 `OverviewPage` 會把每步顯示為 `done`／`ready`，並用智慧 CTA 卡片建議「現在最該做什麼」。
 
 ---
 
@@ -42,9 +42,11 @@
 
 - **總覽頁（首頁 `/`）**：歡迎標題 + 智慧 CTA 卡（推薦下一步）+ 6 步規劃旅程地圖 + 5 張狀態小卡（在職員工／部門／專案職能／已發布版本／流程定義）。是整套工具的入口與導航器。
 - **雙維度建模（匯報線 × 專案職能）**：`Group.kind` 區分 `department`（階層部門，走 `parentId` 匯報線）與 `function`（跨部門職能，扁平）；表單可選種類、列表以徽章標示。
-- **組織圖雙視角**：
-  - **匯報組織圖**：節點＝人員、連線＝匯報關係（實線主匯報、虛線其他主管）。
-  - **組別歸屬圖**：節點＝每筆組別歸屬，同一人跨組會多個節點；可依「全部／部門／職能」**過濾**，並開啟**職能視角面板**（`FunctionCoveragePanel`：無成員職能、無 lead 職能、跨職能負載前幾名）。
+- **組織圖中心：工作台（`/workbench`）三視角**——上方一排 Tabs 切換三個視角，前兩者可編輯、共用同一編輯 session（在草稿中試算）：
+  - **匯報組織圖**（可編輯）：節點＝人員、連線＝匯報關係（實線主匯報、虛線其他主管）；可拖人到主管節點上改匯報線。
+  - **組別組織圖**（可編輯）：以組別為主，每人一節點、同組以背景分區聚集、組間以組長鏈相連；可拖成員改主管或改所屬組。
+  - **組別歸屬圖**（唯讀）：節點＝每筆組別歸屬，同一人跨組會多個節點；可依「全部／部門／職能」**過濾**，並開啟**職能視角面板**（`FunctionCoveragePanel`：無成員職能、無 lead 職能、跨職能負載前幾名）。
+  > 自旅程優先 IA 整併起，組織圖中心統一在工作台；舊路由 `/org-chart` 已**重導向 `/workbench`**（保留舊連結不死），主導覽不再有獨立的「組織圖」入口。
 - **規劃健檢（`/health`）**：管理幅度（span of control，過寬／過窄）、層級深度、職能覆蓋缺口、結構風險（斷鏈／匯報循環／SPOF）的量化指標與可行動警示清單。
 - **情境比較 what-if（`/compare`）**：最多 4 個情境槽並排，以陣列首個有效情境為基準算 `computeOrgDiff`，並對齊規劃指標矩陣（10 指標，down 指標標 warning／success 色，全相同不上色），協助 HR 試算多案後選擇。
 - **變更影響（`/bpmn/impact`）**：HR 視角呈現「組織改了之後動到哪些作業／決策流程的核准人與路徑」。含「變更影響比對」與「流程健檢」兩個 tab，無流程資料時顯示主要 CTA 卡片連 `/bpmn`，避免雙重入口。
@@ -119,9 +121,10 @@ VITE_API_URL=http://localhost:3001 npm run dev
 src/                      # 前端（React / Vite）
 ├─ pages/                 # 路由頁面（與 Layout 導覽對應）：
 │  ├─ OverviewPage        #   /            總覽（首頁入口）
+│  ├─ WorkbenchPage       #   /workbench   組織圖中心（工作台，三視角：匯報／組別組織圖可編輯、組別歸屬圖唯讀）
 │  ├─ PeoplePage          #   /people      人員與歸屬
 │  ├─ GroupsPage          #   /groups      組別管理
-│  ├─ OrgChartPage        #   /org-chart   組織圖雙視角
+│  ├─ OrgChartPage        #   /org-chart → 重導向 /workbench（@deprecated 備援，不再被路由引用）
 │  ├─ OrgHealthPage       #   /health      規劃健檢
 │  ├─ ScenarioComparePage #   /compare     情境比較 what-if
 │  ├─ BpmnImpactPage      #   /bpmn/impact 變更影響（HR 視角主入口）
@@ -251,7 +254,7 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 
 以 [Vitest](https://vitest.dev/)（jsdom 環境）撰寫，測試檔與來源並列（`*.test.ts`）。
 
-- 前端 **463 個測試（57 檔）**：schema migration、核心 services（org 操作、圖形建構、orgHealth、scenarioCompare、functionCoverage、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client、overviewStatus）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
+- 前端**數百個測試**：schema migration、核心 services（org 操作、圖形建構、orgHealth、scenarioCompare、functionCoverage、BPMN 模擬與影響分析、CSV/xlsx、生效日、API client、overviewStatus）、Context Provider，以及 UI 元件／互動／無障礙（vitest-axe）與 DOM 快照。
 - 後端（`server/`）有自己的 Vitest 設定，含路由與 Prisma 整合測試（CI 起真實 Postgres）。
 - CI（`.github/workflows/test.yml`）於 push / PR 跑前端 lint + 型別檢查 + 覆蓋率門檻，以及後端測試。
 
@@ -281,16 +284,18 @@ npm run import:csv -- -i ./src/data/templates/org-members.sample.csv -o org-data
 | — | 規劃健檢 `orgHealth.ts` + `/health` 頁 | ✅ |
 | **M1** | 規劃情境比較 what-if（`scenarioCompare.ts` + `/compare`） | ✅ |
 | **M2** | 變更影響重定位（主導覽改「變更影響」直連 `/bpmn/impact`，BPMN 子頁降次層） | ✅ |
-| **M3** | 整合 UX 收尾（新增 `OverviewPage` + 智慧 CTA + 6 步旅程地圖） | ✅ |
+| **M3** | 整合 UX 收尾（新增 `OverviewPage` + 智慧 CTA + 規劃旅程地圖） | ✅ |
 | **M4** | README + 使用者導引（本文件） | ✅ |
+| — | 組織圖工作台 `/workbench`（reporting/組別組織圖編輯 + 右側即時整合面板 + drag-to-reassign） | ✅ |
+| — | 旅程優先 IA 整併（工作台 3 視角合併、側欄三層分區、`/org-chart` 重導向、總覽旅程文案軟化） | ✅ |
 
 **基礎能力**
 
 - opt-in 後端 API + 持久層 P1–P3（JSONB 版本持久化、前端寫穿、docker compose 一鍵起整套）
 - Excel 匯入（`xlsxToOrgData`，懶載入）
 - 版本生效日（`effectiveDate`，排程／已生效徽章）
-- 自動化測試與覆蓋率門檻（前端 463 測試、後端路由 + Prisma 整合測試）
-- 雙視角組織圖、變更歷程、CSV 匯入、版本管理、localStorage 草稿
+- 自動化測試與覆蓋率門檻（前端數百個測試、後端路由 + Prisma 整合測試）
+- 組織圖中心三視角（工作台：匯報／組別組織圖可編輯、組別歸屬圖唯讀）、變更歷程、CSV 匯入、版本管理、localStorage 草稿
 
 ### 已降級（非定位核心）
 
