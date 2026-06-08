@@ -1,0 +1,111 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Badge DOM 快照 > variant=default 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent bg-primary text-primary-foreground [a]:hover:bg-primary/85"
+  data-slot="badge"
+  data-variant="default"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=destructive 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-destructive/25 bg-destructive/12 text-destructive [a]:hover:bg-destructive/20 dark:bg-destructive/20"
+  data-slot="badge"
+  data-variant="destructive"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=ghost 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent bg-transparent text-muted-foreground [a]:hover:bg-muted [a]:hover:text-foreground"
+  data-slot="badge"
+  data-variant="ghost"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=info 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90"
+  data-slot="badge"
+  data-variant="info"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=link 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent text-primary underline-offset-4 [a]:hover:underline"
+  data-slot="badge"
+  data-variant="link"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=muted 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent bg-muted text-muted-foreground [a]:hover:bg-muted/80"
+  data-slot="badge"
+  data-variant="muted"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=outline 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-border bg-transparent text-foreground [a]:hover:bg-muted"
+  data-slot="badge"
+  data-variant="outline"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=secondary 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent bg-secondary text-secondary-foreground [a]:hover:bg-secondary/85"
+  data-slot="badge"
+  data-variant="secondary"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=success 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-success/25 bg-success/12 text-success [a]:hover:bg-success/20 dark:bg-success/20"
+  data-slot="badge"
+  data-variant="success"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > variant=warning 結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-warning/30 bg-warning/20 text-warning-foreground [a]:hover:bg-warning/30"
+  data-slot="badge"
+  data-variant="warning"
+>
+  標籤
+</span>
+`;
+
+exports[`Badge DOM 快照 > 預設 variant（secondary）結構快照 1`] = `
+<span
+  class="group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-transparent bg-secondary text-secondary-foreground [a]:hover:bg-secondary/85"
+  data-slot="badge"
+  data-variant="secondary"
+>
+  預設
+</span>
+`;

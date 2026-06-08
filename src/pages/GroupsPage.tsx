@@ -20,6 +20,8 @@ export function GroupsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Group | null>(null);
   const [isNew, setIsNew] = useState(false);
+  // 每次開啟表單就 +1，作為 GroupForm 的 key 強制重新掛載（依當下 group/isNew 重新預填）。
+  const [formKey, setFormKey] = useState(0);
 
   const sorted = useMemo(
     () => [...data.groups].sort((a, b) => a.code.localeCompare(b.code)),
@@ -33,12 +35,14 @@ export function GroupsPage() {
     setEditing(null);
     setIsNew(true);
     setFormOpen(true);
+    setFormKey((k) => k + 1);
   };
 
   const openEdit = (g: Group) => {
     setEditing(g);
     setIsNew(false);
     setFormOpen(true);
+    setFormKey((k) => k + 1);
   };
 
   return (
@@ -59,6 +63,7 @@ export function GroupsPage() {
             <TableRow>
               <TableHead>代碼</TableHead>
               <TableHead>名稱</TableHead>
+              <TableHead>種類</TableHead>
               <TableHead>上層組別</TableHead>
               <TableHead>狀態</TableHead>
               <TableHead className="w-20">操作</TableHead>
@@ -69,7 +74,12 @@ export function GroupsPage() {
               <TableRow key={g.id}>
                 <TableCell>{g.code}</TableCell>
                 <TableCell>{g.name}</TableCell>
-                <TableCell>{parentName(g.parentId)}</TableCell>
+                <TableCell>
+                  <Badge variant={g.kind === 'function' ? 'info' : 'muted'}>
+                    {g.kind === 'function' ? '職能' : '部門'}
+                  </Badge>
+                </TableCell>
+                <TableCell>{g.kind === 'function' ? '—' : parentName(g.parentId)}</TableCell>
                 <TableCell>
                   <Badge variant={groupStatusBadge(g.status)}>
                     {g.status === 'active' ? '啟用' : '停用'}
@@ -92,6 +102,7 @@ export function GroupsPage() {
         </Table>
       </div>
       <GroupForm
+        key={formKey}
         open={formOpen}
         group={editing}
         isNew={isNew}

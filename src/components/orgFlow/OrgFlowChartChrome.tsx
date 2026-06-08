@@ -98,6 +98,8 @@ export function OrgFlowMiniMap({ show, onToggle, className }: OrgFlowMiniMapPane
 
   useEffect(() => {
     if (show) {
+      // 與 show 連動的動畫協調：開啟時立即還原 icon 並啟動彈起動畫。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIconClosed(false);
       fabApi.start({ x: FAB_OPEN_X, y: FAB_OPEN_Y, config: FAB_RISE_CONFIG });
       return;

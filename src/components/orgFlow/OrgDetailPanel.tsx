@@ -274,7 +274,7 @@ function AssignmentEditForm({
       <div className="grid gap-1.5">
         <Label htmlFor="org-edit-assignment-group">組別 *</Label>
         <Select
-          value={assignment.groupId || undefined}
+          value={assignment.groupId || null}
           onValueChange={(value) => {
             if (value) setAssignment((a) => ({ ...a, groupId: value }));
           }}
@@ -296,7 +296,7 @@ function AssignmentEditForm({
       <div className="grid gap-1.5">
         <Label htmlFor="org-edit-assignment-level">職級 *</Label>
         <Select
-          value={assignment.jobLevelId || undefined}
+          value={assignment.jobLevelId || null}
           onValueChange={(value) => {
             if (value) setAssignment((a) => ({ ...a, jobLevelId: value }));
           }}
@@ -334,7 +334,7 @@ function AssignmentEditForm({
         <div className="grid gap-1.5">
           <Label htmlFor="org-edit-primary-supervisor">主主管</Label>
           <Select
-            value={assignment.primarySupervisorId ?? undefined}
+            value={assignment.primarySupervisorId}
             onValueChange={(value) =>
               setAssignment((a) => ({ ...a, primarySupervisorId: value ?? null }))
             }

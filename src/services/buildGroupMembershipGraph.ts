@@ -8,7 +8,7 @@ import {
 import type { AssignmentMemberNodeData } from '../components/groupMembership/AssignmentMemberNode';
 import type { ExternalSupervisorNodeData } from '../components/groupMembership/ExternalSupervisorNode';
 import type { GroupLabelNodeData } from '../components/groupMembership/GroupLabelNode';
-import type { Assignment, OrgData } from '../types/org';
+import type { Assignment, GroupKind, OrgData } from '../types/org';
 import { detectReportingCycle } from './validators';
 
 export const ALL_GROUPS_VIEW_ID = '__all__';
@@ -294,11 +294,19 @@ function buildCluster(
 export function buildGroupMembershipGraph(
   data: OrgData,
   viewId: string,
+  kindFilter?: GroupKind,
 ): GroupMembershipGraphResult {
   const isAll = viewId === ALL_GROUPS_VIEW_ID;
-  const activeGroups = data.groups.filter((g) => g.status === 'active');
+  const activeGroups = data.groups.filter(
+    (g) => g.status === 'active' && (!kindFilter || g.kind === kindFilter),
+  );
 
   if (!isAll) {
+    // 單組視角：若該組種類不符過濾條件，視為空畫面（不渲染叢集）。
+    const group = data.groups.find((g) => g.id === viewId);
+    if (kindFilter && group && group.kind !== kindFilter) {
+      return { nodes: [], edges: [] };
+    }
     const result = buildCluster(data, viewId, 0);
     if (result.error) {
       return { nodes: [], edges: [], error: result.error };

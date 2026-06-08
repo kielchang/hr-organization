@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "version": 1,
+  "schemaVersion": 2,
+  "contentVersion": 1,
   "exportedAt": "2026-06-04T09:00:00+08:00",
   "employees": [
     { "id": "e1", "employeeNo": "E001", "name": "王大明", "status": "active" },
@@ -17,12 +17,14 @@
     { "id": "e12", "employeeNo": "E012", "name": "楊志豪", "status": "active" }
   ],
   "groups": [
-    { "id": "g1", "code": "CEO", "name": "總經理室", "parentId": null, "status": "active" },
-    { "id": "g2", "code": "HR", "name": "人資部", "parentId": "g1", "status": "active" },
-    { "id": "g3", "code": "RD", "name": "研發部", "parentId": "g1", "status": "active" },
-    { "id": "g4", "code": "FE", "name": "前端組", "parentId": "g3", "status": "active" },
-    { "id": "g5", "code": "MKT", "name": "行銷部", "parentId": "g1", "status": "active" },
-    { "id": "g6", "code": "PD", "name": "產品部", "parentId": "g1", "status": "active" }
+    { "id": "g1", "code": "CEO", "name": "總經理室", "parentId": null, "status": "active", "kind": "department" },
+    { "id": "g2", "code": "HR", "name": "人資部", "parentId": "g1", "status": "active", "kind": "department" },
+    { "id": "g3", "code": "RD", "name": "研發部", "parentId": "g1", "status": "active", "kind": "department" },
+    { "id": "g4", "code": "FE", "name": "前端組", "parentId": "g3", "status": "active", "kind": "department" },
+    { "id": "g5", "code": "MKT", "name": "行銷部", "parentId": "g1", "status": "active", "kind": "department" },
+    { "id": "g6", "code": "PD", "name": "產品部", "parentId": "g1", "status": "active", "kind": "department" },
+    { "id": "g7", "code": "XFN-AI", "name": "AI 應用小組", "parentId": null, "status": "active", "kind": "function" },
+    { "id": "g8", "code": "XFN-OKR", "name": "OKR 推動小組", "parentId": null, "status": "active", "kind": "function" }
   ],
   "jobLevels": [
     { "id": "jl1", "code": "MGR", "name": "經理", "rank": 40 },
@@ -157,6 +159,42 @@
       "supervisorIds": ["e8"],
       "primarySupervisorId": "e8",
       "isPrimaryGroup": true
+    },
+    {
+      "id": "a15",
+      "employeeId": "e4",
+      "groupId": "g7",
+      "jobLevelId": "jl1",
+      "supervisorIds": ["e3"],
+      "primarySupervisorId": "e3",
+      "isPrimaryGroup": false
+    },
+    {
+      "id": "a16",
+      "employeeId": "e7",
+      "groupId": "g7",
+      "jobLevelId": "jl5",
+      "supervisorIds": ["e4"],
+      "primarySupervisorId": "e4",
+      "isPrimaryGroup": false
+    },
+    {
+      "id": "a17",
+      "employeeId": "e2",
+      "groupId": "g8",
+      "jobLevelId": "jl5",
+      "supervisorIds": [],
+      "primarySupervisorId": null,
+      "isPrimaryGroup": false
+    },
+    {
+      "id": "a18",
+      "employeeId": "e9",
+      "groupId": "g8",
+      "jobLevelId": "jl3",
+      "supervisorIds": [],
+      "primarySupervisorId": null,
+      "isPrimaryGroup": false
     }
   ],
   "changeLog": []

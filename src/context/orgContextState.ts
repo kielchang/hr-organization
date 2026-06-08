@@ -8,8 +8,11 @@ export interface OrgContextValue {
   activeVersionId: string;
   activeVersion: DataVersionInfo | undefined;
   selectDataVersion: (id: string) => void;
-  /** 發布草稿為新的本機版本，回傳新版本 id */
-  publishVersion: (draft: OrgData) => string;
+  /** 發布草稿為新的本機版本（可選填版本名稱、調整理由、生效日 YYYY-MM-DD），回傳新版本 id */
+  publishVersion: (
+    draft: OrgData,
+    opts?: { label?: string; note?: string; effectiveDate?: string },
+  ) => string;
   /** 刪除一個本機發布版本（內建版本不受影響） */
   deletePublishedVersion: (id: string) => void;
   /** 將所有本機發布版本匯出成可攜帶的整包檔 */
@@ -26,6 +29,12 @@ export interface OrgContextValue {
   newAssignmentFor: (employeeId: string) => Assignment;
   loadFromFile: (data: OrgData) => void;
   exportData: (filename?: string) => void;
+  /**
+   * 是否有「本機已發布、但尚未成功同步到雲端」的變更。
+   * 僅 `isApiEnabled()`（後端啟用）時有意義；後端停用時恆為 false。
+   * 持久化於 localStorage，重整後仍反映未上雲狀態。
+   */
+  pendingCloudSync: boolean;
   applyChange: (
     mutate: (current: OrgData) => { data: OrgData; error?: string },
     onSuccess?: () => void,

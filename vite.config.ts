@@ -12,15 +12,53 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 將大型第三方相依拆成穩定的 vendor chunk，利於瀏覽器長期快取
+        // （應用程式碼變動時不需重新下載這些庫）。
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@xyflow') || id.includes('dagre')) return 'vendor-reactflow';
+          if (
+            id.includes('react-router') ||
+            id.includes('react-dom') ||
+            id.includes('/react/') ||
+            id.includes('scheduler')
+          ) {
+            return 'vendor-react';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // 只跑前端 src 內的測試；後端 server/ 有自己的 Vitest 設定。
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['src/services/**', 'src/context/**'],
+      // 涵蓋整個應用程式碼（含 UI 層），讓覆蓋率數字誠實反映現況。
+      include: [
+        'src/services/**',
+        'src/context/**',
+        'src/components/**',
+        'src/hooks/**',
+        'src/pages/**',
+      ],
+      // 回歸防護閾值（設於目前覆蓋率下方數個百分點）：避免新增程式未測時倒退。
+      // services/context 已高（~80-90%），UI 層仍在成長，整體門檻隨補測逐步調高。
+      thresholds: {
+        statements: 50,
+        branches: 36,
+        functions: 43,
+        lines: 51,
+      },
     },
   },
 })

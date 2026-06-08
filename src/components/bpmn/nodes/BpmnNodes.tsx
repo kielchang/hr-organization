@@ -156,14 +156,3 @@ export function BpmnParallelGatewayNode({ selected, data }: NodeProps) {
     </div>
   );
 }
-
-// ─── registry ─────────────────────────────────────────────────────────────────
-
-export const bpmnNodeTypes = {
-  bpmnStart: BpmnStartNode,
-  bpmnEnd: BpmnEndNode,
-  bpmnUserTask: BpmnUserTaskNode,
-  bpmnServiceTask: BpmnServiceTaskNode,
-  bpmnExclusiveGateway: BpmnExclusiveGatewayNode,
-  bpmnParallelGateway: BpmnParallelGatewayNode,
-} as const;

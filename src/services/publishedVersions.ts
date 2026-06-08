@@ -1,5 +1,6 @@
 import type { OrgData } from '../types/org';
 import { cloneOrgData } from './exportImport';
+import { safeSetItem } from './storage';
 
 const STORAGE_KEY = 'hr-org-published-versions';
 /** 匯出/匯入發布版本整包時的識別標記 */
@@ -10,6 +11,10 @@ export interface PublishedVersion {
   label: string;
   publishedAt: string;
   data: OrgData;
+  /** 生效日（YYYY-MM-DD）；未設＝發布即生效。 */
+  effectiveDate?: string;
+  /** 這次調整的理由（選填，版本層級 metadata）。 */
+  note?: string;
 }
 
 export interface PublishedVersionsBundle {
@@ -46,23 +51,24 @@ export function loadPublishedVersions(): PublishedVersion[] {
 }
 
 function persist(list: PublishedVersion[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {
-    // storage full or unavailable — silently ignore
-  }
+  safeSetItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 /** 新增一筆發布版本（最新置頂），回傳更新後清單與新版本。 */
 export function addPublishedVersion(
   data: OrgData,
   label?: string,
+  effectiveDate?: string,
+  note?: string,
 ): { versions: PublishedVersion[]; created: PublishedVersion } {
+  const trimmedNote = note?.trim();
   const created: PublishedVersion = {
     id: newId(),
     label: label?.trim() || timestampLabel(),
     publishedAt: new Date().toISOString(),
     data: cloneOrgData(data),
+    ...(effectiveDate ? { effectiveDate } : {}),
+    ...(trimmedNote ? { note: trimmedNote } : {}),
   };
   const next = [created, ...loadPublishedVersions()];
   persist(next);

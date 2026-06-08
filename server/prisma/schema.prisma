@@ -1,0 +1,28 @@
+// Prisma schema — 於 P2 起接上程式碼與資料庫。
+// P1 僅放置 schema 起點（版本快照表），尚未在程式中使用 Prisma client。
+
+generator client {
+  provider      = "prisma-client-js"
+  // native：本機開發；linux-musl-openssl-3.0.x：docker（node:22-alpine）執行期需要
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 組織資料的「已發布版本」快照（先以 JSONB 文件儲存，P4 再正規化為實體表）
+model OrgVersion {
+  id          String   @id @default(cuid())
+  label       String
+  data        Json
+  publishedAt DateTime @default(now())
+}
+
+/// 工作中的草稿（單租戶階段僅一筆；多租戶於 P4 加 tenantId）
+model OrgDraft {
+  id        String   @id @default(cuid())
+  data      Json
+  updatedAt DateTime @updatedAt
+}

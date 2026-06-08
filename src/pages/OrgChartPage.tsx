@@ -1,38 +1,24 @@
+/**
+ * @deprecated 已併入 /workbench 第 3 視角「組別歸屬圖」，`/org-chart` 路由改為導向 /workbench，
+ * 本檔不再被路由引用、暫保留備援以降風險，未來可由獨立 PR 移除。
+ */
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { OrgFlowChart } from '../components/orgFlow/OrgFlowChart';
+import { useMemo, useState } from 'react';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';
-import { EditModeToolbar } from '../components/orgFlow/EditModeToolbar';
-import { SnapshotPanel } from '../components/orgFlow/SnapshotPanel';
+import { FunctionCoveragePanel } from '../components/groupMembership/FunctionCoveragePanel';
+import { ReportingEditCanvas } from '../components/orgFlow/ReportingEditCanvas';
+import {
+  pickDefaultGroupId,
+  resolveGroupId,
+} from '../components/orgFlow/orgFlowGroupSelection';
 import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
-import { computeOrgDiff } from '../services/computeOrgDiff';
 import { useOrg } from '../context/useOrg';
-import { useEditSession } from '../hooks/useEditSession';
-import { cloneOrgData } from '../services/exportImport';
-import type { OrgData } from '../types/org';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { X } from 'lucide-react';
+import { useOrgFlowEditing } from '../hooks/useOrgFlowEditing';
+import type { GroupKind } from '../types/org';
 
 type ChartMode = 'reporting' | 'membership';
-
-function pickDefaultGroupId(groups: { id: string; status: string }[]): string {
-  const active = groups.filter((g) => g.status === 'active');
-  return (
-    active.find((g) => g.id === 'g4')?.id ??
-    active[0]?.id ??
-    ALL_GROUPS_VIEW_ID
-  );
-}
-
-function resolveGroupId(
-  groupId: string,
-  groups: { id: string; status: string }[],
-): string {
-  if (groupId === ALL_GROUPS_VIEW_ID) return ALL_GROUPS_VIEW_ID;
-  const active = groups.filter((g) => g.status === 'active');
-  if (active.some((g) => g.id === groupId)) return groupId;
-  return pickDefaultGroupId(groups);
-}
+/** 組別歸屬視角的種類過濾：all=不過濾。 */
+type MembershipKindFilter = 'all' | GroupKind;
 
 const chartDescriptions: Record<ChartMode, string> = {
   reporting:
@@ -42,94 +28,21 @@ const chartDescriptions: Record<ChartMode, string> = {
 };
 
 export function OrgChartPage() {
-  const { data, publishVersion } = useOrg();
+  const { data } = useOrg();
 
   const [chartMode, setChartMode] = useState<ChartMode>('reporting');
+  const [membershipKind, setMembershipKind] =
+    useState<MembershipKindFilter>('all');
   const [groupId, setGroupId] = useState(() => pickDefaultGroupId(data.groups));
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
-  const [staleDataWarning, setStaleDataWarning] = useState(false);
 
-  const editSession = useEditSession();
-  const prevPublishedRef = useRef<OrgData>(data);
-
-  // Detect if published data changes while in edit mode
-  useEffect(() => {
-    if (editSession.isEditMode && data !== prevPublishedRef.current) {
-      setStaleDataWarning(true);
-    }
-    prevPublishedRef.current = data;
-  }, [data, editSession.isEditMode]);
+  const editing = useOrgFlowEditing();
+  const { orgData } = editing;
 
   const resolvedGroupId = useMemo(
-    () => {
-      const sourceData = editSession.isEditMode && editSession.session
-        ? editSession.session.draftData
-        : data;
-      return resolveGroupId(groupId, sourceData.groups);
-    },
-    [groupId, data, editSession.isEditMode, editSession.session],
+    () => resolveGroupId(groupId, orgData.groups),
+    [groupId, orgData],
   );
-
-  // The data source depends on mode
-  const orgData = useMemo((): OrgData => {
-    if (editSession.isEditMode && editSession.session) {
-      return editSession.session.draftData;
-    }
-    return data;
-  }, [data, editSession.isEditMode, editSession.session]);
-
-  // Compute diff result when previewing a snapshot:
-  // Compare original base data (when edit mode was entered) vs the previewed snapshot,
-  // so users can see what changed from the original state to that checkpoint.
-  const diffResult = useMemo(() => {
-    if (!editSession.session?.previewingSnapshotId || !editSession.session) return null;
-    const snapshot = editSession.session.snapshots.find(
-      (s) => s.id === editSession.session!.previewingSnapshotId,
-    );
-    if (!snapshot) return null;
-    return computeOrgDiff(editSession.session.baseData, snapshot.orgData);
-  }, [editSession.session]);
-
-  const handleEnterEditMode = () => {
-    editSession.enterEditMode(data);
-    setStaleDataWarning(false);
-  };
-
-  const handleExitEditMode = () => {
-    editSession.exitEditMode();
-    setShowSnapshotPanel(false);
-    setStaleDataWarning(false);
-  };
-
-  const handleSaveCheckpoint = (description: string) => {
-    editSession.saveCheckpoint(description);
-    setShowSnapshotPanel(true);
-  };
-
-  const handlePublish = () => {
-    const draft = editSession.getDraftData();
-    if (!draft) return;
-    publishVersion(cloneOrgData(draft));
-    editSession.exitEditMode();
-    setShowSnapshotPanel(false);
-    setStaleDataWarning(false);
-  };
-
-  const handleDraftChange = (next: OrgData) => {
-    editSession.mutateDraft(() => next);
-  };
-
-  const chartProps = {
-    selectedGroupId: resolvedGroupId,
-    onGroupChange: setGroupId,
-    selectedEmployeeId,
-    onNodeSelect: setSelectedEmployeeId,
-    isEditMode: editSession.isEditMode,
-    orgData,
-    diffResult,
-    onDraftChange: handleDraftChange,
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -139,21 +52,6 @@ export function OrgChartPage() {
           {chartDescriptions[chartMode]}
         </p>
       </header>
-
-      {staleDataWarning && (
-        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>底層資料已在外部變更。建議捨棄目前草稿後重新進入編輯模式。</span>
-            <button
-              type="button"
-              onClick={() => setStaleDataWarning(false)}
-              className="shrink-0 text-amber-600 hover:text-amber-900"
-            >
-              <X className="size-4" />
-            </button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       <Tabs
         value={chartMode}
@@ -168,45 +66,60 @@ export function OrgChartPage() {
         </TabsList>
       </Tabs>
 
-      {/* Edit mode toolbar — only for reporting chart */}
-      {chartMode === 'reporting' && (
-        <EditModeToolbar
-          isEditMode={editSession.isEditMode}
-          session={editSession.session}
-          showSnapshotPanel={showSnapshotPanel}
-          onEnterEditMode={handleEnterEditMode}
-          onExitEditMode={handleExitEditMode}
-          onSaveCheckpoint={handleSaveCheckpoint}
-          onPublish={handlePublish}
-          onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
-        />
+      {/* 組別歸屬視角：種類過濾切換（全部／部門／職能） */}
+      {chartMode === 'membership' && (
+        <Tabs
+          value={membershipKind}
+          onValueChange={(value) => {
+            const nextKind = value as MembershipKindFilter;
+            setMembershipKind(nextKind);
+            setSelectedEmployeeId(null);
+            // 若目前選定的單組種類與新過濾不符，會渲染成空白畫面；自動切回「全部視角」。
+            if (nextKind !== 'all' && resolvedGroupId !== ALL_GROUPS_VIEW_ID) {
+              const selectedGroup = orgData.groups.find(
+                (g) => g.id === resolvedGroupId,
+              );
+              if (selectedGroup && selectedGroup.kind !== nextKind) {
+                setGroupId(ALL_GROUPS_VIEW_ID);
+              }
+            }
+          }}
+        >
+          <TabsList variant="default" className="w-fit">
+            <TabsTrigger value="all">全部</TabsTrigger>
+            <TabsTrigger value="department">部門</TabsTrigger>
+            <TabsTrigger value="function">職能</TabsTrigger>
+          </TabsList>
+        </Tabs>
       )}
 
-      {/* Chart area + optional snapshot panel */}
-      <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
-        <div className="relative min-h-[480px] flex-1">
-          {chartMode === 'reporting' ? (
-            <OrgFlowChart variant="reporting" {...chartProps} />
-          ) : (
-            <GroupMembershipFlowChart variant="membership" {...{
-              selectedGroupId: resolvedGroupId,
-              onGroupChange: setGroupId,
-              selectedEmployeeId,
-              onNodeSelect: setSelectedEmployeeId,
-            }} />
-          )}
+      {chartMode === 'reporting' ? (
+        <ReportingEditCanvas
+          editing={editing}
+          resolvedGroupId={resolvedGroupId}
+          onGroupChange={setGroupId}
+          selectedEmployeeId={selectedEmployeeId}
+          onNodeSelect={setSelectedEmployeeId}
+        />
+      ) : (
+        <div className="flex min-h-0 gap-3" style={{ height: 'calc(100vh - 18rem)' }}>
+          <div className="relative min-h-[480px] flex-1">
+            <GroupMembershipFlowChart
+              variant="membership"
+              selectedGroupId={resolvedGroupId}
+              onGroupChange={setGroupId}
+              selectedEmployeeId={selectedEmployeeId}
+              onNodeSelect={setSelectedEmployeeId}
+              kindFilter={membershipKind === 'all' ? undefined : membershipKind}
+            />
+          </div>
         </div>
+      )}
 
-        {chartMode === 'reporting' && editSession.isEditMode && showSnapshotPanel && editSession.session && (
-          <SnapshotPanel
-            snapshots={editSession.session.snapshots}
-            previewingSnapshotId={editSession.session.previewingSnapshotId}
-            onPreview={editSession.previewSnapshot}
-            onRollback={editSession.rollbackToSnapshot}
-            onClose={() => setShowSnapshotPanel(false)}
-          />
-        )}
-      </div>
+      {/* 職能視角輕量訊號：覆蓋缺口與跨職能負載（全部／職能過濾時顯示） */}
+      {chartMode === 'membership' && membershipKind !== 'department' && (
+        <FunctionCoveragePanel data={orgData} />
+      )}
     </div>
   );
 }

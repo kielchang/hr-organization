@@ -1,5 +1,8 @@
 export type EntityStatus = 'active' | 'inactive';
 
+/** 組別種類：department=階層部門（匯報線，走 parentId）；function=跨部門專案職能 */
+export type GroupKind = 'department' | 'function';
+
 export interface Employee {
   id: string;
   employeeNo: string;
@@ -13,6 +16,10 @@ export interface Group {
   name: string;
   parentId: string | null;
   status: EntityStatus;
+  /** 組別種類；migration 回填舊資料為 'department'，新表單必填。 */
+  kind: GroupKind;
+  /** 組長（employeeId）；migration toV4 以組內匯報根回填；可 null＝未指定。 */
+  leaderId?: string | null;
 }
 
 export interface JobLevel {
@@ -30,7 +37,10 @@ export interface Assignment {
   supervisorIds: string[];
   primarySupervisorId: string | null;
   isPrimaryGroup: boolean;
-  /** 組織層級（1-indexed 匯報層）；組織圖以此判斷垂直層級，可拖拉改動 */
+  /**
+   * 可選的**層級覆寫**（1-indexed）；預設由主匯報深度自動計算
+   * （`reportingDepth.computePrimaryDepth`），僅使用者刻意垂直拖曳時才設值。
+   */
   level?: number;
 }
 
@@ -57,10 +67,10 @@ export interface ChangeEntry {
 }
 
 export interface OrgData {
-  /** 資料**結構** schema 版本（migration 用），與下方 `version`（內容版本）不同。 */
+  /** 資料**結構** schema 版本（migration 用），與下方 `contentVersion`（內容版本）不同。 */
   schemaVersion: number;
   /** 使用者面的內容版本（發布時遞增），非 schema 版本。 */
-  version: number;
+  contentVersion: number;
   exportedAt: string;
   employees: Employee[];
   groups: Group[];

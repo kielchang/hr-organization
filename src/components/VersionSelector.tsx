@@ -15,6 +15,17 @@ import {
 import { selectOptionLabel, toSelectOptions } from '@/lib/selectOptions';
 import { buttonIntent, validationBadge } from '@/lib/uiSemantics';
 import { useOrg } from '../context/useOrg';
+import { effectiveStatus } from '../services/effectiveDate';
+import type { DataVersionInfo } from '../services/dataVersions';
+
+/** 版本標籤後綴：標示生效日狀態（排程中／已生效）。 */
+function effectiveSuffix(v: DataVersionInfo): string {
+  if (!v.effectiveDate) return '';
+  const status = effectiveStatus({ id: v.id, publishedAt: v.exportedAt, effectiveDate: v.effectiveDate });
+  return status === 'scheduled'
+    ? `（排程 ${v.effectiveDate} 生效）`
+    : `（${v.effectiveDate} 生效）`;
+}
 
 export function VersionSelector() {
   const {
@@ -33,7 +44,7 @@ export function VersionSelector() {
         dataVersions,
         activeVersionId,
         (v) => v.id,
-        (v) => `${v.valid ? '✓ ' : '✗ '}${v.label}`,
+        (v) => `${v.valid ? '✓ ' : '✗ '}${v.label}${effectiveSuffix(v)}`,
       ),
     [dataVersions, activeVersionId],
   );
@@ -81,6 +92,11 @@ export function VersionSelector() {
           </Button>
         )}
       </div>
+      {activeVersion?.note && (
+        <p className="text-sm text-muted-foreground">
+          調整理由：{activeVersion.note}
+        </p>
+      )}
       {activeVersion && !activeVersion.valid && activeVersion.errors.length > 0 && (
         <Alert variant="destructive">
           <AlertDescription>

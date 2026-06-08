@@ -26,6 +26,7 @@ import { OrgDetailPanel } from '../orgFlow/OrgDetailPanel';
 import type { OrgFlowChartVariant } from '../orgFlow/OrgFlowControls';
 import { useDraggableFlowNodes } from '../orgFlow/useDraggableFlowNodes';
 import { createEmptyAssignment } from '../../services/orgOperations';
+import type { GroupKind } from '../../types/org';
 
 const nodeTypes = {
   assignmentMember: AssignmentMemberNode,
@@ -39,6 +40,8 @@ interface GroupMembershipFlowChartProps {
   onGroupChange: (groupId: string) => void;
   selectedEmployeeId: string | null;
   onNodeSelect: (employeeId: string | null) => void;
+  /** 依組別種類過濾叢集；不傳＝顯示全部。 */
+  kindFilter?: GroupKind;
 }
 
 function FlowInner({
@@ -47,18 +50,22 @@ function FlowInner({
   onGroupChange,
   selectedEmployeeId,
   onNodeSelect,
+  kindFilter,
 }: GroupMembershipFlowChartProps) {
   const { data } = useOrg();
   const { fitView } = useReactFlow();
 
   const activeGroups = useMemo(
-    () => data.groups.filter((g) => g.status === 'active'),
-    [data.groups],
+    () =>
+      data.groups.filter(
+        (g) => g.status === 'active' && (!kindFilter || g.kind === kindFilter),
+      ),
+    [data.groups, kindFilter],
   );
 
   const { nodes: computedNodes, edges, error } = useMemo(
-    () => buildGroupMembershipGraph(data, selectedGroupId),
-    [data, selectedGroupId],
+    () => buildGroupMembershipGraph(data, selectedGroupId, kindFilter),
+    [data, selectedGroupId, kindFilter],
   );
 
   const { nodes, onNodesChange } = useDraggableFlowNodes(

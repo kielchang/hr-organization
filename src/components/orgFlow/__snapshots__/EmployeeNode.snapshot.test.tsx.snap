@@ -1,0 +1,252 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`EmployeeNode DOM 快照 > diff 狀態=added 節點結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border px-3.5 py-2.5 text-sm shadow-sm ring-1 transition-[box-shadow,border-color] border-emerald-500 bg-emerald-50 ring-emerald-200"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground "
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+    <span
+      class="group/badge inline-flex h-5 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90 mt-0.5 w-fit text-[10px]"
+      data-slot="badge"
+      data-variant="info"
+    >
+      主組別
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`EmployeeNode DOM 快照 > diff 狀態=modified 節點結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border px-3.5 py-2.5 text-sm shadow-sm ring-1 transition-[box-shadow,border-color] border-amber-400 bg-amber-50 ring-amber-200"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground "
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+    <span
+      class="group/badge inline-flex h-5 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90 mt-0.5 w-fit text-[10px]"
+      data-slot="badge"
+      data-variant="info"
+    >
+      主組別
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`EmployeeNode DOM 快照 > diff 狀態=removed 節點結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border px-3.5 py-2.5 text-sm shadow-sm ring-1 transition-[box-shadow,border-color] border-red-400 bg-red-50 ring-red-200 opacity-60"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground line-through"
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+    <span
+      class="group/badge inline-flex h-5 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90 mt-0.5 w-fit text-[10px]"
+      data-slot="badge"
+      data-variant="info"
+    >
+      主組別
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`EmployeeNode DOM 快照 > 主組別節點結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border bg-card px-3.5 py-2.5 text-sm shadow-sm ring-1 ring-foreground/5 transition-[box-shadow,border-color]"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground "
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+    <span
+      class="group/badge inline-flex h-5 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90 mt-0.5 w-fit text-[10px]"
+      data-slot="badge"
+      data-variant="info"
+    >
+      主組別
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`EmployeeNode DOM 快照 > 選取狀態節點結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border bg-card px-3.5 py-2.5 text-sm transition-[box-shadow,border-color] border-primary shadow-md ring-2 ring-primary/25"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground "
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+    <span
+      class="group/badge inline-flex h-5 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-4xl border px-2 py-0.5 font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3! border-info/30 bg-info text-info-foreground [a]:hover:bg-info/90 mt-0.5 w-fit text-[10px]"
+      data-slot="badge"
+      data-variant="info"
+    >
+      主組別
+    </span>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;
+
+exports[`EmployeeNode DOM 快照 > 非主組別節點（不顯示主組別徽章）結構快照 1`] = `
+<div
+  class="min-w-[188px] rounded-xl border bg-card px-3.5 py-2.5 text-sm shadow-sm ring-1 ring-foreground/5 transition-[box-shadow,border-color]"
+>
+  <div
+    class="react-flow__handle react-flow__handle-top nodrag nopan !size-2 !border-2 !border-background !bg-primary target connectable connectablestart connectableend connectionindicator"
+    data-handlepos="top"
+    data-id="1-null-null-target"
+  />
+  <div
+    class="flex flex-col gap-1"
+  >
+    <p
+      class="font-medium leading-snug text-card-foreground "
+    >
+      王大明
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      E001
+    </p>
+    <p
+      class="text-xs text-muted-foreground"
+    >
+      總監
+    </p>
+  </div>
+  <div
+    class="react-flow__handle react-flow__handle-bottom nodrag nopan !size-2 !border-2 !border-background !bg-primary source connectable connectablestart connectableend connectionindicator"
+    data-handlepos="bottom"
+    data-id="1-null-null-source"
+  />
+</div>
+`;

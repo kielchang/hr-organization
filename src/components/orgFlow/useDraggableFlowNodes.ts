@@ -21,8 +21,14 @@ export function useDraggableFlowNodes<T extends Node>(
   const [nodes, setNodes] = useState<T[]>(computedNodes);
   const resetKeyRef = useRef(resetKey);
   const snapStepRef = useRef(snapStep);
-  snapStepRef.current = snapStep;
+  // 在 effect 中同步最新 snapStep，供 onNodesChange 取用（避免 render 期間寫 ref）。
+  useEffect(() => {
+    snapStepRef.current = snapStep;
+  }, [snapStep]);
 
+  // 將外部 dagre 計算結果同步進本地拖曳狀態（保留拖曳中位置）。
+  // 這是「以 props 為來源、本地可覆寫」的受控同步，必須在 effect 內 setState。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (resetKeyRef.current !== resetKey) {
       resetKeyRef.current = resetKey;
@@ -44,6 +50,7 @@ export function useDraggableFlowNodes<T extends Node>(
       });
     });
   }, [computedNodes, resetKey, preserveDraggedPositions]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => {

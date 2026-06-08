@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Play, Pencil, Trash2, FileText, BarChart2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useBpmn } from '../context/BpmnProvider';
+import { useBpmn } from '../context/useBpmn';
 import { useOrg } from '../context/useOrg';
 import { analyzeProcessHealth } from '../services/processImpact';
 import type { BpmnProcess } from '../types/bpmn';
@@ -123,8 +123,13 @@ export function BpmnListPage() {
                       <Button variant="outline" size="sm" onClick={() => setConfirmId(null)}>取消</Button>
                     </div>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmId(p.id)}>
-                      <Trash2 className="size-4 text-destructive" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="刪除流程"
+                      onClick={() => setConfirmId(p.id)}
+                    >
+                      <Trash2 className="size-4 text-destructive" aria-hidden="true" />
                     </Button>
                   )}
                 </div>

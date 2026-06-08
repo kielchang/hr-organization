@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  CSV_MEMBER_COLUMNS,
+  CSV_MEMBER_COLUMNS_ZH,
   csvMemberRowsToOrgData,
   orgDataToCsvMemberRows,
 } from '../services/csvToOrgData';
@@ -24,6 +24,7 @@ import { MOCK_DATA_DIR } from '../services/dataVersions';
 export function CsvImportPage() {
   const { data } = useOrg();
   const fileRef = useRef<HTMLInputElement>(null);
+  const excelRef = useRef<HTMLInputElement>(null);
   const [csvText, setCsvText] = useState('');
   const [outputName, setOutputName] = useState('org-data-imported');
   const [version, setVersion] = useState('1');
@@ -36,6 +37,20 @@ export function CsvImportPage() {
     if (!file) return;
     setCsvText(await file.text());
     setResult(null);
+    e.target.value = '';
+  };
+
+  const onExcelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    // 動態載入 Excel 解析（@e965/xlsx 較大，僅匯入時才載）
+    const { xlsxToOrgData } = await import('../services/xlsxToOrgData');
+    const v = Number(version);
+    const res = xlsxToOrgData(buf, { version: Number.isFinite(v) && v >= 1 ? v : 1 });
+    setResult(res);
+    // 把解析結果以 CSV 形式回填預覽區，方便檢視／微調
+    setCsvText(res.valid ? orgDataToCsvMemberRows(res.data) : '');
     e.target.value = '';
   };
 
@@ -54,9 +69,10 @@ export function CsvImportPage() {
   };
 
   const downloadTemplate = () => {
-    const header = CSV_MEMBER_COLUMNS.join(',');
+    const header = CSV_MEMBER_COLUMNS_ZH.join(',');
     const content = [
-      '# 成員歸屬 CSV 範本',
+      '# 成員歸屬 CSV 範本（# 開頭為說明列，匯入時會略過）',
+      '# 主管工號可多筆以 | 分隔；是否主要組別填 1/0；在職狀態填 active/inactive 或 在職/停用',
       header,
       'E001,範例員工,active,RD,研發部,CEO,active,ST,專員,10,,,1',
     ].join('\n');
@@ -73,9 +89,9 @@ export function CsvImportPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h2 className="text-2xl font-semibold tracking-tight">CSV 轉 JSON</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">CSV / Excel 轉 JSON</h2>
         <p className="text-sm text-muted-foreground">
-          以「一列一筆成員歸屬」整理組織資料，轉成 JSON 後可下載，或透過指令寫入本機{' '}
+          以「一列一筆成員歸屬」整理組織資料（支援 CSV 或 Excel .xlsx），轉成 JSON 後可下載，或透過指令寫入本機{' '}
           <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs">{MOCK_DATA_DIR}</code>
           （不進版控）並在版本選單切換。
         </p>
@@ -83,7 +99,7 @@ export function CsvImportPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>1. 準備 CSV</CardTitle>
+          <CardTitle>1. 準備 CSV / Excel</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 pt-0">
           <div className="flex flex-wrap gap-2">
@@ -98,6 +114,10 @@ export function CsvImportPage() {
               <Upload className="size-4" />
               選擇 CSV 檔案
             </Button>
+            <Button type="button" variant="outline" onClick={() => excelRef.current?.click()}>
+              <Upload className="size-4" />
+              選擇 Excel 檔案
+            </Button>
             <input
               ref={fileRef}
               type="file"
@@ -105,9 +125,16 @@ export function CsvImportPage() {
               hidden
               onChange={onFile}
             />
+            <input
+              ref={excelRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              hidden
+              onChange={onExcelFile}
+            />
           </div>
           <CardDescription className="break-all">
-            必要欄位：{CSV_MEMBER_COLUMNS.join(', ')}
+            必要欄位：{CSV_MEMBER_COLUMNS_ZH.join(', ')}
           </CardDescription>
         </CardContent>
       </Card>

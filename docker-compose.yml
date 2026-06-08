@@ -1,0 +1,50 @@
+# 一鍵起整套服務：PostgreSQL + 後端 API + 前端 Web
+#   docker compose up -d --build     # 啟動（首次或改動後加 --build）
+#   docker compose ps                # 查看狀態
+#   docker compose logs -f api       # 看日誌
+#   docker compose down              # 停止（加 -v 連資料庫卷一起清）
+#
+# 開啟：前端 http://localhost:8088 ｜ API http://localhost:3001/api/health
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hr
+      POSTGRES_PASSWORD: hr
+      POSTGRES_DB: hr_org
+    ports:
+      - "55432:5432" # 對外用 55432，避免與本機既有 Postgres(5432) 衝突
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hr -d hr_org"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./server
+    environment:
+      DATABASE_URL: postgresql://hr:hr@db:5432/hr_org
+      PORT: "3001"
+      CORS_ORIGIN: http://localhost:8088 # 允許前端來源
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 瀏覽器（在主機）連 API 的對外位址
+        VITE_API_URL: http://localhost:3001
+    ports:
+      - "8088:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

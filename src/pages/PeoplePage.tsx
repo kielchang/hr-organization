@@ -19,6 +19,9 @@ export function PeoplePage() {
   > | null>(null);
   const [employeeFormOpen, setEmployeeFormOpen] = useState(false);
   const [employeeFormNew, setEmployeeFormNew] = useState(false);
+  // 每次開啟表單就 +1，作為 EmployeeForm 的 key 強制重新掛載，
+  // 確保依當下的 employee/isNew 重新預填（修正常駐重用不更新的問題）。
+  const [employeeFormKey, setEmployeeFormKey] = useState(0);
 
   const employee = data.employees.find((e) => e.id === selectedId);
   const assignments = useMemo(
@@ -29,11 +32,13 @@ export function PeoplePage() {
   const openNewEmployee = () => {
     setEmployeeFormNew(true);
     setEmployeeFormOpen(true);
+    setEmployeeFormKey((k) => k + 1);
   };
 
   const openEditEmployee = () => {
     setEmployeeFormNew(false);
     setEmployeeFormOpen(true);
+    setEmployeeFormKey((k) => k + 1);
   };
 
   return (
@@ -170,6 +175,7 @@ export function PeoplePage() {
         </div>
       </div>
       <EmployeeForm
+        key={employeeFormKey}
         open={employeeFormOpen}
         employee={employeeFormNew ? null : employee ?? null}
         isNew={employeeFormNew}

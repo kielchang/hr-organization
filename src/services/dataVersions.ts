@@ -4,6 +4,7 @@ import { migrateOrgData } from './migrations/orgMigrations';
 import { validateOrgData } from './validators';
 import type { OrgData } from '../types/org';
 import type { PublishedVersion } from './publishedVersions';
+import type { ApiVersion } from './apiClient';
 
 export const SEED_DATA_PATH = 'src/data/org-data.json';
 export const MOCK_DATA_DIR = 'src/data/mock';
@@ -18,15 +19,19 @@ export interface DataVersionInfo {
   valid: boolean;
   errors: string[];
   data: OrgData;
-  version: number;
+  contentVersion: number;
   exportedAt: string;
   isSeed: boolean;
   source: DataVersionSource;
+  /** 生效日（YYYY-MM-DD），僅發布版本可能有；未設＝發布即生效。 */
+  effectiveDate?: string;
+  /** 這次調整的理由（選填），僅本機發布版本可能有；雲端版本無。 */
+  note?: string;
 }
 
 const emptyOrgData: OrgData = {
   schemaVersion: 0,
-  version: 0,
+  contentVersion: 0,
   exportedAt: '',
   employees: [],
   groups: [],
@@ -57,7 +62,9 @@ function buildLabel(
         timeStyle: 'short',
       })
     : '';
-  return date ? `${prefix}（v${data.version} · ${date}）` : `${prefix}（v${data.version}）`;
+  return date
+    ? `${prefix}（v${data.contentVersion} · ${date}）`
+    : `${prefix}（v${data.contentVersion}）`;
 }
 
 function parseVersionEntry(
@@ -77,7 +84,7 @@ function parseVersionEntry(
       valid: errors.length === 0,
       errors,
       data,
-      version: data.version,
+      contentVersion: data.contentVersion,
       exportedAt: data.exportedAt,
       isSeed,
       source,
@@ -91,7 +98,7 @@ function parseVersionEntry(
       valid: false,
       errors: [message],
       data: emptyOrgData,
-      version: 0,
+      contentVersion: 0,
       exportedAt: '',
       isSeed,
       source,
@@ -111,8 +118,28 @@ export function publishedVersionToInfo(pv: PublishedVersion): DataVersionInfo {
     valid: errors.length === 0,
     errors,
     data,
-    version: data.version,
+    contentVersion: data.contentVersion,
     exportedAt: pv.publishedAt,
+    isSeed: false,
+    source: 'published',
+    effectiveDate: pv.effectiveDate,
+    note: pv.note,
+  };
+}
+
+/** 將後端 API 回傳的版本轉成下拉選單可用的 DataVersionInfo（標籤前綴「雲端」）。 */
+export function apiVersionToInfo(v: ApiVersion): DataVersionInfo {
+  const data = migrateOrgData(cloneOrgData(v.data));
+  const errors = validateOrgData(data);
+  return {
+    id: v.id,
+    filename: `${v.id}.json`,
+    label: `雲端 · ${v.label}`,
+    valid: errors.length === 0,
+    errors,
+    data,
+    contentVersion: data.contentVersion,
+    exportedAt: v.publishedAt,
     isSeed: false,
     source: 'published',
   };
@@ -139,4 +166,27 @@ export function pickDefaultVersionId(versions: DataVersionInfo[]): string {
   if (valid) return valid.id;
   if (versions.length > 0) return versions[0].id;
   return '';
+}
+
+/**
+ * 從雲端版本清單挑出「最新」一筆的 id：依 `exportedAt`（＝後端 publishedAt）
+ * 由新到舊；時間相同時以 id 由大到小作為穩定 tiebreak。空清單回 null。
+ * 不就地排序（不可變），供 OrgProvider 自動預設選版與 QA 單元測試使用。
+ */
+export function pickLatestRemoteVersionId(
+  remoteVersions: DataVersionInfo[],
+): string | null {
+  if (remoteVersions.length === 0) return null;
+  let latest = remoteVersions[0];
+  for (let i = 1; i < remoteVersions.length; i += 1) {
+    const candidate = remoteVersions[i];
+    if (isNewerVersion(candidate, latest)) latest = candidate;
+  }
+  return latest.id;
+}
+
+/** a 是否比 b 新：先比 exportedAt（字串 ISO 可直接比較），再以 id 由大到小 tiebreak。 */
+function isNewerVersion(a: DataVersionInfo, b: DataVersionInfo): boolean {
+  if (a.exportedAt !== b.exportedAt) return a.exportedAt > b.exportedAt;
+  return a.id > b.id;
 }

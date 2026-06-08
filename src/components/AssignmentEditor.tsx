@@ -126,14 +126,14 @@ export function AssignmentEditor({
       <CardContent className="grid gap-3 pt-0">
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="grid gap-2">
-          <Label>組別</Label>
+          <Label htmlFor={`${assignment.id}-group`}>組別</Label>
           <Select
-            value={assignment.groupId || undefined}
+            value={assignment.groupId || null}
             onValueChange={(value) => {
               if (value) setAssignment((a) => ({ ...a, groupId: value }));
             }}
           >
-            <SelectTrigger className="w-full bg-background">
+            <SelectTrigger id={`${assignment.id}-group`} className="w-full bg-background">
               <SelectValue placeholder="選擇組別">
                 {selectOptionLabel(groupOptions, assignment.groupId)}
               </SelectValue>
@@ -148,14 +148,14 @@ export function AssignmentEditor({
           </Select>
         </div>
         <div className="grid gap-2">
-          <Label>職級</Label>
+          <Label htmlFor={`${assignment.id}-joblevel`}>職級</Label>
           <Select
-            value={assignment.jobLevelId || undefined}
+            value={assignment.jobLevelId || null}
             onValueChange={(value) => {
               if (value) setAssignment((a) => ({ ...a, jobLevelId: value }));
             }}
           >
-            <SelectTrigger className="w-full bg-background">
+            <SelectTrigger id={`${assignment.id}-joblevel`} className="w-full bg-background">
               <SelectValue placeholder="選擇職級">
                 {selectOptionLabel(jobLevelOptions, assignment.jobLevelId)}
               </SelectValue>
@@ -192,9 +192,9 @@ export function AssignmentEditor({
         </div>
         {assignment.supervisorIds.length > 0 && (
           <div className="grid gap-2">
-            <Label>主主管</Label>
+            <Label htmlFor={`${assignment.id}-primarysup`}>主主管</Label>
             <Select
-              value={assignment.primarySupervisorId ?? undefined}
+              value={assignment.primarySupervisorId}
               onValueChange={(value) => {
                 setAssignment((a) => ({
                   ...a,
@@ -202,7 +202,7 @@ export function AssignmentEditor({
                 }));
               }}
             >
-              <SelectTrigger className="w-full bg-background">
+              <SelectTrigger id={`${assignment.id}-primarysup`} className="w-full bg-background">
                 <SelectValue placeholder="選擇主主管">
                   {selectOptionLabel(
                     primarySupervisorOptions,

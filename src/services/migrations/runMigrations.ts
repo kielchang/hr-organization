@@ -2,7 +2,7 @@
  * 通用 schema migration 框架。
  *
  * 設計重點：
- * - 「schema 版本」描述資料**結構**，與使用者面的「內容版本」（OrgData.version、
+ * - 「schema 版本」描述資料**結構**，與使用者面的「內容版本」（OrgData.contentVersion、
  *   BpmnProcess.version）是兩個不同概念，請勿混用。
  * - migration 線性遞增：每個 step 只負責 (to-1) → to，框架負責依序套用。
  * - 缺 `schemaVersion` 欄位的舊資料一律視為第 0 版，從頭跑完整鏈。

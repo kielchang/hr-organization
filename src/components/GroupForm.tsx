@@ -17,14 +17,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  GROUP_KIND_OPTIONS,
   GROUP_STATUS_OPTIONS,
   selectOptionLabel,
   toSelectOptions,
 } from '@/lib/selectOptions';
-import type { Group } from '../types/org';
+import type { Group, GroupKind } from '../types/org';
 import { useOrg } from '../context/useOrg';
 
 const NO_PARENT = '__none__';
+const NO_LEADER = '__none__';
 
 interface GroupFormProps {
   open: boolean;
@@ -49,6 +51,7 @@ export function GroupForm({
       name: '',
       parentId: null,
       status: 'active',
+      kind: 'department',
     },
   );
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +70,30 @@ export function GroupForm({
     () => toSelectOptions(GROUP_STATUS_OPTIONS, group.status, (o) => o.value, (o) => o.label),
     [group.status],
   );
+
+  const kindOptions = useMemo(
+    () => toSelectOptions(GROUP_KIND_OPTIONS, group.kind, (o) => o.value, (o) => o.label),
+    [group.kind],
+  );
+
+  const leaderSelectValue = group.leaderId ?? NO_LEADER;
+
+  // 該組現有成員＝對應到此 groupId 的 assignment 所指向的員工（依姓名顯示）。
+  const memberEmployees = useMemo(() => {
+    const memberIds = new Set(
+      data.assignments.filter((a) => a.groupId === group.id).map((a) => a.employeeId),
+    );
+    return data.employees.filter((e) => memberIds.has(e.id));
+  }, [data.assignments, data.employees, group.id]);
+
+  const hasMembers = memberEmployees.length > 0;
+
+  const leaderOptions = useMemo(() => {
+    const items = [{ id: NO_LEADER, name: '未指定' }, ...memberEmployees];
+    return toSelectOptions(items, leaderSelectValue, (e) => e.id, (e) => e.name);
+  }, [memberEmployees, leaderSelectValue]);
+
+  const isFunction = group.kind === 'function';
 
   const onSave = () => {
     if (!group.code.trim() || !group.name.trim()) {
@@ -107,9 +134,38 @@ export function GroupForm({
             />
           </div>
           <div className="grid gap-2">
+            <Label htmlFor="group-kind">種類</Label>
+            <Select
+              value={group.kind}
+              onValueChange={(value) => {
+                if (!value) return;
+                setGroup((g) => ({
+                  ...g,
+                  kind: value as GroupKind,
+                  // 職能於 v1 為扁平結構（無階層），切換時一併清掉上層。
+                  parentId: value === 'function' ? null : g.parentId,
+                }));
+              }}
+            >
+              <SelectTrigger id="group-kind" className="w-full bg-background">
+                <SelectValue>
+                  {selectOptionLabel(kindOptions, group.kind)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {kindOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
             <Label htmlFor="group-parent">上層組別</Label>
             <Select
               value={parentSelectValue}
+              disabled={isFunction}
               onValueChange={(value) => {
                 if (!value) return;
                 setGroup((g) => ({
@@ -118,7 +174,11 @@ export function GroupForm({
                 }));
               }}
             >
-              <SelectTrigger id="group-parent" className="w-full bg-background">
+              <SelectTrigger
+                id="group-parent"
+                className="w-full bg-background"
+                aria-disabled={isFunction}
+              >
                 <SelectValue placeholder="（無）">
                   {selectOptionLabel(parentOptions, parentSelectValue)}
                 </SelectValue>
@@ -131,6 +191,47 @@ export function GroupForm({
                 ))}
               </SelectContent>
             </Select>
+            {isFunction && (
+              <p className="text-xs text-muted-foreground">
+                職能為跨部門扁平結構，無上層組別。
+              </p>
+            )}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="group-leader">組長</Label>
+            <Select
+              value={leaderSelectValue}
+              disabled={!hasMembers}
+              onValueChange={(value) => {
+                if (!value) return;
+                setGroup((g) => ({
+                  ...g,
+                  leaderId: value === NO_LEADER ? null : value,
+                }));
+              }}
+            >
+              <SelectTrigger
+                id="group-leader"
+                className="w-full bg-background"
+                aria-disabled={!hasMembers}
+              >
+                <SelectValue placeholder="未指定">
+                  {selectOptionLabel(leaderOptions, leaderSelectValue)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {leaderOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!hasMembers && (
+              <p className="text-xs text-muted-foreground">
+                此組尚無成員，存檔後再設組長。
+              </p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="group-status">狀態</Label>
