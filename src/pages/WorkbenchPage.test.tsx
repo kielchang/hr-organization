@@ -101,7 +101,8 @@ describe('WorkbenchPage 組織圖工作台 render smoke', () => {
 });
 
 /**
- * 主視圖切換 Tabs（匯報組織圖 ↔ 組別組織圖；D2 加入、Phase E 擴充為可編輯）：
+ * 主視圖切換 Tabs（匯報組織圖 ↔ 組別組織圖 ↔ 組別歸屬圖；D2 加入、Phase E 擴充為
+ * 可編輯、旅程優先 IA 整併後再加入第 3 視角「組別歸屬圖」）：
  * - 預設停在 reporting（避免驚嚇）。
  * - 切到「組別組織圖」→ 顯示 GroupOrgEditCanvas（組框出現）。
  * - 切換時 groupId / selectedEmployeeId 不重設（lift 至頁面、跨 panel remount 保留）。
@@ -124,9 +125,10 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
   it('預設停在匯報組織圖（reporting）：reporting 工具列在、組別框不在', () => {
     renderWithProviders(<WorkbenchPage />, { route: '/workbench' });
 
-    // 兩個視圖 tab 皆存在。
+    // 三個主視圖 tab 皆存在（旅程優先 IA 整併後，組別歸屬圖併入為第 3 視角）。
     expect(screen.getByRole('tab', { name: /匯報組織圖/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /組別組織圖/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /組別歸屬圖/ })).toBeInTheDocument();
 
     // 預設 reporting：編輯工具列（檢視模式 + 進入編輯）可見。
     expect(screen.getByText('檢視模式')).toBeInTheDocument();
@@ -294,5 +296,125 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
     );
     // 同時確認 groupId 也維持研發部（單組視角不重設）。
     expect(screen.getByRole('combobox')).toHaveTextContent('研發部');
+  });
+});
+
+/**
+ * 組別歸屬圖（membership，第 3 視角）—— 旅程優先 IA 整併後自 /org-chart 原封搬入。
+ * 這裡是 membership 行為的**權威測試家**（OrgChartPage.test 已精簡為 deprecation 冒煙）。
+ *
+ * 覆蓋：
+ * - 切到「組別歸屬圖」後出現種類過濾子 Tabs（全部／部門／職能）。
+ * - FunctionCoveragePanel（「職能覆蓋訊號」）的條件顯示：
+ *     membershipKind !== 'department' 時顯示；切「部門」時不顯示（對齊 src 條件）。
+ * - kind 與選組不符時自動切回全公司視角（auto-revert）。
+ *
+ * 取得「檢視組別」下拉目前顯示文字：membership 圖沿用 OrgChartGroupSelector，
+ * 其 trigger id 仍為 `org-chart-group-select`（自 OrgChartPage 共用元件搬入）。
+ */
+function membershipSelectorText() {
+  return document.getElementById('org-chart-group-select')?.textContent ?? '';
+}
+
+describe('WorkbenchPage 第 3 視角：組別歸屬圖（membership）', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  /** 切到「組別歸屬圖」視角，並等候種類過濾子 Tabs 浮現。 */
+  async function gotoMembership(user: ReturnType<typeof userEvent.setup>) {
+    renderWithProviders(<WorkbenchPage />, { route: '/workbench' });
+    await user.click(screen.getByRole('tab', { name: /組別歸屬圖/ }));
+    // 種類過濾子 Tabs（全部／部門／職能）為 membership 視角專屬，等其掛載完成。
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: '部門' })).toBeInTheDocument(),
+    );
+  }
+
+  it('切到「組別歸屬圖」→ 出現種類過濾子 Tabs（全部／部門／職能）', async () => {
+    const user = userEvent.setup();
+    await gotoMembership(user);
+
+    // 三個種類過濾 tab 皆在（與 reporting/group/membership 主 tab 並存）。
+    expect(screen.getByRole('tab', { name: '全部' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '部門' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '職能' })).toBeInTheDocument();
+
+    // 預設過濾為「全部」（all）→ FunctionCoveragePanel 顯示（seed 含職能 g7/g8）。
+    expect(
+      screen.getByRole('heading', { name: '職能覆蓋訊號', level: 3 }),
+    ).toBeInTheDocument();
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('切「部門」過濾 → FunctionCoveragePanel（職能覆蓋訊號）隱藏；切回「職能」→ 重新顯示', async () => {
+    const user = userEvent.setup();
+    await gotoMembership(user);
+
+    // 預設「全部」：職能覆蓋訊號可見。
+    expect(
+      screen.getByRole('heading', { name: '職能覆蓋訊號' }),
+    ).toBeInTheDocument();
+
+    // 切「部門」：對齊 src 條件 membershipKind !== 'department' → 面板隱藏。
+    await user.click(screen.getByRole('tab', { name: '部門' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: '職能覆蓋訊號' }),
+      ).not.toBeInTheDocument(),
+    );
+
+    // 切「職能」：membershipKind === 'function'（!== 'department'）→ 面板再次顯示。
+    await user.click(screen.getByRole('tab', { name: '職能' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: '職能覆蓋訊號' }),
+      ).toBeInTheDocument(),
+    );
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('選定部門組後切「職能」過濾（kind 不符）→ 自動切回全公司（auto-revert）', async () => {
+    const user = userEvent.setup();
+    await gotoMembership(user);
+
+    // 工作台預設以全公司開啟；先在 membership 視角選定單一部門組（前端組，kind=department）。
+    await user.click(screen.getByRole('combobox'));
+    const listbox = await screen.findByRole('listbox');
+    await user.click(within(listbox).getByRole('option', { name: '前端組' }));
+    await waitFor(() => expect(membershipSelectorText()).toMatch(/前端組/));
+
+    // 切「職能」過濾：前端組 kind=department 與「職能」不符 → 自動切回全公司視角。
+    await user.click(screen.getByRole('tab', { name: '職能' }));
+    await waitFor(() => expect(membershipSelectorText()).toMatch(/全公司/));
+    expect(membershipSelectorText()).not.toMatch(/前端組/);
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('選定部門組後切「部門」過濾（kind 相符）→ 維持原選定，不誤切回全公司', async () => {
+    const user = userEvent.setup();
+    await gotoMembership(user);
+
+    // 選定單一部門組（前端組，kind=department）。
+    await user.click(screen.getByRole('combobox'));
+    const listbox = await screen.findByRole('listbox');
+    await user.click(within(listbox).getByRole('option', { name: '前端組' }));
+    await waitFor(() => expect(membershipSelectorText()).toMatch(/前端組/));
+
+    // 切「部門」過濾：kind 相符 → 不應被切回全公司（與上一案的「切回」形成對照）。
+    await user.click(screen.getByRole('tab', { name: '部門' }));
+    await waitFor(() => expect(membershipSelectorText()).toMatch(/前端組/));
+    expect(membershipSelectorText()).not.toMatch(/全公司/);
+
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

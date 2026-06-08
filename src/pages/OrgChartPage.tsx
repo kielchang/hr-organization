@@ -1,3 +1,7 @@
+/**
+ * @deprecated 已併入 /workbench 第 3 視角「組別歸屬圖」，`/org-chart` 路由改為導向 /workbench，
+ * 本檔不再被路由引用、暫保留備援以降風險，未來可由獨立 PR 移除。
+ */
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMemo, useState } from 'react';
 import { GroupMembershipFlowChart } from '../components/groupMembership/GroupMembershipFlowChart';

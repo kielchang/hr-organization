@@ -118,7 +118,7 @@ export function OverviewPage() {
         <div className="flex items-baseline justify-between">
           <h3 className="text-lg font-semibold tracking-tight">規劃旅程</h3>
           <p className="text-xs text-muted-foreground">
-            六步固定順序：載入 → 編輯 → 健檢 → 比較 → 影響 → 發布
+            建議路徑（可任選一步開始）：載入 → 編輯 → 健檢 → 比較 → 影響 → 發布
           </p>
         </div>
         <ol
