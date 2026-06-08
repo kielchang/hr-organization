@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Network, Boxes } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ReportingEditCanvas } from '../components/orgFlow/ReportingEditCanvas';
-import { GroupOrgCanvas } from '../components/groupOrg/GroupOrgCanvas';
+import { GroupOrgEditCanvas } from '../components/groupOrg/GroupOrgEditCanvas';
 import { WorkbenchInsightPanel } from '../components/orgFlow/WorkbenchInsightPanel';
 import { WorkbenchGuideLinks } from '../components/orgFlow/WorkbenchGuideLinks';
 import { resolveGroupId } from '../components/orgFlow/orgFlowGroupSelection';
@@ -10,7 +10,7 @@ import { ALL_GROUPS_VIEW_ID } from '../services/buildOrgFlowGraph';
 import { buildOrgHealth } from '../services/orgHealth';
 import { useOrgFlowEditing } from '../hooks/useOrgFlowEditing';
 
-/** 工作台主視圖：匯報組織圖（可編輯）／組別組織圖（D2 唯讀）。 */
+/** 工作台主視圖：匯報組織圖／組別組織圖（兩者皆可編輯，共用同一編輯 session）。 */
 type WorkbenchView = 'reporting' | 'group';
 
 /**
@@ -97,11 +97,10 @@ export function WorkbenchPage() {
 
         <TabsContent value="group" className="flex flex-col gap-2">
           <p className="text-xs text-muted-foreground">
-            組別組織圖（每人一節點、依組別群組；可編輯為後續）
+            組別組織圖（每人一節點、依組別群組）：進編輯後可拖成員——拖到他人身上＝改主管、拖到分區空白＝改組別。
           </p>
-          <GroupOrgCanvas
-            orgData={orgData}
-            diffResult={editing.diffResult}
+          <GroupOrgEditCanvas
+            editing={editing}
             resolvedGroupId={resolvedGroupId}
             onGroupChange={setGroupId}
             selectedEmployeeId={selectedEmployeeId}

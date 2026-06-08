@@ -3,6 +3,7 @@ import {
   deleteAssignment,
   deleteEmployee,
   importOrgData,
+  reassignEmployeeGroup,
   reassignSupervisor,
   upsertAssignment,
   upsertEmployee,
@@ -386,6 +387,321 @@ describe('reassignSupervisor（拖人改匯報線）', () => {
     // 整筆不套用：回原 data，level 覆寫原封不動。
     expect(data).toBe(base);
     expect(data.assignments.find((a) => a.id === 'a-staff')!.level).toBe(7);
+  });
+});
+
+describe('reassignEmployeeGroup（拖人改組別）', () => {
+  /**
+   * 共用底圖：員工 staff；組別 g1（原組）、g2（目標組）皆 active；職級 j1。
+   * 各案再覆寫 staff 的歸屬與其他組別/歸屬。
+   */
+  function regroupBase(staffAssignment: ReturnType<typeof assignment>) {
+    return makeOrgData({
+      employees: [emp('staff'), emp('boss')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAssignment],
+    });
+  }
+
+  it('成功改組：groupId 改為新組、level 覆寫清為 undefined、error null', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      level: 5, // 既有手動層級覆寫
+    });
+    const base = regroupBase(staffAss);
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g2', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.groupId).toBe('g2');
+    // 核心：手動 level 覆寫被清為 undefined（換組後跟隨新組計算深度）。
+    expect(updated.level).toBeUndefined();
+  });
+
+  it('成功改組：changeLog 追加一筆且摘要含「改組別」與員工/組名', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    const base = makeOrgData({
+      employees: [emp('staff', { name: '小明' })],
+      groups: [
+        group('g1', { kind: 'department', name: '研發部' }),
+        group('g2', { kind: 'department', name: '行銷部' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const before = base.changeLog.length;
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g2', OP);
+
+    expect(error).toBeNull();
+    expect(data.changeLog.length).toBe(before + 1);
+    const entry = data.changeLog[0];
+    expect(entry.changeType).toBe('assignment_update');
+    expect(entry.operator).toBe(OP);
+    // 可讀摘要：含「改組別」與員工名、目標組名。
+    expect(entry.summary).toContain('改組別');
+    expect(entry.summary).toContain('小明');
+    expect(entry.summary).toContain('行銷部');
+  });
+
+  it('主歸屬拖入職能組擋：isPrimaryGroup 成員 → function 組 → error、data 為原參照、未變動、無新增 changeLog', () => {
+    // 主歸屬（home line）只能落在部門。拖入 kind:'function' 的職能組應被擋下，整筆不套用。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      isPrimaryGroup: true,
+      level: 5,
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('gf', { kind: 'function' }), // 職能組
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+    const beforeLog = base.changeLog.length;
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'gf', OP);
+
+    expect(error).not.toBeNull();
+    // 訊息含「主歸屬／職能／部門」其一即可。
+    expect(error).toMatch(/主歸屬|職能|部門/);
+    // 整筆不套用：回原 data 參照（reference 相等）。
+    expect(data).toBe(base);
+    // assignments 未變：groupId 仍為原組、level 覆寫原封不動。
+    const unchanged = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(unchanged.groupId).toBe('g1');
+    expect(unchanged.level).toBe(5);
+    // 未新增 changeLog。
+    expect(data.changeLog.length).toBe(beforeLog);
+  });
+
+  it('次要歸屬拖入職能組允許：isPrimaryGroup:false → function 組 → 成功、groupId 改、level 清', () => {
+    // 次要歸屬（dotted/兼任）可落在職能組，不被主歸屬規則誤擋。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      isPrimaryGroup: false,
+      level: 5,
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('gf', { kind: 'function' }), // 職能組
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'gf', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    // 次要歸屬成功落入職能組。
+    expect(updated.groupId).toBe('gf');
+    // 換組後手動 level 覆寫被清為 undefined。
+    expect(updated.level).toBeUndefined();
+  });
+
+  it('主歸屬改入另一部門組仍允許：isPrimaryGroup:true → department 組 → 成功套用', () => {
+    // 主歸屬規則只擋「非部門」目標；改入另一個部門組應正常成功。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      isPrimaryGroup: true,
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department' }), // 另一部門組
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g2', OP);
+
+    expect(error).toBeNull();
+    const updated = data.assignments.find((a) => a.id === 'a-staff')!;
+    expect(updated.groupId).toBe('g2');
+    // 主歸屬旗標維持不變。
+    expect(updated.isPrimaryGroup).toBe(true);
+  });
+
+  it('重複歸屬擋：同員工在新組已有歸屬 → error、data 為原物件（未變動）', () => {
+    const staffG1 = assignment('a-g1', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    // staff 在 g2 已有另一筆歸屬。
+    const staffG2 = assignment('a-g2', {
+      employeeId: 'staff',
+      groupId: 'g2',
+      jobLevelId: 'j1',
+      isPrimaryGroup: false,
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffG1, staffG2],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-g1', 'g2', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/已有歸屬/);
+    // 整筆不套用：回原 data（reference 相等、未寫 changeLog）。
+    expect(data).toBe(base);
+  });
+
+  it('inactive 組擋：目標組已停用 → error、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department', status: 'inactive' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g2', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/停用/);
+    expect(data).toBe(base);
+  });
+
+  it('循環擋：換組後在新顯示集合內形成 A↔B 互報 → error、data 為原 data 參照（未套用）', () => {
+    // staff 與 boss 互為主管，但原本在不同組（g1/g2）→ 同組偵測下未成循環。
+    // 把 boss 從 g2 改到 g1 後，兩人同在 g1 → 整體匯報關係出現 A↔B 循環。
+    // reassignEmployeeGroup 以「整體」匯報關係偵測，故換組這步即被擋。
+    const staffG1 = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      supervisorIds: ['boss'],
+      primarySupervisorId: 'boss',
+    });
+    const bossG2 = assignment('a-boss', {
+      employeeId: 'boss',
+      groupId: 'g2',
+      jobLevelId: 'j1',
+      supervisorIds: ['staff'],
+      primarySupervisorId: 'staff',
+    });
+    const base = makeOrgData({
+      employees: [emp('staff'), emp('boss')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffG1, bossG2],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-boss', 'g1', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/循環/);
+    // 整筆不套用：回原 data 參照（未產生新物件、未寫 changeLog）。
+    expect(data).toBe(base);
+  });
+
+  it('同組 no-op：newGroupId === 原 groupId → 回原 data、error null、changeLog 不增', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      level: 5,
+    });
+    const base = regroupBase(staffAss);
+    const beforeLog = base.changeLog.length;
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g1', OP);
+
+    expect(error).toBeNull();
+    // 同組無實質變更：回原 data 參照（不寫 changeLog、不清 level）。
+    expect(data).toBe(base);
+    expect(data.changeLog.length).toBe(beforeLog);
+    // 未變動 → 既有 level 覆寫原封不動。
+    expect(data.assignments.find((a) => a.id === 'a-staff')!.level).toBe(5);
+  });
+
+  it('空 assignmentId（co-leader）→ error、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    const base = regroupBase(staffAss);
+
+    const { data, error } = reassignEmployeeGroup(base, '', 'g2', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/無可調整的歸屬/);
+    expect(data).toBe(base);
+  });
+
+  it('不存在的 assignmentId → error、data 未變', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    const base = regroupBase(staffAss);
+
+    const { data, error } = reassignEmployeeGroup(base, 'no-such-id', 'g2', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/找不到/);
+    expect(data).toBe(base);
+  });
+
+  it('找不到目標組（newGroupId 不存在）→ error、data 未變', () => {
+    // 用次要歸屬（isPrimaryGroup:false）才會走到 validateAssignment 的「找不到組別」路徑；
+    // 主歸屬遇到不存在的組會先被「主歸屬只能落在部門」檢查短路（newGroup?.kind !== 'department'）。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      isPrimaryGroup: false,
+    });
+    const base = regroupBase(staffAss);
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'ghost', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/找不到組別/);
+    expect(data).toBe(base);
   });
 });
 

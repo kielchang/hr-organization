@@ -101,11 +101,11 @@ describe('WorkbenchPage 組織圖工作台 render smoke', () => {
 });
 
 /**
- * 主視圖切換 Tabs（匯報組織圖 ↔ 組別組織圖；D2 加入）：
+ * 主視圖切換 Tabs（匯報組織圖 ↔ 組別組織圖；D2 加入、Phase E 擴充為可編輯）：
  * - 預設停在 reporting（避免驚嚇）。
- * - 切到「組別組織圖」→ 顯示 GroupOrgCanvas（組框出現、reporting 工具列消失）。
+ * - 切到「組別組織圖」→ 顯示 GroupOrgEditCanvas（組框出現）。
  * - 切換時 groupId / selectedEmployeeId 不重設（lift 至頁面、跨 panel remount 保留）。
- * - 組別視圖為唯讀（無編輯工具列）。
+ * - 組別視圖（Phase E 起）**也有編輯工具列**，且與 reporting 共用同一編輯 session。
  *
  * Base UI Select（檢視組別下拉）以 findByRole('listbox') 等非同步查詢驅動，
  * 控制式（value 受控）下穩定；偶發 flaky 時單獨重跑確認（見任務說明）。
@@ -142,7 +142,7 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('切到「組別組織圖」→ 顯示 GroupOrgCanvas（組框出現、reporting 工具列消失、唯讀）', async () => {
+  it('切到「組別組織圖」→ 顯示 GroupOrgEditCanvas（組框出現、組別 tab 自帶編輯工具列）', async () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkbenchPage />, { route: '/workbench' });
 
@@ -155,14 +155,47 @@ describe('WorkbenchPage 主視圖切換（匯報 ↔ 組別）', () => {
       ).toBeGreaterThan(0),
     );
 
-    // 切走 reporting panel 後其編輯工具列卸載 → 唯讀（無「檢視模式」「進入編輯」）。
-    expect(screen.queryByText('檢視模式')).not.toBeInTheDocument();
+    // Phase E：組別 tab 現在改用 GroupOrgEditCanvas（含 EditModeToolbar），
+    // 不再唯讀。切走 reporting panel 後僅剩組別 tab 自己的工具列。
+    expect(screen.getByText('檢視模式')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: '進入編輯' }),
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: '進入編輯' }),
+    ).toBeInTheDocument();
 
     // 成員節點 id 已作用域化（`${groupId}::${employeeId}`）→ 全公司視角下
     // 跨多組同一員工不再產生重複 node key；切換不應有 console.error。
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('組別 tab 進入編輯：浮現「儲存檢查點／捨棄／發布」（與 reporting 共用同一 editing session）', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<WorkbenchPage />, { route: '/workbench' });
+
+    await user.click(screen.getByRole('tab', { name: /組別組織圖/ }));
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll('.react-flow__node-groupZone').length,
+      ).toBeGreaterThan(0),
+    );
+
+    // 在組別 tab 自帶工具列上進入編輯模式。
+    await user.click(screen.getByRole('button', { name: '進入編輯' }));
+
+    // 編輯態徽章與按鈕浮現（GroupOrgEditCanvas 與 reporting 共用 useOrgFlowEditing）。
+    expect(screen.getByText('編輯模式')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '儲存檢查點' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '捨棄' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '發布' })).toBeInTheDocument();
+
+    // 共用 session：切回匯報 tab，仍為編輯模式（同一 editing 狀態跨 tab 保留）。
+    await user.click(screen.getByRole('tab', { name: /匯報組織圖/ }));
+    expect(screen.getByText('編輯模式')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '儲存檢查點' }),
+    ).toBeInTheDocument();
+
     expect(errorSpy).not.toHaveBeenCalled();
   });
 

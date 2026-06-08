@@ -50,6 +50,7 @@ export function GroupOrgCanvas({
           onGroupChange={onGroupChange}
           selectedEmployeeId={selectedEmployeeId}
           onNodeSelect={onNodeSelect}
+          // 唯讀版面：isEditMode/onDraftChange 採預設（非編輯、no-op）；編輯能力走 GroupOrgEditCanvas。
         />
       </div>
       {asidePanel}

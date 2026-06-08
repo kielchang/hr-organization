@@ -269,6 +269,85 @@ export function reassignSupervisor(
   return { data: result.data, error: null };
 }
 
+/**
+ * 拖人改組別：把 `assignmentId` 那筆歸屬的 `groupId` 改成 `newGroupId`。
+ *
+ * 行為（仿 {@link reassignSupervisor} 契約）：
+ * - 找到該筆歸屬，將 `groupId` 改為 `newGroupId`。
+ * - **清除該歸屬的 `level` 覆寫**（設為 `undefined`）：換組後層級跟隨新組計算深度。
+ * - 走既有 `upsertAssignment`（內含 `validateAssignment`：自動擋「同員工在新組已有
+ *   歸屬」重複、inactive 組、找不到組別等）。
+ * - 循環防護：套用後以 `detectReportingCycleFromAssignments` 檢查整體匯報關係；若偵測到
+ *   循環，**不套用**並回 `error`（畫面端據此回滾節點位置）。
+ * - **同組 no-op**：`newGroupId === 原 groupId` → 回原資料、`error: null`（不寫 changeLog）。
+ * - 找不到該歸屬 / 該歸屬為 co-leader（`assignmentId` 為空，理論上 UI 已擋）→ 回 `error`。
+ *
+ * @returns `{ data, error }`；`error === null` 代表成功，`data` 為套用後的新資料。
+ *          失敗時 `data` 為**原資料**（未變動）。
+ */
+export function reassignEmployeeGroup(
+  data: OrgData,
+  assignmentId: string,
+  newGroupId: string,
+  operator: string,
+): { data: OrgData; error: string | null } {
+  if (!assignmentId) {
+    return { data, error: '此節點無可調整的歸屬紀錄' };
+  }
+
+  const assignment = data.assignments.find((a) => a.id === assignmentId);
+  if (!assignment) {
+    return { data, error: '找不到要調整的歸屬紀錄' };
+  }
+
+  // 同組：無實質變更，回原資料（不寫 changeLog）。
+  if (assignment.groupId === newGroupId) {
+    return { data, error: null };
+  }
+
+  // 主歸屬只能落在部門組（與 validateOrgData 同規則；validateAssignment 不含此檢查，於此補擋）。
+  const newGroup = data.groups.find((g) => g.id === newGroupId);
+  if (assignment.isPrimaryGroup === true && newGroup?.kind !== 'department') {
+    return { data, error: '主歸屬只能落在部門，無法改入職能組' };
+  }
+
+  const updated: Assignment = {
+    ...assignment,
+    groupId: newGroupId,
+    // 清除手動層級覆寫，換組後跟隨新組計算深度。
+    level: undefined,
+  };
+
+  // 驗證（沿用 validateAssignment：擋同員工在新組已有歸屬、inactive 組、找不到組別等）。
+  // 直接驗證＋套用（不走 upsertAssignment 以免其寫入 generic changeLog；此處改寫可讀摘要）。
+  const errors = validateAssignment(updated, data, updated.id);
+  if (errors.length) {
+    return { data, error: errors.join('；') };
+  }
+
+  let next: OrgData = {
+    ...data,
+    assignments: data.assignments.map((a) => (a.id === updated.id ? updated : a)),
+  };
+
+  // 循環防護：換組可能改變顯示集合內的匯報關係，套用後檢查整體匯報，有循環則整筆不套用。
+  const cycle = detectReportingCycleFromAssignments(next.assignments);
+  if (cycle.length > 0) {
+    return { data, error: '此調整會造成匯報循環，已取消' };
+  }
+
+  // changeLog 摘要：以可讀的員工/組別名稱呈現（查無則回退 id）。
+  const emp = data.employees.find((e) => e.id === assignment.employeeId);
+  next = appendChange(
+    next,
+    'assignment_update',
+    `改組別：員工 ${emp?.name ?? assignment.employeeId} → 組別 ${newGroup?.name ?? newGroupId}`,
+    operator,
+  );
+
+  return { data: next, error: null };
+}
+
 export function createEmptyAssignment(employeeId: string): Assignment {
   return {
     id: newId('a'),

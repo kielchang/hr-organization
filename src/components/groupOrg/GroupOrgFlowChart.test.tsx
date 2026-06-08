@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import { renderWithProviders } from '../../test/renderWithProviders';
 import { GroupOrgFlowChart } from './GroupOrgFlowChart';
 import { ALL_GROUPS_VIEW_ID } from '../../services/buildGroupOrgGraph';
 import { computeOrgDiff } from '../../services/computeOrgDiff';
@@ -63,8 +64,12 @@ function renderChart(props?: {
   selectedEmployeeId?: string | null;
   onNodeSelect?: (id: string | null) => void;
   diffResult?: import('../../types/editSession').OrgDiffResult | null;
+  isEditMode?: boolean;
+  onDraftChange?: (next: OrgData) => void;
 }) {
-  return render(
+  // GroupOrgFlowChart 內部以 useOrg() 取 operator（拖曳改主管/改組寫 changeLog 需要）→
+  // 以 renderWithProviders 套 OrgProvider；唯讀路徑不觸發寫入，僅滿足 context 依賴。
+  return renderWithProviders(
     <GroupOrgFlowChart
       orgData={props?.orgData ?? seedOrg()}
       selectedGroupId={props?.selectedGroupId ?? ALL_GROUPS_VIEW_ID}
@@ -72,6 +77,8 @@ function renderChart(props?: {
       selectedEmployeeId={props?.selectedEmployeeId ?? null}
       onNodeSelect={props?.onNodeSelect ?? vi.fn()}
       diffResult={props?.diffResult}
+      isEditMode={props?.isEditMode}
+      onDraftChange={props?.onDraftChange}
     />,
   );
 }
@@ -279,5 +286,140 @@ describe('GroupOrgFlowChart 唯讀組別組織圖', () => {
     const a0 = container.querySelector('[data-id="g1::a0"]');
     expect(a0).not.toBeNull();
     expect(a0!.querySelector('.bg-amber-50')).toBeNull();
+  });
+});
+
+/**
+ * GroupOrgFlowChart 編輯模式（Phase E）smoke。
+ *
+ * jsdom 無真實佈局/指標 → React Flow 的拖曳 drop（getIntersectingNodes 命中判定）
+ * 不可靠，故此處不模擬完整拖放手勢；改驗「可拖性」這層純宣告式狀態：
+ * - isEditMode=true 時有本組歸屬的成員節點掛上 `draggable` class。
+ * - co-leader 成員（無本組歸屬、assignmentId=''）即使在編輯態仍**不可拖**。
+ * - 唯讀（isEditMode 未傳）與編輯態的等價對照。
+ * 落點分流（員工優先→分區）的純邏輯內嵌於元件 useCallback、無對外導出 → 不在此單測；
+ * 其行為由 reassignSupervisor / reassignEmployeeGroup 的服務層單測涵蓋。
+ */
+describe('GroupOrgFlowChart 編輯模式 smoke', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  /**
+   * boss(g1, leaderId) ← mid(g1)；另有 outsider 在 g2 但因 leaderId='boss'（組外組長）
+   * 被推導為 g1 的 co-leader（無本組 g1 歸屬 → assignmentId=''、不可拖）。
+   */
+  function editSeed(): OrgData {
+    return makeOrgData({
+      employees: [
+        emp('boss', { name: '老闆' }),
+        emp('mid', { name: '中階' }),
+      ],
+      groups: [group('g1', { name: '業務部', kind: 'department', leaderId: 'boss' })],
+      jobLevels: [jobLevel('j1', 40, { name: '經理' })],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1', jobLevelId: 'j1' }),
+        assignment('a-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          jobLevelId: 'j1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+      ],
+    });
+  }
+
+  it('editing 傳入 isEditMode=true：有本組歸屬的成員節點為可拖（draggable class）', () => {
+    const { container } = renderChart({
+      orgData: editSeed(),
+      selectedGroupId: 'g1',
+      isEditMode: true,
+    });
+
+    const employeeNodes = container.querySelectorAll(
+      '.react-flow__node-employee',
+    );
+    expect(employeeNodes.length).toBeGreaterThan(0);
+    // boss 與 mid 皆有本組 g1 歸屬 → 編輯態下可拖。
+    for (const n of employeeNodes) {
+      expect(n.classList.contains('draggable')).toBe(true);
+    }
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('唯讀↔編輯對照：同份資料唯讀無 draggable、編輯態有 draggable', () => {
+    const data = editSeed();
+
+    const ro = renderChart({ orgData: data, selectedGroupId: 'g1' });
+    const roNodes = ro.container.querySelectorAll('.react-flow__node-employee');
+    expect(roNodes.length).toBeGreaterThan(0);
+    for (const n of roNodes) {
+      expect(n.classList.contains('draggable')).toBe(false);
+    }
+    ro.unmount();
+
+    const ed = renderChart({
+      orgData: data,
+      selectedGroupId: 'g1',
+      isEditMode: true,
+    });
+    const edNodes = ed.container.querySelectorAll('.react-flow__node-employee');
+    for (const n of edNodes) {
+      expect(n.classList.contains('draggable')).toBe(true);
+    }
+  });
+
+  it('co-leader 成員（無本組歸屬、assignmentId=空）編輯態仍不可拖', () => {
+    // sales leaderId=CEO（不在 sales）；s1 主管 COO（exec leaderId）→ COO 被推導為
+    // sales 的 co-leader，但 COO 在 sales 無歸屬 → 該節點 assignmentId='' → 不可拖。
+    const data = makeOrgData({
+      employees: [
+        emp('CEO', { name: '執行長' }),
+        emp('COO', { name: '營運長' }),
+        emp('s1', { name: '業務甲' }),
+      ],
+      groups: [
+        group('sales', { name: '業務部', leaderId: 'CEO' }),
+        group('exec', { name: '高管', leaderId: 'COO' }),
+      ],
+      assignments: [
+        assignment('x-ceo', { employeeId: 'CEO', groupId: 'exec' }),
+        assignment('x-coo', {
+          employeeId: 'COO',
+          groupId: 'exec',
+          supervisorIds: ['CEO'],
+          primarySupervisorId: 'CEO',
+        }),
+        assignment('x-s1', {
+          employeeId: 's1',
+          groupId: 'sales',
+          supervisorIds: ['COO'],
+          primarySupervisorId: 'COO',
+        }),
+      ],
+    });
+
+    const { container } = renderChart({
+      orgData: data,
+      selectedGroupId: 'sales',
+      isEditMode: true,
+    });
+
+    // sales 框內：s1（本組歸屬）→ 可拖；COO（co-leader、無 sales 歸屬）→ 不可拖。
+    const s1Node = container.querySelector('[data-id="sales::s1"]');
+    const cooNode = container.querySelector('[data-id="sales::COO"]');
+    expect(s1Node).not.toBeNull();
+    expect(cooNode).not.toBeNull();
+    expect(s1Node!.classList.contains('draggable')).toBe(true);
+    // 核心：co-leader 成員即使在編輯態仍不可拖（無可改的本組歸屬）。
+    expect(cooNode!.classList.contains('draggable')).toBe(false);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

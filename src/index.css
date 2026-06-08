@@ -74,6 +74,15 @@ body,
   /* 極淡同色相邊（非 dashed 框）：只勾勒分區範圍、不搶成員節點視覺。 */
   border: 1px solid hsl(var(--zone-hue, 212) 45% 80% / 0.45);
   box-shadow: inset 0 0 0 1px hsl(var(--zone-hue, 212) 50% 90% / 0.3);
+  transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+/* 拖曳改組 drop target：落點分區強調（同色相加深 + 內框），與員工 drop target
+   （邊框 + primary ring）區隔——一眼看出「放這＝改組」vs「放這＝改主管」。 */
+.group-org-zone.group-org-zone--drop-target {
+  background: hsl(var(--zone-hue, 212) 65% 92% / 0.85);
+  border-color: hsl(var(--zone-hue, 212) 55% 60% / 0.7);
+  box-shadow: inset 0 0 0 2px hsl(var(--zone-hue, 212) 60% 65% / 0.6);
 }
 
 .react-flow__panel.org-flow-chrome-panel {

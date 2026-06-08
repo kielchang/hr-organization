@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { Crown, Users } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { GroupZoneNodeData } from '../../services/buildGroupOrgGraph';
 
 /**
@@ -15,6 +16,8 @@ export interface GroupZoneRenderData extends GroupZoneNodeData {
   leaderName: string | null;
   /** 共管（co-leader）姓名陣列，順序對齊 coLeaderIds。 */
   coLeaderNames: string[];
+  /** 拖曳改組懸停目標時高亮（放開＝把被拖成員改到此組）。 */
+  isDropTarget?: boolean;
 }
 
 /**
@@ -39,11 +42,15 @@ function GroupZoneNodeComponent({ data }: NodeProps) {
 
   const ariaLabel = `組別分區 ${d.groupName}（組長：${d.leaderName ?? '未指定'}${
     coLeaderText ? `；共管：${coLeaderText}` : ''
-  }）`;
+  }）${d.isDropTarget ? '：放開可將成員改入此組' : ''}`;
 
   return (
     <div
-      className="group-org-zone pointer-events-none h-full w-full"
+      className={cn(
+        'group-org-zone pointer-events-none h-full w-full',
+        // 拖曳改組懸停高亮（同色相加深 + 內框），與員工 drop target 樣式區隔。
+        d.isDropTarget && 'group-org-zone--drop-target',
+      )}
       // CSS 變數承載分區色相；--zone-hue 供 .group-org-zone 套低彩度淡色背景/邊。
       style={{ ['--zone-hue' as string]: String(d.hue) }}
       // 分區為背景視覺分組；aria 標示組別與組長供讀屏使用者理解（不只靠顏色）。
