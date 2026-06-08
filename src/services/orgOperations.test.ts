@@ -687,8 +687,9 @@ describe('reassignEmployeeGroup（拖人改組別）', () => {
   });
 
   it('找不到目標組（newGroupId 不存在）→ error、data 未變', () => {
-    // 用次要歸屬（isPrimaryGroup:false）才會走到 validateAssignment 的「找不到組別」路徑；
-    // 主歸屬遇到不存在的組會先被「主歸屬只能落在部門」檢查短路（newGroup?.kind !== 'department'）。
+    // 次要歸屬（isPrimaryGroup:false）：不存在的組會被函式最前面的「組不存在」early guard
+    // （!newGroup）攔下，直接回「找不到組別」——不再走 validateAssignment 路徑。
+    // 註：主歸屬亦同（見下一條測試）；early guard 在主歸屬部門檢查之前，無短路差異。
     const staffAss = assignment('a-staff', {
       employeeId: 'staff',
       groupId: 'g1',
@@ -701,6 +702,26 @@ describe('reassignEmployeeGroup（拖人改組別）', () => {
 
     expect(error).not.toBeNull();
     expect(error).toMatch(/找不到組別/);
+    expect(data).toBe(base);
+  });
+
+  it('主歸屬拖入不存在的組 → 回「找不到組別」而非「主歸屬只能落部門」、data 未變', () => {
+    // 修正重點：不存在的組被最前面的 early guard（!newGroup）攔下，回「找不到組別」，
+    // 不再被「主歸屬只能落在部門」檢查短路成誤導訊息。
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+      isPrimaryGroup: true,
+    });
+    const base = regroupBase(staffAss);
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'ghost', OP);
+
+    expect(error).not.toBeNull();
+    expect(error).toMatch(/找不到組別/);
+    // 證明不再被主歸屬檢查短路：不應回「主歸屬只能落…」訊息。
+    expect(error).not.toMatch(/主歸屬/);
     expect(data).toBe(base);
   });
 });

@@ -305,9 +305,14 @@ export function reassignEmployeeGroup(
     return { data, error: null };
   }
 
-  // 主歸屬只能落在部門組（與 validateOrgData 同規則；validateAssignment 不含此檢查，於此補擋）。
+  // 目標組必須存在（先擋，避免「不存在」被下方主歸屬檢查的 optional chaining 誤判為「非部門」）。
   const newGroup = data.groups.find((g) => g.id === newGroupId);
-  if (assignment.isPrimaryGroup === true && newGroup?.kind !== 'department') {
+  if (!newGroup) {
+    return { data, error: '找不到組別' };
+  }
+
+  // 主歸屬只能落在部門組（與 validateOrgData 同規則；validateAssignment 不含此檢查，於此補擋）。
+  if (assignment.isPrimaryGroup === true && newGroup.kind !== 'department') {
     return { data, error: '主歸屬只能落在部門，無法改入職能組' };
   }
 
@@ -341,7 +346,7 @@ export function reassignEmployeeGroup(
   next = appendChange(
     next,
     'assignment_update',
-    `改組別：員工 ${emp?.name ?? assignment.employeeId} → 組別 ${newGroup?.name ?? newGroupId}`,
+    `改組別：員工 ${emp?.name ?? assignment.employeeId} → 組別 ${newGroup.name}`,
     operator,
   );
 
