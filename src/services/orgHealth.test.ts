@@ -781,13 +781,30 @@ describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
         health.findings.some((f) => f.id === 'group-mismatch:sales:s3'),
       ).toBe(false);
 
-      // readiness 關鍵不變式：parallel-colead 不屬任何維度 → structure 維完全不受影響。
+      // readiness 關鍵不變式：parallel-colead 不屬任何維度 → 它對 structure 維零影響。
       // （此 fixture 另有 span-narrow(info)/spof(warning) 等與 Phase F 無關的 finding，
       //  會影響 span/keyPerson 維與 total；故只精準斷言「parallel-colead 不扣分」的結構維。）
+      //
+      // 組長層級精煉同批落地：exec 組 leaderId=coo，但 coo 在 exec 組內無任何部屬
+      //（exec 成員為 ceo/coo，ceo 主管 null、coo 主管 ceo → 無人 primary=coo），且 exec
+      //  無 active co-leader → 觸發 leader-no-report:exec(warning, category=group-mismatch)。
+      //  故 structure 維現有「恰 1 筆」warning（leader-no-report:exec）→ score=100−15=85。
+      //  關鍵不變式仍守住：這 1 筆來自 leader-no-report，**不是** parallel-colead。
       const r = buildReadiness(health);
       const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
-      expect(byKey.structure.score).toBe(100); // 未被 parallel-colead 扣分
-      expect(byKey.structure.findingCount).toBe(0); // parallel-colead 不計入 structure
+      expect(byKey.structure.findingCount).toBe(1); // 僅 leader-no-report:exec
+      expect(byKey.structure.score).toBe(100 - 15); // 85
+      // 該唯一 structure finding 確為 leader-no-report:exec，且非 parallel-colead。
+      expect(health.findings.some((f) => f.id === 'leader-no-report:exec')).toBe(
+        true,
+      );
+      // sales 無 leader-no-report：原因是「組長 ceo 在組內有 active 直接部屬」（s1/s2 的
+      // primary 主管 = ceo = leaderId）→ hasDirectReport=true → 抑制。
+      // 註：co-leader 豁免已移除，此處抑制純粹來自「組長本人有組內直接部屬」，與 coo 是否
+      // 為 co-leader 無關。
+      expect(
+        health.findings.some((f) => f.id === 'leader-no-report:sales'),
+      ).toBe(false);
 
       // 直接守門：parallel-colead 這筆 finding 不存在於任何 readiness 維度的計分集合內。
       const PARALLEL = health.findings.find(
@@ -1235,8 +1252,13 @@ describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
       const { findings } = buildOrgHealth(data);
       // coLead 為 co-leader → parallel-colead(info)。
       expect(findings.some((f) => f.id === 'parallel-colead:teamA:coLead')).toBe(true);
-      // 同層平行 → 不報任何 group-mismatch（含 level-anomaly）warning。
-      expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+      // 規則 3（本案焦點）：同層平行 → 不報 level-anomaly；規則 2 也豁免 → 不報 group-mismatch:teamA:*。
+      expect(findings.some((f) => f.id.startsWith('level-anomaly:'))).toBe(false);
+      expect(findings.some((f) => f.id.startsWith('group-mismatch:teamA'))).toBe(false);
+      // 規則 4（豁免移除後）：teamA 組長 lead 0 直接部屬、≥2 active 成員（lead、peer）、
+      // peer 掛組外 coLead → 仍報 leader-no-report:teamA（co-leader 不再豁免）。此筆同屬
+      // group-mismatch category 但與規則 2/3 無關，故不再用「無 group-mismatch category」斷言。
+      expect(findings.some((f) => f.id === 'leader-no-report:teamA')).toBe(true);
     });
 
     it('成員本身是 co-leader 時，其與組內主管的層級比較被排除（規則 3 的 coLeaderIds.includes(a.employeeId) 分支）', () => {
@@ -1274,6 +1296,225 @@ describe('buildOrgHealth — 組別↔主管一致性（Phase F）', () => {
       });
       const { findings } = buildOrgHealth(data);
       expect(findings.some((f) => f.category === 'group-mismatch')).toBe(false);
+    });
+  });
+
+  describe('規則 4：leader-no-report（warning、組長在組內無部屬、category=group-mismatch）', () => {
+    /**
+     * 組長層級精煉同批落地的新警示：組別主管（`leaderId`）轄下若無對應成員，代表組設定
+     * 可能有誤 → 標記 warning（id 前綴 `leader-no-report:`、category 沿用 group-mismatch
+     * → 掛 readiness structure 維）。
+     *
+     * 觸發條件（皆滿足、皆只算 active）：
+     *  - 組 active、`leaderId` 非 null 且 active；
+     *  - 組有 ≥2 名 active 成員（單一 active 成員＝組長本人 → 不報，避免噪音）；
+     *  - 沒有任何「在組內的 active 成員」其「在本組那筆 assignment」的
+     *    primarySupervisorId = leaderId（即組長本人在組內無 active 直接部屬）。
+     *
+     * 重要：co-leader 的存在**不再豁免**（使用者定案）。組長 0 直接部屬、active 成員全掛
+     * co-leader 下時仍會報 warning——否則「組設定可能有誤」會被靜默放過，違反本意。
+     * 成員數與直接部屬檢查皆**只算 active**，與同檔 span 等規則的 active-only 慣例一致。
+     *
+     * 下列正案例命中；負案例分別守護「組長有 active 直接部屬／單一 active 成員／組長非
+     * active／組別非 active」四種抑制，並以 active-only 案守護「inactive 成員不湊數、
+     * inactive 部屬不算有效部屬」。
+     */
+
+    it('正案例：active 組長在組內、≥2 成員、無人 primary 指向組長、無 co-leader → leader-no-report(warning)、掛 structure 維', () => {
+      // dept leaderId=lead（組內、無上級）；另一成員 other primary 主管=null（無人報 lead）。
+      // 成員數 2、無 active co-leader、無人 primary=lead → 命中 leader-no-report:dept。
+      const data = makeOrgData({
+        employees: [emp('lead', { name: '組長' }), emp('other', { name: '路人' })],
+        groups: [group('dept', { kind: 'department', name: '部門', leaderId: 'lead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+          // other 在組內、無 primary 主管（不報 lead）→ 組長轄下無對應部屬。
+          assignment('as-other', { employeeId: 'other', groupId: 'dept', jobLevelId: 'j1' }),
+        ],
+      });
+      const health = buildOrgHealth(data);
+      const finding = health.findings.find((f) => f.id === 'leader-no-report:dept');
+      expect(finding?.severity).toBe('warning');
+      expect(finding?.category).toBe('group-mismatch');
+      expect(finding?.employeeId).toBe('lead');
+      expect(finding?.groupId).toBe('dept');
+      expect(finding?.message).toContain('組長');
+      expect(finding?.message).toContain('部門');
+
+      // 掛 structure 維（group-mismatch category）→ structure 自 100 扣 15。
+      const r = buildReadiness(health);
+      const byKey = Object.fromEntries(r.dimensions.map((d) => [d.key, d]));
+      expect(byKey.structure.findingCount).toBeGreaterThanOrEqual(1);
+      expect(byKey.structure.score).toBeLessThanOrEqual(100 - 15);
+    });
+
+    it('active-only 負案例：2 名成員但 1 名 inactive → active 僅組長本人 → 不報（inactive 不湊數）', () => {
+      // dept leaderId=lead；組內共 2 名成員（lead、ghost），但 ghost 為 inactive →
+      // active 成員僅 lead 一人（< 2）→ 與「單一成員（組長本人）」等價 → 抑制。
+      // 守護：成員數只算 active，inactive 成員不得湊滿 ≥2 門檻而誤報。
+      const data = makeOrgData({
+        employees: [
+          emp('lead', { name: '組長' }),
+          emp('ghost', { status: 'inactive' }),
+        ],
+        groups: [group('dept', { kind: 'department', name: '部門', leaderId: 'lead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+          // ghost 在組內但 inactive → 不計入 active 成員數。
+          assignment('as-ghost', { employeeId: 'ghost', groupId: 'dept', jobLevelId: 'j1' }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'leader-no-report:dept')).toBe(false);
+    });
+
+    it('active-only 正案例：指向組長的唯一部屬是 inactive 員工 → 不算有效部屬 → 應報', () => {
+      // dept leaderId=lead；組內 3 名成員（lead、deadSub、liveOther）。
+      //  - deadSub primary 主管=lead，但 deadSub 為 inactive → 不算組長的 active 直接部屬；
+      //  - liveOther 為 active 但 primary=null（不報 lead）。
+      // active 成員＝lead、liveOther（≥2）；無任何 active 成員 primary=lead → 命中。
+      // 守護：直接部屬檢查只算 active——inactive 員工指向組長不得抑制警示。
+      const data = makeOrgData({
+        employees: [
+          emp('lead', { name: '組長' }),
+          emp('deadSub', { status: 'inactive' }),
+          emp('liveOther', { name: '其他在職成員' }),
+        ],
+        groups: [group('dept', { kind: 'department', name: '部門', leaderId: 'lead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+          // deadSub primary=lead 但 inactive → 非有效直接部屬。
+          assignment('as-deadSub', {
+            employeeId: 'deadSub',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['lead'],
+            primarySupervisorId: 'lead',
+          }),
+          // liveOther active 但無 primary 主管。
+          assignment('as-liveOther', {
+            employeeId: 'liveOther',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      const finding = findings.find((f) => f.id === 'leader-no-report:dept');
+      expect(finding?.severity).toBe('warning');
+      expect(finding?.category).toBe('group-mismatch');
+      expect(finding?.employeeId).toBe('lead');
+    });
+
+    it('負案例：有成員 primary 指向組長（組長有直接部屬）→ 不報', () => {
+      // dept leaderId=lead；成員 sub primary 主管=lead → 組長有直接部屬 → 抑制。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('sub')],
+        groups: [group('dept', { kind: 'department', leaderId: 'lead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-sub', {
+            employeeId: 'sub',
+            groupId: 'dept',
+            jobLevelId: 'j1',
+            supervisorIds: ['lead'],
+            primarySupervisorId: 'lead',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'leader-no-report:dept')).toBe(false);
+    });
+
+    it('負案例：單一成員（組長本人）→ 不報（避免噪音）', () => {
+      // dept 僅 lead 一名成員（即組長本人）→ members.size < 2 → 不報。
+      const data = makeOrgData({
+        employees: [emp('lead')],
+        groups: [group('dept', { kind: 'department', leaderId: 'lead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'leader-no-report:dept')).toBe(false);
+    });
+
+    it('正案例（豁免移除後反轉）：組長 0 直接部屬、active 成員全掛 co-leader 下 → 仍報 leader-no-report（co-leader 不再豁免）', () => {
+      // sales leaderId=lead（組內，無組內部屬）；成員 m 主管 coLead（組外、exec leaderId →
+      // 夠格 co-leader）。
+      //
+      // 舊行為：sales 有 active co-leader coLead → 整組豁免 → 不報 leader-no-report:sales。
+      // 新行為（對齊使用者本意）：豁免條件只看「組長本人在組內有無 active 直接部屬」，
+      //   co-leader 的存在不再豁免 → 組長 lead 0 直接部屬、≥2 active 成員（lead、m）、
+      //   無人 primary=lead → 命中 leader-no-report:sales(warning)。
+      // parallel-colead(info) 仍照常標示合法共管（兩者不互斥）。
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('coLead'), emp('m')],
+        groups: [
+          group('sales', { name: '業務部', leaderId: 'lead' }),
+          group('exec', { name: '高管組', leaderId: 'coLead' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'sales', jobLevelId: 'j1' }),
+          assignment('as-coLead', { employeeId: 'coLead', groupId: 'exec', jobLevelId: 'j1' }),
+          // m 主管 coLead（組外、夠格）→ coLead 為 sales co-leader；無人 primary 指向 lead。
+          assignment('as-m', {
+            employeeId: 'm',
+            groupId: 'sales',
+            jobLevelId: 'j1',
+            supervisorIds: ['coLead'],
+            primarySupervisorId: 'coLead',
+          }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      // 反轉：co-leader 不再豁免 → 仍報 leader-no-report:sales(warning)。
+      const finding = findings.find((f) => f.id === 'leader-no-report:sales');
+      expect(finding?.severity).toBe('warning');
+      expect(finding?.category).toBe('group-mismatch');
+      expect(finding?.employeeId).toBe('lead');
+      // parallel-colead(info) 仍照常標示合法共管（與 leader-no-report 並存、不互斥）。
+      expect(findings.some((f) => f.id === 'parallel-colead:sales:coLead')).toBe(true);
+    });
+
+    it('負案例：組長非 active → 不報', () => {
+      // dept leaderId=deadLead（inactive）→ !isActive(leaderId) 守門 → 不報。
+      const data = makeOrgData({
+        employees: [
+          emp('deadLead', { status: 'inactive' }),
+          emp('other'),
+        ],
+        groups: [group('dept', { kind: 'department', leaderId: 'deadLead' })],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-dead', { employeeId: 'deadLead', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-other', { employeeId: 'other', groupId: 'dept', jobLevelId: 'j1' }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'leader-no-report:dept')).toBe(false);
+    });
+
+    it('負案例：組別 status!==active → 整組跳過、不報 leader-no-report', () => {
+      const data = makeOrgData({
+        employees: [emp('lead'), emp('other')],
+        groups: [
+          group('dept', { kind: 'department', leaderId: 'lead', status: 'inactive' }),
+        ],
+        jobLevels: [jobLevel('j1', 10)],
+        assignments: [
+          assignment('as-lead', { employeeId: 'lead', groupId: 'dept', jobLevelId: 'j1' }),
+          assignment('as-other', { employeeId: 'other', groupId: 'dept', jobLevelId: 'j1' }),
+        ],
+      });
+      const { findings } = buildOrgHealth(data);
+      expect(findings.some((f) => f.id === 'leader-no-report:dept')).toBe(false);
     });
   });
 

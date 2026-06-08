@@ -636,6 +636,58 @@ export function buildOrgHealth(
     }
   }
 
+  // 規則 4：組長無組內部屬（warning，併入 group-mismatch category）。
+  // 使用者定案：組別主管（leaderId）轄下若無對應成員，代表組設定可能有誤 → 標記警示。
+  // 判斷只看「組長本人在組內有無直接部屬」，co-leader 的存在不再豁免——否則組長 0 部屬、
+  // 成員全掛 co-leader 下時會被靜默放過，違反本意。
+  //
+  // 觸發條件（皆滿足）：
+  // - 組 G 為 active、`leaderId` 非 null 且 active；
+  // - G 有 ≥2 名 active 成員（單一成員即組長本人 → 不警示，避免噪音）；
+  // - 沒有任何「在 G 的 active 成員」其「在 G 那筆 assignment」的 primarySupervisorId = leaderId
+  //   （即組長在組內沒有任何 active 直接部屬）。
+  // 成員數與部屬檢查皆只算 active，與同檔 span 等規則的 active-only 慣例一致。
+  // category 沿用 group-mismatch（掛 readiness structure 維、避免 category 爆量），
+  // 以 id 前綴 leader-no-report 與 message 區分；不動既有 parallel-colead。
+  //
+  // 「組內成員的 primary 主管 = leaderId」以該成員「在本組那筆 assignment」的
+  // primarySupervisorId 判定（同一員工在同組理論上唯一；取第一筆穩定，與組視圖一致）。
+  const inGroupPrimarySupByGroup = new Map<string, Map<string, string | null>>();
+  for (const a of normalized.assignments) {
+    let perGroup = inGroupPrimarySupByGroup.get(a.groupId);
+    if (!perGroup) {
+      perGroup = new Map<string, string | null>();
+      inGroupPrimarySupByGroup.set(a.groupId, perGroup);
+    }
+    if (!perGroup.has(a.employeeId)) {
+      perGroup.set(a.employeeId, a.primarySupervisorId);
+    }
+  }
+  for (const [groupId, leadership] of leadershipByGroup) {
+    const leaderId = leadership.leaderId;
+    if (leaderId == null || !isActive(leaderId)) continue;
+    const group = groupById.get(groupId);
+    if (!group || group.status !== 'active') continue;
+    const members = membersByGroup.get(groupId);
+    const activeMembers = members
+      ? [...members].filter((eid) => isActive(eid))
+      : [];
+    if (activeMembers.length < 2) continue; // 單一 active 成員（即組長本人）不警示
+    const supByMember = inGroupPrimarySupByGroup.get(groupId);
+    const hasDirectReport = activeMembers.some(
+      (eid) => eid !== leaderId && supByMember?.get(eid) === leaderId,
+    );
+    if (hasDirectReport) continue;
+    findings.push({
+      id: `leader-no-report:${groupId}`,
+      severity: 'warning',
+      category: 'group-mismatch',
+      message: `組「${group.name}」的組長「${nameOf(leaderId)}」在組內沒有部屬，組設定可能有誤。`,
+      employeeId: leaderId,
+      groupId,
+    });
+  }
+
   // ---- summary ----
   const warningCount = findings.filter((f) => f.severity === 'warning').length;
   const summary: OrgHealthSummary = {

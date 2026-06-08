@@ -841,6 +841,230 @@ describe('buildGroupOrgGraph co-leader 納入分區與同層', () => {
   });
 });
 
+describe('buildGroupOrgGraph 組長置頂（leaderId 為根的 top-down BFS）', () => {
+  /**
+   * 組內層級精煉：層級骨架改「以組長（`leaderId`）+ co-leaders 為根（level 1）的
+   * top-down BFS」——取代舊「以 computePrimaryDepth 求組內匯報根再置頂」。
+   *
+   * 規則（與實作 layoutIntraGroup 對齊）：
+   * - 根集合 = {leaderId} ∪ {co-leaders} → 皆 level 1（頂，且同 Y 帶平行同層共管）。
+   * - 其餘成員：由根集合沿「組內 primary 主管 → 部屬」往下 BFS，逐層 +1。
+   * - 無法從根集合到達者（鏈不指向根、或主管在組外且非 co-lead）→ level 1（斷開/待確認）。
+   * - leaderId 為 null 時 fallback：以 computePrimaryDepth（組內匯報根=1）置頂，維持可用。
+   *
+   * 斷言聚焦「層級數值（level）與同 Y 帶」的結構不變式，不驗絕對像素。
+   */
+
+  /** 取某員工攤平節點的 level。 */
+  function levelOf(nodes: Node[], employeeId: string, groupId?: string): number {
+    return (memberNode(nodes, employeeId, groupId)!.data as { level: number })
+      .level;
+  }
+
+  it('顯式組長置頂：leaderId 指定的人為 level 1（即使其在組內匯報鏈中非根）', () => {
+    // sales leaderId=mgr（顯式）。匯報鏈：boss ← mgr ← staff（boss 為匯報根、非組長）。
+    // 舊行為（匯報根置頂）：boss=1。新行為（組長置頂）：mgr=1（組長為根）。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mgr'), emp('staff')],
+      groups: [group('sales', { leaderId: 'mgr' })],
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'sales' }),
+        assignment('a-mgr', {
+          employeeId: 'mgr',
+          groupId: 'sales',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-staff', {
+          employeeId: 'staff',
+          groupId: 'sales',
+          supervisorIds: ['mgr'],
+          primarySupervisorId: 'mgr',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'sales');
+    // 組長 mgr 為 level 1（頂）。
+    expect(levelOf(r.nodes, 'mgr')).toBe(1);
+    // 由組長往下：staff（主管 mgr）= level 2。
+    expect(levelOf(r.nodes, 'staff')).toBe(levelOf(r.nodes, 'mgr') + 1);
+    // boss 的 primary 主管不在「組長子樹」中（boss 是 mgr 的上級、非部屬）→ BFS 觸及不到
+    // → 落 level 1（與組長並排，斷開/待確認）。
+    expect(levelOf(r.nodes, 'boss')).toBe(1);
+  });
+
+  it('子樹成員 = 主管 level + 1（沿組長往下逐層遞增）', () => {
+    // sales leaderId=lead；lead ← a ← b 線性子樹。
+    const data = makeOrgData({
+      employees: [emp('lead'), emp('a'), emp('b')],
+      groups: [group('sales', { leaderId: 'lead' })],
+      assignments: [
+        assignment('x-lead', { employeeId: 'lead', groupId: 'sales' }),
+        assignment('x-a', {
+          employeeId: 'a',
+          groupId: 'sales',
+          supervisorIds: ['lead'],
+          primarySupervisorId: 'lead',
+        }),
+        assignment('x-b', {
+          employeeId: 'b',
+          groupId: 'sales',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'sales');
+    expect(levelOf(r.nodes, 'lead')).toBe(1);
+    expect(levelOf(r.nodes, 'a')).toBe(2);
+    expect(levelOf(r.nodes, 'b')).toBe(3);
+  });
+
+  it('組長 + co-leaders 皆 level 1 且同 Y（平行同層共管）', () => {
+    // sales leaderId=lead（組內）；成員 m2 主管 coLead（組外、exec 組長 → 夠格 co-leader）。
+    const data = makeOrgData({
+      employees: [emp('lead'), emp('coLead'), emp('m'), emp('m2')],
+      groups: [group('sales', { leaderId: 'lead' }), group('exec', { leaderId: 'coLead' })],
+      assignments: [
+        assignment('x-lead', { employeeId: 'lead', groupId: 'sales' }),
+        assignment('x-co', { employeeId: 'coLead', groupId: 'exec' }),
+        assignment('x-m', {
+          employeeId: 'm',
+          groupId: 'sales',
+          supervisorIds: ['lead'],
+          primarySupervisorId: 'lead',
+        }),
+        assignment('x-m2', {
+          employeeId: 'm2',
+          groupId: 'sales',
+          supervisorIds: ['coLead'],
+          primarySupervisorId: 'coLead',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'sales');
+    // co-leader（coLead）被推導為 sales 共管 → 納入分區。
+    expect(r.leadership.get('sales')?.coLeaderIds).toContain('coLead');
+    // 組長與 co-leader 皆 level 1。
+    expect(levelOf(r.nodes, 'lead', 'sales')).toBe(1);
+    expect(levelOf(r.nodes, 'coLead', 'sales')).toBe(1);
+    // 同層 → 同 Y 帶。
+    expect(memberNode(r.nodes, 'coLead', 'sales')!.position.y).toBe(
+      memberNode(r.nodes, 'lead', 'sales')!.position.y,
+    );
+  });
+
+  it('斷開成員（主管在組外且非 co-lead）落 level 1（與組長並排）', () => {
+    // sales leaderId=lead（組內）；成員 orphan 主管 extMgr 在組外、且「不夠格」
+    //（extMgr 主歸屬掛 topBoss、非任何組長）→ 不被推成 co-leader → BFS 觸及不到 → level 1。
+    const data = makeOrgData({
+      employees: [emp('lead'), emp('topBoss'), emp('extMgr'), emp('orphan')],
+      groups: [
+        group('sales', { leaderId: 'lead' }),
+        group('other', { kind: 'department' }),
+      ],
+      assignments: [
+        assignment('x-lead', { employeeId: 'lead', groupId: 'sales' }),
+        assignment('x-top', { employeeId: 'topBoss', groupId: 'other' }),
+        assignment('x-ext', {
+          employeeId: 'extMgr',
+          groupId: 'other',
+          supervisorIds: ['topBoss'],
+          primarySupervisorId: 'topBoss',
+        }),
+        assignment('x-orphan', {
+          employeeId: 'orphan',
+          groupId: 'sales',
+          supervisorIds: ['extMgr'],
+          primarySupervisorId: 'extMgr',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'sales');
+    // extMgr 不是 sales co-leader（不夠格）→ orphan 鏈不指向 sales 根 → 落 level 1。
+    expect(r.leadership.get('sales')?.coLeaderIds).not.toContain('extMgr');
+    expect(levelOf(r.nodes, 'orphan', 'sales')).toBe(1);
+    expect(levelOf(r.nodes, 'lead', 'sales')).toBe(1);
+    // 斷開成員與組長並排同 Y。
+    expect(memberNode(r.nodes, 'orphan', 'sales')!.position.y).toBe(
+      memberNode(r.nodes, 'lead', 'sales')!.position.y,
+    );
+  });
+
+  it('無顯式 leaderId → 推導回退組內匯報根並置頂（boss 第1層、其下遞增）', () => {
+    // 無顯式 group.leaderId、boss 為唯一組內匯報根 → deriveGroupLeadership 回退 boss
+    // 為 leaderId（單一候選）→ 仍走「組長置頂」top-down BFS：boss=1、mid=2、low=3。
+    const data = makeOrgData({
+      employees: [emp('boss'), emp('mid'), emp('low')],
+      groups: [group('g1')], // 無 leaderId
+      assignments: [
+        assignment('a-boss', { employeeId: 'boss', groupId: 'g1' }),
+        assignment('a-mid', {
+          employeeId: 'mid',
+          groupId: 'g1',
+          supervisorIds: ['boss'],
+          primarySupervisorId: 'boss',
+        }),
+        assignment('a-low', {
+          employeeId: 'low',
+          groupId: 'g1',
+          supervisorIds: ['mid'],
+          primarySupervisorId: 'mid',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'g1');
+    expect(r.leadership.get('g1')?.leaderId).toBe('boss');
+    expect(levelOf(r.nodes, 'boss')).toBe(1);
+    expect(levelOf(r.nodes, 'mid')).toBe(2);
+    expect(levelOf(r.nodes, 'low')).toBe(3);
+  });
+
+  it('雙匯報根（無顯式 leaderId）→ 推得唯一組長置頂；另一根不在其子樹 → 落 level 1', () => {
+    // a、c 皆無上級（兩匯報根）；deriveInGroupRoot deterministic tiebreak（深度同→部屬數同
+    //（各 1）→ employeeId 升冪）→ 取 a 為組長。top-down BFS 自 a：a=1、b（主管 a）=2；
+    // c 不在 a 子樹（c 為獨立根）→ 落 level 1；d（主管 c）亦 BFS 觸及不到 → 落 level 1。
+    const data = makeOrgData({
+      employees: [emp('a'), emp('b'), emp('c'), emp('d')],
+      groups: [group('g1')],
+      assignments: [
+        assignment('a-a', { employeeId: 'a', groupId: 'g1' }),
+        assignment('a-b', {
+          employeeId: 'b',
+          groupId: 'g1',
+          supervisorIds: ['a'],
+          primarySupervisorId: 'a',
+        }),
+        assignment('a-c', { employeeId: 'c', groupId: 'g1' }),
+        assignment('a-d', {
+          employeeId: 'd',
+          groupId: 'g1',
+          supervisorIds: ['c'],
+          primarySupervisorId: 'c',
+        }),
+      ],
+    });
+    const r = buildGroupOrgGraph(data, 'g1');
+    // 雙匯報根經 deterministic tiebreak 推得組長 a（非 null；候選>0 → 不走 null fallback）。
+    expect(r.leadership.get('g1')?.leaderId).toBe('a');
+    expect(levelOf(r.nodes, 'a')).toBe(1);
+    expect(levelOf(r.nodes, 'b')).toBe(2);
+    // 另一獨立根 c 不在組長 a 子樹 → 斷開落 level 1；其部屬 d 亦觸及不到 → level 1。
+    expect(levelOf(r.nodes, 'c')).toBe(1);
+    expect(levelOf(r.nodes, 'd')).toBe(1);
+  });
+
+  it('leaderId 為 null 的 fallback 路徑：空組（無成員 → leaderId null）不崩壞、無成員節點', () => {
+    // 非空組經推導必得非 null leaderId（候選>0）；leaderId===null 的 fallback 分支在實務上
+    // 僅空組可達（無成員 → 無節點需佈局）。守護該分支不丟錯、輸出空成員集合。
+    const data = makeOrgData({ groups: [group('g1')] });
+    const r = buildGroupOrgGraph(data, 'g1');
+    expect(r.error).toBeUndefined();
+    expect(r.leadership.get('g1')?.leaderId).toBeNull();
+    expect(membersOf(r.nodes, 'g1')).toHaveLength(0);
+  });
+});
+
 describe('buildGroupOrgGraph 組內匯報邊', () => {
   /**
    * 組內成員匯報邊：type='reporting'、edge id `go-${groupId}-e-*`、端點為作用域化 id
@@ -909,13 +1133,21 @@ describe('buildGroupOrgGraph 組內匯報邊', () => {
   });
 });
 
-describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
+describe('buildGroupOrgGraph 組長鏈（go-leaderlink-*）', () => {
   /**
-   * 重設計移除框錨點邊 go-link-*；改以成員層級的跨組匯報邊 go-cross-*：
-   * 端點為兩位顯示中員工的「主節點」（分屬不同 cluster）、type='reporting'。
+   * 組別層級精煉：移除舊「任意跨組成員匯報邊」`go-cross-*`，改以「組長鏈」表達組間
+   * 上下關係——層級骨架依「組別管理」（組的上下＝`Group.parentId`、各組頂點＝組長
+   * `leaderId`）。故組間僅以一條「父組組長 → 子組組長」邊呈現：
+   * - id 前綴 `go-leaderlink-`、`type='reporting'`、`data.label='組別階層'`；
+   * - 端點為兩組各自 `leaderId` 對應的攤平成員節點 id（作用域化 `${groupId}::${leaderId}`），
+   *   source=父組組長、target=子組組長；
+   * - 子組或父組 `leaderId` 為 null、或父組未在顯示集合內 → 跳過該鏈（不畫）。
    *
-   * 案例：parent 組成員 p；child 組成員 c 的主管為 p（跨組）→ 應有一條
-   * p(parent)→c(child) 的跨組邊，端點分屬不同 cluster。
+   * 同時守護「不再有任何 `go-cross-*`」與「無框錨點 `go-link-*` / group:→group: 邊」。
+   *
+   * 案例：parent 組成員 p（組內無上級 → 推導為 parent 組長）；child 組（parentId=parent）
+   * 成員 c（c 為 child 組內匯報根 → 推導為 child 組長）→ 應有一條
+   * parent 組長(p) → child 組長(c) 的組長鏈。
    */
   function crossOrg() {
     return makeOrgData({
@@ -929,6 +1161,7 @@ describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
         assignment('a-c', {
           employeeId: 'c',
           groupId: 'child',
+          // 跨組主管 p 不再產生成員層級跨組邊；組間關係改由組長鏈表達。
           supervisorIds: ['p'],
           primarySupervisorId: 'p',
         }),
@@ -936,21 +1169,41 @@ describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
     });
   }
 
-  it('跨組主管 → go-cross-* 邊；端點分屬不同 cluster、type=reporting', () => {
+  it('父子組各有組長 → go-leaderlink-* 邊：source=父組長、target=子組長、type=reporting、label「組別階層」', () => {
     const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
-    const cross = r.edges.find((e) => e.id.startsWith('go-cross-'));
-    expect(cross).toBeDefined();
-    expect(cross!.type).toBe('reporting');
-    // 端點分屬不同 cluster（前綴組不同）。
-    expect(cross!.source).toBe(scopedId('parent', 'p'));
-    expect(cross!.target).toBe(scopedId('child', 'c'));
-    const srcGroup = (cross!.source as string).split('::')[0];
-    const tgtGroup = (cross!.target as string).split('::')[0];
-    expect(srcGroup).not.toBe(tgtGroup);
-    // 端點對得上實際成員節點。
+    // 推導組長：parent→p（組內匯報根）、child→c（組內匯報根）。
+    expect(r.leadership.get('parent')?.leaderId).toBe('p');
+    expect(r.leadership.get('child')?.leaderId).toBe('c');
+
+    const link = r.edges.find((e) => e.id.startsWith('go-leaderlink-'));
+    expect(link).toBeDefined();
+    expect(link!.type).toBe('reporting');
+    // source=父組組長、target=子組組長（作用域化、分屬不同 cluster）。
+    expect(link!.source).toBe(scopedId('parent', 'p'));
+    expect(link!.target).toBe(scopedId('child', 'c'));
+    const srcGroup = (link!.source as string).split('::')[0];
+    const tgtGroup = (link!.target as string).split('::')[0];
+    expect(srcGroup).toBe('parent');
+    expect(tgtGroup).toBe('child');
+    // 中性 label 與組內「主匯報」區隔語意。
+    expect((link!.data as { label: string }).label).toBe('組別階層');
+    // 端點對得上實際成員節點（非懸空邊）。
     const ids = new Set(allMembers(r.nodes).map((n) => n.id));
-    expect(ids.has(cross!.source)).toBe(true);
-    expect(ids.has(cross!.target)).toBe(true);
+    expect(ids.has(link!.source)).toBe(true);
+    expect(ids.has(link!.target)).toBe(true);
+  });
+
+  it('已無任何 go-cross-* 成員跨組邊（改以組長鏈表達組間關係）', () => {
+    const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
+    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(false);
+    // 組間僅由組長鏈表達：唯一一條跨 cluster 邊即 go-leaderlink-*。
+    const crossClusterEdges = r.edges.filter((e) => {
+      const s = (e.source as string).split('::')[0];
+      const t = (e.target as string).split('::')[0];
+      return s !== t;
+    });
+    expect(crossClusterEdges).toHaveLength(1);
+    expect(crossClusterEdges[0].id).toMatch(/^go-leaderlink-/);
   });
 
   it('無 go-link-* 框錨點邊；無 group:→group: 框邊', () => {
@@ -966,104 +1219,69 @@ describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
     expect(groupToGroup).toHaveLength(0);
   });
 
-  it('無 type=default 邊（框錨點邊已移除）', () => {
+  it('無 type=default 邊（框錨點邊已移除）；組長鏈亦為 reporting', () => {
     const r = buildGroupOrgGraph(crossOrg(), ALL_GROUPS_VIEW_ID);
     expect(r.edges.some((e) => e.type === 'default')).toBe(false);
-    // 所有邊皆為 reporting。
+    // 所有邊皆為 reporting（含組內邊與組長鏈）。
     for (const e of r.edges) {
       expect(e.type).toBe('reporting');
     }
   });
 
-  it('跨組邊不與組內邊重複：同一 (主管, 部屬) 配對若已由組內邊呈現則不再產跨組邊', () => {
-    // p、pc 皆在 parent 組、pc 主管 p（組內）；c 在 child、主管 p（跨組）。
+  it('父組未在顯示集合內（單組視角）→ 無組長鏈（不指向未顯示父組）', () => {
+    // 單看 child 組：父組 parent 不顯示 → 組長鏈須跳過（parentId 不在顯示集合內）。
+    const r = buildGroupOrgGraph(crossOrg(), 'child');
+    expect(r.edges.some((e) => e.id.startsWith('go-leaderlink-'))).toBe(false);
+    // 亦無任何跨組殘留邊（單組視角僅該組內邊）。
+    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(false);
+  });
+
+  it('子組或父組 leaderId 為 null（空組無組長）→ 跳過該組長鏈', () => {
+    // parent 有組長 p；child 為空組（無成員 → leaderId fallback 亦為 null）→ 跳過鏈。
     const data = makeOrgData({
-      employees: [emp('p'), emp('pc'), emp('c')],
+      employees: [emp('p')],
       groups: [
         group('parent', { kind: 'department' }),
         group('child', { kind: 'department', parentId: 'parent' }),
       ],
-      assignments: [
-        assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
-        assignment('a-pc', {
-          employeeId: 'pc',
-          groupId: 'parent',
-          supervisorIds: ['p'],
-          primarySupervisorId: 'p',
-        }),
-        assignment('a-c', {
-          employeeId: 'c',
-          groupId: 'child',
-          supervisorIds: ['p'],
-          primarySupervisorId: 'p',
-        }),
-      ],
+      assignments: [assignment('a-p', { employeeId: 'p', groupId: 'parent' })],
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    // p→pc 為組內邊（同 parent 組）。
-    const intra = r.edges.find(
-      (e) =>
-        e.source === scopedId('parent', 'p') &&
-        e.target === scopedId('parent', 'pc'),
-    );
-    expect(intra).toBeDefined();
-    expect(intra!.id).toMatch(/^go-parent-e-/);
-    // p→c 為跨組邊（go-cross-*）。
-    const cross = r.edges.find(
-      (e) =>
-        e.source === scopedId('parent', 'p') &&
-        e.target === scopedId('child', 'c'),
-    );
-    expect(cross).toBeDefined();
-    expect(cross!.id).toMatch(/^go-cross-/);
-    // p→pc 不會被當成跨組邊再加一次（無 go-cross- 指向 parent::pc）。
-    const dupCross = r.edges.filter(
-      (e) =>
-        e.id.startsWith('go-cross-') &&
-        e.target === scopedId('parent', 'pc'),
-    );
-    expect(dupCross).toHaveLength(0);
+    expect(r.leadership.get('child')?.leaderId).toBeNull();
+    expect(r.edges.some((e) => e.id.startsWith('go-leaderlink-'))).toBe(false);
   });
 
-  it('跨組邊主節點唯一：同員工跨多組時跨組邊以其主歸屬節點為端點', () => {
-    // c 同屬 child(primary) 與 fn(非 primary)；其主管 p 在 parent。
-    // 跨組邊應以 c 的主歸屬節點（child::c）為 target，不重複指向 fn::c。
+  it('多層父子鏈（grand→parent→child）→ 各相鄰層一條組長鏈、端點皆為對應組長', () => {
+    // grand←parent←child 三層部門，各組各一名組長。
     const data = makeOrgData({
-      employees: [emp('p'), emp('c')],
+      employees: [emp('g'), emp('p'), emp('c')],
       groups: [
-        group('parent', { kind: 'department' }),
+        group('grand', { kind: 'department' }),
+        group('parent', { kind: 'department', parentId: 'grand' }),
         group('child', { kind: 'department', parentId: 'parent' }),
-        group('fn', { kind: 'function', parentId: null }),
       ],
       assignments: [
+        assignment('a-g', { employeeId: 'g', groupId: 'grand' }),
         assignment('a-p', { employeeId: 'p', groupId: 'parent' }),
-        assignment('a-c-child', {
-          employeeId: 'c',
-          groupId: 'child',
-          supervisorIds: ['p'],
-          primarySupervisorId: 'p',
-          isPrimaryGroup: true,
-        }),
-        assignment('a-c-fn', {
-          employeeId: 'c',
-          groupId: 'fn',
-          isPrimaryGroup: false,
-        }),
+        assignment('a-c', { employeeId: 'c', groupId: 'child' }),
       ],
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
-    const crossToC = r.edges.filter(
-      (e) =>
-        e.id.startsWith('go-cross-') &&
-        (e.target === scopedId('child', 'c') ||
-          e.target === scopedId('fn', 'c')),
+    const links = r.edges.filter((e) => e.id.startsWith('go-leaderlink-'));
+    // grand→parent 與 parent→child 各一條。
+    expect(links).toHaveLength(2);
+    const pairs = links
+      .map((e) => `${e.source}→${e.target}`)
+      .sort();
+    expect(pairs).toEqual(
+      [
+        `${scopedId('grand', 'g')}→${scopedId('parent', 'p')}`,
+        `${scopedId('parent', 'p')}→${scopedId('child', 'c')}`,
+      ].sort(),
     );
-    // 僅一條跨組邊、指向主歸屬（child::c）。
-    expect(crossToC).toHaveLength(1);
-    expect(crossToC[0].target).toBe(scopedId('child', 'c'));
   });
 
-  it('function 組（彼此無匯報關係）→ 無跨組邊', () => {
+  it('function 組（parentId=null、彼此無父子關係）→ 無組長鏈、無 go-cross-*', () => {
     const data = makeOrgData({
       employees: [emp('a'), emp('b')],
       groups: [
@@ -1076,10 +1294,11 @@ describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
       ],
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
+    expect(r.edges.some((e) => e.id.startsWith('go-leaderlink-'))).toBe(false);
     expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(false);
   });
 
-  it('所有 edge id 全域唯一（組內 go-${g}-e-* + 跨組 go-cross-* 不重撞）', () => {
+  it('所有 edge id 全域唯一（組內 go-${g}-e-* + 組長鏈 go-leaderlink-* 不重撞）', () => {
     const data = makeOrgData({
       employees: [emp('p'), emp('pc'), emp('c'), emp('cc')],
       groups: [
@@ -1110,9 +1329,11 @@ describe('buildGroupOrgGraph 跨組匯報邊（go-cross-*）', () => {
     });
     const r = buildGroupOrgGraph(data, ALL_GROUPS_VIEW_ID);
     const edgeIds = r.edges.map((e) => e.id);
-    // 同時涵蓋組內 reporting 與跨組 reporting 兩類邊。
-    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(true);
-    expect(r.edges.some((e) => /^go-[^c].*-e-/.test(e.id))).toBe(true);
+    // 同時涵蓋組內 reporting（go-${g}-e-*）與組長鏈 reporting（go-leaderlink-*）兩類邊。
+    expect(r.edges.some((e) => e.id.startsWith('go-leaderlink-'))).toBe(true);
+    expect(r.edges.some((e) => /^go-[^l].*-e-/.test(e.id))).toBe(true);
+    // 已無 go-cross-*。
+    expect(r.edges.some((e) => e.id.startsWith('go-cross-'))).toBe(false);
     expect(new Set(edgeIds).size).toBe(edgeIds.length);
   });
 });

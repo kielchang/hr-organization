@@ -123,9 +123,11 @@ interface IntraGroupLayout {
  * Y，再加頂部標籤留白 + padding），但**仍是 cluster 內相對座標**——呼叫端再加上該
  * cluster 的絕對位移，得到攤平後的絕對座標（成員為頂層節點、無 parentId）。
  *
- * 層級規則（沿用）：
- * - 用 `computePrimaryDepth(該組 assignments)` 得「組內相對深度」（組內匯報根 = 1）。
- * - co-leader（組外主管）納入本組作為節點、鉗到組長層，呈現平行同層共管。
+ * 層級規則（使用者定案：層級骨架依「組別管理」，各組頂點＝組長 leaderId）：
+ * - 根集合 = {leaderId} ∪ {co-leaders} → 皆 level 1（頂，co-lead 與組長平行同層共管）。
+ * - 其餘成員：由根集合沿「組內 primary 主管 → 部屬」往下 BFS，逐層 +1。
+ * - 無法從根集合到達者（鏈不指向根、或主管在組外且非 co-lead）→ level 1（斷開/待確認）。
+ * - leaderId 為 null 時 fallback：以 `computePrimaryDepth`（組內匯報根 = 1）置頂，維持可用。
  */
 function layoutIntraGroup(
   data: OrgData,
@@ -149,49 +151,64 @@ function layoutIntraGroup(
   const displayEmployeeIds = [...memberIds, ...coLeaderIds];
   const coLeaderSet = new Set(leadership.coLeaderIds);
 
-  // 組內相對深度（組內匯報根 = 1，只走 primarySupervisorId）。
-  const depthMap = computePrimaryDepth(groupAssignments);
-  const leaderLevel =
-    leadership.leaderId != null
-      ? depthMap.get(leadership.leaderId) ?? 1
-      : 1;
-
-  // 每節點「組內有效層級」（組長層 = 最小、leaderLevel 起算）：
-  // - 組長 / co-leader → leaderLevel（co-leader 與組長平行同層共管）。
-  // - 一般成員 → 沿組內主匯報鏈往上走：
-  //     · 到 co-leader（組外主管被納入）→ co-leader 層(leaderLevel) + 往下步數。
-  //     · 到組長或其他組內根/組外非 co-leader 主管 → 以組內深度（leaderLevel 起算）。
-  // 走鏈記憶化、含環防護（理論上已被 detectReportingCycle 擋掉）。
+  // 層級骨架以「組長（leaderId）置頂」：組內層級＝以組長為根的 top-down 深度（BFS）。
+  // 根集合 = {leaderId} ∪ {co-leaders}（co-lead 與組長平行同層）→ 皆 level 1（頂）；
+  // 其餘成員：沿「組內 primary 主管 → 部屬」邊由根往下逐層 +1。
+  //
+  // 無法從根集合到達的成員（組內無 primary 主管指向根的鏈、或其主管在組外且非 co-lead）
+  // → 放 level 1（與組長並排，視為斷開／待確認；由 orgHealth 警示標記）。
+  //
+  // leaderId 為 null 時 fallback：以既有「組內匯報根」相對深度置頂（維持可用），
+  // 與 deriveInGroupRoot 同源（computePrimaryDepth：組內匯報根 = 1）。
+  const LEADER_LEVEL = 1;
   const levelMap = new Map<string, number>();
-  const visiting = new Set<string>();
-  const resolveLevel = (eid: string): number => {
-    const cached = levelMap.get(eid);
-    if (cached != null) return cached;
-    if (coLeaderSet.has(eid)) {
-      levelMap.set(eid, leaderLevel);
-      return leaderLevel;
-    }
-    if (visiting.has(eid)) return leaderLevel; // 防環
-    visiting.add(eid);
 
-    const sup = memberAssignmentByEmployee.get(eid)?.primarySupervisorId ?? null;
-    let lv: number;
-    if (sup != null && coLeaderSet.has(sup)) {
-      // 主管是顯示中的 co-leader → 落在 co-leader 下一層。
-      lv = resolveLevel(sup) + 1;
-    } else if (sup != null && memberIds.has(sup)) {
-      // 主管在組內 → 主管層 + 1（沿鏈遞迴；co-leader 子樹也由此自然下推）。
-      lv = resolveLevel(sup) + 1;
-    } else {
-      // 組內根（主管為 null、或主管為組外非 co-leader）→ 以組內深度落 leaderLevel 起算。
-      lv = leaderLevel - 1 + (depthMap.get(eid) ?? 1);
+  if (leadership.leaderId == null) {
+    // fallback：無組長 → 組內匯報根置頂（既有行為）。co-leader 仍鉗到頂層同層共管。
+    const fallbackDepth = computePrimaryDepth(groupAssignments);
+    for (const eid of displayEmployeeIds) {
+      levelMap.set(
+        eid,
+        coLeaderSet.has(eid) ? LEADER_LEVEL : fallbackDepth.get(eid) ?? LEADER_LEVEL,
+      );
+    }
+  } else {
+    // 由「組內 primary 主管」建子樹鄰接表（主管 → 部屬），只含顯示集合內的邊。
+    const childrenBySup = new Map<string, string[]>();
+    for (const eid of memberIds) {
+      const sup = memberAssignmentByEmployee.get(eid)?.primarySupervisorId ?? null;
+      if (sup == null) continue;
+      if (!memberIds.has(sup) && !coLeaderSet.has(sup)) continue; // 主管在組外且非 co-lead → 不連
+      const arr = childrenBySup.get(sup);
+      if (arr) arr.push(eid);
+      else childrenBySup.set(sup, [eid]);
     }
 
-    visiting.delete(eid);
-    levelMap.set(eid, lv);
-    return lv;
-  };
-  for (const eid of displayEmployeeIds) resolveLevel(eid);
+    // 從根集合（組長 + co-leaders）BFS 往下，逐層 +1；防環以「已定 level」判定。
+    const queue: string[] = [];
+    const rootSet = new Set<string>(coLeaderSet);
+    rootSet.add(leadership.leaderId);
+    for (const root of rootSet) {
+      if (!levelMap.has(root)) {
+        levelMap.set(root, LEADER_LEVEL);
+        queue.push(root);
+      }
+    }
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const lv = levelMap.get(cur)!;
+      for (const child of childrenBySup.get(cur) ?? []) {
+        if (levelMap.has(child)) continue; // 已定（含防環、含 co-lead 子也被組長並排）
+        levelMap.set(child, lv + 1);
+        queue.push(child);
+      }
+    }
+
+    // 未被 BFS 觸及者（斷開/待確認）→ level 1，與組長並排。
+    for (const eid of displayEmployeeIds) {
+      if (!levelMap.has(eid)) levelMap.set(eid, LEADER_LEVEL);
+    }
+  }
 
   const nodes: Node<EmployeeNodeData>[] = displayEmployeeIds.map((eid) => {
     const employee = data.employees.find((e) => e.id === eid)!;
@@ -537,63 +554,40 @@ export function buildGroupOrgGraph(
     edges.push(...layout.edges);
   }
 
-  // 跨組匯報邊：成員的主管在「別組」（非本組顯示集合、亦非已納入本組的 co-leader）時，
-  // 組內佈局不會產生該邊。為呈現「一張連貫的組織圖」（如 李小華→王大明 跨分區），
-  // 在頂層補上端點落在不同 cluster 的匯報線，讓部門上下關係靠分區位置 + 跨區線自然呈現。
+  // 組間連線改「組長鏈」（取代舊 go-cross 任意跨組成員匯報邊）：
+  // 層級骨架依「組別管理」——組的上下關係＝Group.parentId、各組頂點＝Group.leaderId。
+  // 故組間關係以「子組組長 → 父組組長」一條邊呈現（child leader → parent leader），
+  // 端點為兩組各自 leaderId 對應的攤平 employee 節點 id（作用域化 ${groupId}::${leaderId}）。
   //
-  // 每位顯示中員工解析出唯一「主節點」（其主歸屬 cluster 的作用域化 id；多組時優先
-  // isPrimaryGroup、否則首次出現），跨組邊以此為端點，避免同員工多分區造成連線分歧。
-  const primaryNodeOf = new Map<string, string>();
+  // 邊界：子組或父組 leaderId 為 null、或對應 leader 節點不在圖中 → 跳過該組長鏈（不畫）。
+  // 邊型：沿用 reporting edge（實線 + 箭頭），但以中性 label「組別階層」與 id 前綴
+  // go-leaderlink- 與組內主匯報區隔；co-lead 平行共管仍由 A 段（同層）與 Phase F 維持。
+  const displayNodeIds = new Set(memberNodes.map((n) => n.id));
+  let leaderLinkIndex = 0;
   for (const g of targetGroups) {
-    const ga = data.assignments.filter((a) => a.groupId === g.id);
-    for (const a of ga) {
-      const existing = primaryNodeOf.get(a.employeeId);
-      // 優先綁定主歸屬組的節點；無主歸屬時保留首見。
-      if (existing == null || a.isPrimaryGroup) {
-        primaryNodeOf.set(a.employeeId, memberNodeId(g.id, a.employeeId));
-      }
-    }
-  }
-  // 已由組內邊覆蓋的 (source 員工, target 員工) 配對：避免跨組邊與組內邊重複呈現。
-  const sameGroupPairs = new Set<string>();
-  for (const layout of layouts) {
-    const ga = data.assignments.filter((a) => a.groupId === layout.group.id);
-    const memberSet = new Set(ga.map((a) => a.employeeId));
-    const coLeadSet = new Set(layout.leadership.coLeaderIds);
-    for (const a of ga) {
-      for (const supId of a.supervisorIds) {
-        if (memberSet.has(supId) || coLeadSet.has(supId)) {
-          sameGroupPairs.add(`${supId}\0${a.employeeId}`);
-        }
-      }
-    }
-  }
-  const crossPrimary = new Map<string, boolean>();
-  for (const a of scopedAssignments) {
-    for (const supId of a.supervisorIds) {
-      const pairKey = `${supId}\0${a.employeeId}`;
-      if (sameGroupPairs.has(pairKey)) continue; // 已由組內邊呈現。
-      const srcNode = primaryNodeOf.get(supId);
-      const tgtNode = primaryNodeOf.get(a.employeeId);
-      // 主管須為顯示中的員工（有主節點）；端點分屬不同 cluster 才算跨組。
-      if (srcNode == null || tgtNode == null || srcNode === tgtNode) continue;
-      const isPrimary = a.primarySupervisorId === supId;
-      crossPrimary.set(pairKey, (crossPrimary.get(pairKey) ?? false) || isPrimary);
-    }
-  }
-  let crossIndex = 0;
-  for (const [pairKey, isPrimary] of crossPrimary) {
-    const [supId, empId] = pairKey.split('\0');
+    const parentId = g.parentId;
+    if (parentId == null || !targetGroupIds.has(parentId)) continue; // 父組須在顯示集合內
+    const childLeaderId = leadership.get(g.id)?.leaderId ?? null;
+    const parentLeaderId = leadership.get(parentId)?.leaderId ?? null;
+    if (childLeaderId == null || parentLeaderId == null) continue; // 任一無組長 → 跳過
+
+    const childNode = memberNodeId(g.id, childLeaderId);
+    const parentNode = memberNodeId(parentId, parentLeaderId);
+    // leader 節點存在性確認：對應的成員節點須在圖中（leader 必為其組成員，理論恆真，仍防呆）。
+    if (!displayNodeIds.has(childNode) || !displayNodeIds.has(parentNode)) continue;
+    if (childNode === parentNode) continue; // 同節點（理論不會發生）→ 不畫自環。
+
     edges.push({
-      id: `go-cross-${crossIndex++}`,
-      source: primaryNodeOf.get(supId)!,
-      target: primaryNodeOf.get(empId)!,
+      id: `go-leaderlink-${leaderLinkIndex++}`,
+      source: parentNode,
+      target: childNode,
       type: 'reporting',
       animated: false,
       markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
       data: {
-        isPrimary,
-        label: isPrimary ? '主匯報' : '虛線匯報',
+        // 實線 + 箭頭（isPrimary）；label 用「組別階層」與組內「主匯報」區隔語意。
+        isPrimary: true,
+        label: '組別階層',
         offset: GROUP_RANK_SEP / 2,
       } satisfies ReportingEdgeData,
     });
