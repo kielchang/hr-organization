@@ -5,6 +5,7 @@ import { OrgFlowChart } from './OrgFlowChart';
 import { EditModeToolbar } from './EditModeToolbar';
 import { EditImpactBar } from './EditImpactBar';
 import { SnapshotPanel } from './SnapshotPanel';
+import { ChangeReviewPanel } from './ChangeReviewPanel';
 import type { UseOrgFlowEditing } from '../../hooks/useOrgFlowEditing';
 
 interface ReportingEditCanvasProps {
@@ -51,6 +52,7 @@ export function ReportingEditCanvas({
     editing;
 
   const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
+  const [showChangeReviewPanel, setShowChangeReviewPanel] = useState(false);
 
   const handleEnterEditMode = () => {
     editing.enterEditMode();
@@ -59,6 +61,7 @@ export function ReportingEditCanvas({
   const handleExitEditMode = () => {
     editing.exitEditMode();
     setShowSnapshotPanel(false);
+    setShowChangeReviewPanel(false);
   };
 
   const handleSaveCheckpoint = (description: string) => {
@@ -73,6 +76,7 @@ export function ReportingEditCanvas({
   }) => {
     editing.publish(opts);
     setShowSnapshotPanel(false);
+    setShowChangeReviewPanel(false);
   };
 
   return (
@@ -101,6 +105,8 @@ export function ReportingEditCanvas({
         onSaveCheckpoint={handleSaveCheckpoint}
         onPublish={handlePublish}
         onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
+        showChangeReviewPanel={showChangeReviewPanel}
+        onToggleChangeReviewPanel={() => setShowChangeReviewPanel((v) => !v)}
       />
 
       {/* 編輯態 before→after 指標浮層（R5.2） */}
@@ -129,6 +135,14 @@ export function ReportingEditCanvas({
             onPreview={editing.previewSnapshot}
             onRollback={editing.rollbackToSnapshot}
             onClose={() => setShowSnapshotPanel(false)}
+          />
+        )}
+
+        {isEditMode && showChangeReviewPanel && session && (
+          <ChangeReviewPanel
+            base={session.baseData}
+            draft={session.draftData}
+            onClose={() => setShowChangeReviewPanel(false)}
           />
         )}
 

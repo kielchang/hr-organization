@@ -5,6 +5,7 @@ import { GroupOrgFlowChart } from './GroupOrgFlowChart';
 import { EditModeToolbar } from '../orgFlow/EditModeToolbar';
 import { EditImpactBar } from '../orgFlow/EditImpactBar';
 import { SnapshotPanel } from '../orgFlow/SnapshotPanel';
+import { ChangeReviewPanel } from '../orgFlow/ChangeReviewPanel';
 import type { UseOrgFlowEditing } from '../../hooks/useOrgFlowEditing';
 
 interface GroupOrgEditCanvasProps {
@@ -48,6 +49,7 @@ export function GroupOrgEditCanvas({
     editing;
 
   const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
+  const [showChangeReviewPanel, setShowChangeReviewPanel] = useState(false);
 
   const handleEnterEditMode = () => {
     editing.enterEditMode();
@@ -56,6 +58,7 @@ export function GroupOrgEditCanvas({
   const handleExitEditMode = () => {
     editing.exitEditMode();
     setShowSnapshotPanel(false);
+    setShowChangeReviewPanel(false);
   };
 
   const handleSaveCheckpoint = (description: string) => {
@@ -70,6 +73,7 @@ export function GroupOrgEditCanvas({
   }) => {
     editing.publish(opts);
     setShowSnapshotPanel(false);
+    setShowChangeReviewPanel(false);
   };
 
   return (
@@ -98,6 +102,8 @@ export function GroupOrgEditCanvas({
         onSaveCheckpoint={handleSaveCheckpoint}
         onPublish={handlePublish}
         onToggleSnapshotPanel={() => setShowSnapshotPanel((v) => !v)}
+        showChangeReviewPanel={showChangeReviewPanel}
+        onToggleChangeReviewPanel={() => setShowChangeReviewPanel((v) => !v)}
       />
 
       {/* 編輯態 before→after 指標浮層 */}
@@ -125,6 +131,14 @@ export function GroupOrgEditCanvas({
             onPreview={editing.previewSnapshot}
             onRollback={editing.rollbackToSnapshot}
             onClose={() => setShowSnapshotPanel(false)}
+          />
+        )}
+
+        {isEditMode && showChangeReviewPanel && session && (
+          <ChangeReviewPanel
+            base={session.baseData}
+            draft={session.draftData}
+            onClose={() => setShowChangeReviewPanel(false)}
           />
         )}
 

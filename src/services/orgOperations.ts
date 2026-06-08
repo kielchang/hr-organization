@@ -60,6 +60,7 @@ export function upsertEmployee(
       operator,
     );
   } else {
+    const prev = data.employees.find((e) => e.id === employee.id);
     next = {
       ...next,
       employees: next.employees.map((e) =>
@@ -71,6 +72,8 @@ export function upsertEmployee(
       'employee_update',
       `更新員工：${employee.name}`,
       operator,
+      prev ? JSON.stringify(prev) : undefined,
+      JSON.stringify(employee),
     );
   }
   return { data: next };
@@ -121,11 +124,19 @@ export function upsertGroup(
     next = { ...next, groups: [...next.groups, group] };
     next = appendChange(next, 'group_create', `新增組別：${group.name}`, operator);
   } else {
+    const prev = data.groups.find((g) => g.id === group.id);
     next = {
       ...next,
       groups: next.groups.map((g) => (g.id === group.id ? group : g)),
     };
-    next = appendChange(next, 'group_update', `更新組別：${group.name}`, operator);
+    next = appendChange(
+      next,
+      'group_update',
+      `更新組別：${group.name}`,
+      operator,
+      prev ? JSON.stringify(prev) : undefined,
+      JSON.stringify(group),
+    );
   }
   return { data: next };
 }
@@ -348,6 +359,8 @@ export function reassignEmployeeGroup(
     'assignment_update',
     `改組別：員工 ${emp?.name ?? assignment.employeeId} → 組別 ${newGroup.name}`,
     operator,
+    JSON.stringify(assignment),
+    JSON.stringify(updated),
   );
 
   return { data: next, error: null };

@@ -726,6 +726,71 @@ describe('reassignEmployeeGroup（拖人改組別）', () => {
   });
 });
 
+describe('changeLog before/after 補齊（異動歷程面板用）', () => {
+  it('reassignEmployeeGroup 成功改組：assignment_update 那筆 before/after 皆非空，且 groupId 反映前後組', () => {
+    const staffAss = assignment('a-staff', {
+      employeeId: 'staff',
+      groupId: 'g1',
+      jobLevelId: 'j1',
+    });
+    const base = makeOrgData({
+      employees: [emp('staff')],
+      groups: [
+        group('g1', { kind: 'department' }),
+        group('g2', { kind: 'department' }),
+      ],
+      jobLevels: [jobLevel('j1', 10)],
+      assignments: [staffAss],
+    });
+
+    const { data, error } = reassignEmployeeGroup(base, 'a-staff', 'g2', OP);
+
+    expect(error).toBeNull();
+    const entry = data.changeLog[0];
+    expect(entry.changeType).toBe('assignment_update');
+    expect(entry.summary).toContain('改組別');
+    // before/after 皆為非空字串。
+    expect(typeof entry.before).toBe('string');
+    expect(typeof entry.after).toBe('string');
+    expect(entry.before).toBeTruthy();
+    expect(entry.after).toBeTruthy();
+    // parse 後 groupId 反映原組→新組。
+    expect(JSON.parse(entry.before!).groupId).toBe('g1');
+    expect(JSON.parse(entry.after!).groupId).toBe('g2');
+  });
+
+  it('upsertEmployee 更新分支（isNew=false）：employee_update 那筆 before/after parse 後 name 反映前後', () => {
+    const base = makeOrgData({ employees: [emp('e1', { name: '舊名' })] });
+    const { data } = upsertEmployee(base, emp('e1', { name: '新名' }), OP, false);
+
+    const entry = data.changeLog[0];
+    expect(entry.changeType).toBe('employee_update');
+    expect(entry.before).toBeTruthy();
+    expect(entry.after).toBeTruthy();
+    expect(JSON.parse(entry.before!).name).toBe('舊名');
+    expect(JSON.parse(entry.after!).name).toBe('新名');
+  });
+
+  it('upsertGroup 更新分支（isNew=false）：group_update 那筆 before/after parse 後 name 反映前後', () => {
+    const base = makeOrgData({
+      groups: [group('g1', { code: 'RD', name: '舊組名' })],
+    });
+    const { data } = upsertGroup(
+      base,
+      group('g1', { code: 'RD', name: '新組名' }),
+      OP,
+      false,
+    );
+
+    const entry = data.changeLog[0];
+    expect(entry.changeType).toBe('group_update');
+    expect(entry.before).toBeTruthy();
+    expect(entry.after).toBeTruthy();
+    expect(JSON.parse(entry.before!).name).toBe('舊組名');
+    expect(JSON.parse(entry.after!).name).toBe('新組名');
+  });
+});
+
 describe('importOrgData / createEmptyAssignment', () => {
   it('importOrgData 追加 import changelog', () => {
     const data = importOrgData(makeOrgData(), OP);

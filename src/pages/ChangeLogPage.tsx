@@ -16,19 +16,7 @@ import {
 } from '@/components/ui/table';
 import type { ChangeEntry } from '../types/org';
 import { useOrg } from '../context/useOrg';
-
-const changeTypeLabels: Record<string, string> = {
-  employee_create: '新增員工',
-  employee_update: '更新員工',
-  employee_delete: '刪除員工',
-  group_create: '新增組別',
-  group_update: '更新組別',
-  group_delete: '刪除組別',
-  assignment_create: '新增歸屬',
-  assignment_update: '更新歸屬',
-  assignment_delete: '刪除歸屬',
-  import: '匯入資料',
-};
+import { changeTypeLabel } from '../lib/changeTypeLabels';
 
 export function ChangeLogPage() {
   const { data } = useOrg();
@@ -78,7 +66,7 @@ export function ChangeLogPage() {
                   <TableCell>{formatTime(entry.timestamp)}</TableCell>
                   <TableCell>{entry.operator}</TableCell>
                   <TableCell>
-                    {changeTypeLabels[entry.changeType] ?? entry.changeType}
+                    {changeTypeLabel(entry.changeType)}
                   </TableCell>
                   <TableCell className="max-w-md whitespace-normal">
                     {entry.summary}

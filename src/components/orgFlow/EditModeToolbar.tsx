@@ -8,6 +8,7 @@ import {
   History,
   Check,
   Lightbulb,
+  GitCompareArrows,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,10 @@ interface EditModeToolbarProps {
     effectiveDate?: string;
   }) => void;
   onToggleSnapshotPanel: () => void;
+  /** 異動歷程面板是否開啟（選填；未傳則不顯示該切換鈕）。 */
+  showChangeReviewPanel?: boolean;
+  /** 切換異動歷程面板（選填；未傳則不顯示該切換鈕）。 */
+  onToggleChangeReviewPanel?: () => void;
 }
 
 export function EditModeToolbar({
@@ -41,6 +46,8 @@ export function EditModeToolbar({
   onSaveCheckpoint,
   onPublish,
   onToggleSnapshotPanel,
+  showChangeReviewPanel = false,
+  onToggleChangeReviewPanel,
 }: EditModeToolbarProps) {
   const [showCheckpointInput, setShowCheckpointInput] = useState(false);
   const [checkpointDesc, setCheckpointDesc] = useState('');
@@ -174,6 +181,21 @@ export function EditModeToolbar({
                 <Badge className="ml-1 h-4 w-4 justify-center p-0 text-[10px]">
                   {snapshotCount}
                 </Badge>
+              </Button>
+            )}
+
+            {/* Change review panel toggle */}
+            {onToggleChangeReviewPanel && (
+              <Button
+                type="button"
+                size="sm"
+                variant={
+                  showChangeReviewPanel ? buttonIntent.primary : buttonIntent.neutral
+                }
+                onClick={onToggleChangeReviewPanel}
+              >
+                <GitCompareArrows className="size-3.5" />
+                異動歷程
               </Button>
             )}
 
