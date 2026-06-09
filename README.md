@@ -2,7 +2,7 @@
 
 > **HR 用來規劃組織結構的試算工具**——沿**匯報線（階層部門）× 專案職能（跨部門）**雙維度，建立、試算、健檢、比較多個組織方案後，選一個發布生效。前端優先（localStorage），後端為 opt-in。
 
-[![整合分支驗證](https://img.shields.io/badge/integration-pre--push%20verify-brightgreen)](docs/工作流程-integration分支.md) [![測試](https://img.shields.io/badge/tests-463%20passing-brightgreen)](#測試) [![部署](https://img.shields.io/badge/deploy-GitHub%20Pages-blue)](#部署)
+[![整合分支驗證](https://img.shields.io/badge/integration-pre--push%20verify-brightgreen)](docs/工作流程-integration分支.md) [![測試](https://img.shields.io/badge/tests-passing-brightgreen)](#測試) [![部署](https://img.shields.io/badge/deploy-GitHub%20Pages-blue)](#部署)
 
 ---
 
