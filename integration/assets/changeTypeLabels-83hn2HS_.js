@@ -1,0 +1,1 @@
+var e={employee_create:`新增員工`,employee_update:`更新員工`,employee_delete:`刪除員工`,group_create:`新增組別`,group_update:`更新組別`,group_delete:`刪除組別`,assignment_create:`新增歸屬`,assignment_update:`更新歸屬`,assignment_delete:`刪除歸屬`,import:`匯入資料`};function t(t){return e[t]??t}export{t};

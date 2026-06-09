@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-Bh1tDfsg.js";import{Z as t}from"./vendor-react-HfY-wMqJ.js";import{k as n}from"./index-BmVgpy7k.js";var r=e(t(),1);function i(){let e=(0,r.useContext)(n);if(!e)throw Error(`useBpmn must be used inside BpmnProvider`);return e}export{i as t};
