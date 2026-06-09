@@ -38,6 +38,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // 高 CPU 負載下，隔離跑 <1s 的重 UI 測試（React Flow 渲染、axe a11y 掃描）
+    // 仍可能因排程爭用破 Vitest 預設 5000ms per-test 逾時，造成 pre-push 假性失敗。
+    // 將逾時提高到 15000ms，給負載下實際很快完成的測試足夠餘裕；不影響正常情況耗時。
+    testTimeout: 15000,
+    hookTimeout: 15000,
     // 只跑前端 src 內的測試；後端 server/ 有自己的 Vitest 設定。
     include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
