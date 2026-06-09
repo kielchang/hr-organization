@@ -80,7 +80,14 @@ function FlowInner({
     }
   }, [computedNodes, edges, fitView, selectedGroupId]);
 
-  const hasDetail = !!selectedEmployeeId;
+  // 選取的員工不在當前（可能被 kindFilter 過濾的）membership 節點集合時不顯示詳情卡，
+  // 避免跨視角共用 selectedEmployeeId 時出現「卡片浮著但圖上無對應節點」的視覺不一致。
+  const hasDetail = useMemo(
+    () =>
+      selectedEmployeeId != null &&
+      computedNodes.some((n) => employeeIdFromMembershipNode(n) === selectedEmployeeId),
+    [computedNodes, selectedEmployeeId],
+  );
   const [showMiniMap, setShowMiniMap] = useState(true);
   const [navMode, setNavMode] = useState<OrgFlowNavMode>('mouse');
 
